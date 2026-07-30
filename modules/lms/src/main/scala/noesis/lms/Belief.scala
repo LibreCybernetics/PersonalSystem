@@ -2,8 +2,8 @@ package noesis.lms
 
 import java.time.{Duration, Instant}
 
-import noesis.core.model.*
-import noesis.core.reason.Closure
+import noesis.logic.*
+import noesis.reasoner.{Closure, Support}
 
 /** The belief model (SPEC §4.2).
   *

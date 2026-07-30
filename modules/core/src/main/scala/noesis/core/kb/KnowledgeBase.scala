@@ -8,12 +8,12 @@ import cats.effect.{Async, Ref}
 import cats.syntax.all.*
 import noesis.core.capture.{Capture, CaptureProblem, Intent}
 import noesis.core.event.{Event, EventBus, Events}
-import noesis.core.journal.{Commit, Journal, Operation}
-import noesis.core.model.*
+import noesis.journal.{Commit, Journal, Operation}
+import noesis.logic.*
 import noesis.core.policy.*
-import noesis.core.projection.{AxiomRecord, Graph, KbState, Projections}
-import noesis.core.query.{BasicGraphPattern, Query, Solution}
-import noesis.core.reason.*
+import noesis.core.projection.{AxiomRecord, KbState, Projections}
+import noesis.reasoner.query.{BasicGraphPattern, Query, Solution}
+import noesis.reasoner.*
 import noesis.core.verbalize.{Naming, Templates, Verbalizer}
 
 /** Why a commit was refused. Inconsistent commits are rejected *with a justification* (SPEC §3.4). */
@@ -173,7 +173,7 @@ final class KnowledgeBase[F[_]: {Async, UUIDGen}] private (
 
       case Some(ops) =>
         val scratch = ops.foldLeft(before): (s, op) =>
-          KbState.step(s, noesis.core.journal.JournalEntry(s.seq + 1, java.time.Instant.EPOCH, op))
+          KbState.step(s, noesis.journal.JournalEntry(s.seq + 1, java.time.Instant.EPOCH, op))
         val scratchClosure =
           Reasoner.closure(Projections.current(scratch), config.rules, config.reasoner)
 

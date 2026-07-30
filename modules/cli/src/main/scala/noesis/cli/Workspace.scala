@@ -7,9 +7,9 @@ import cats.syntax.all.*
 import fs2.io.file.{Files, Path}
 import noesis.core.capture.Intent
 import noesis.core.event.Events
-import noesis.core.journal.{JsonLines, JsonLinesJournal}
+import noesis.journal.{JsonLines, JsonLinesJournal}
 import noesis.core.kb.{KbConfig, KnowledgeBase}
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.lms.{LearningEngine, Review}
 import noesis.vocab.Modules
 

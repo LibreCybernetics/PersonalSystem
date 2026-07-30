@@ -1,7 +1,7 @@
 package noesis.core.event
 
-import noesis.core.journal.{JournalEntry, Operation}
-import noesis.core.model.*
+import noesis.journal.{JournalEntry, Operation}
+import noesis.logic.*
 import noesis.core.projection.KbState
 
 /** Derives the event stream implied by journal operations.

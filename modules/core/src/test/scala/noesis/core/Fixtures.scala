@@ -2,9 +2,9 @@ package noesis.core
 
 import cats.effect.IO
 import cats.effect.std.UUIDGen
-import noesis.core.journal.InMemoryJournal
+import noesis.journal.InMemoryJournal
 import noesis.core.kb.{KbConfig, KnowledgeBase}
-import noesis.core.model.*
+import noesis.logic.*
 
 /** Shared vocabulary and builders for the core tests.
   *

@@ -79,10 +79,59 @@ lazy val commonSettings = Seq(
   ),
 )
 
-// The Knowledge Core (SPEC §3): journal, projections, reasoning, query,
-// policy cascade, verbalization. Knows nothing about learning or modules.
+// The formal semantic language (SPEC §3.1): identifiers, literals, OWL-style axioms, annotations,
+// temporal statements, and their stable serialized representation.
+lazy val logic = project
+  .in(file("modules/logic"))
+  .settings(commonSettings)
+  .settings(
+    name := "noesis-logic",
+    libraryDependencies ++= Seq(
+      "org.typelevel" %% "cats-core" % "2.13.0",
+      "org.typelevel" %% "cats-effect" % catsEffectV,
+      "io.circe" %% "circe-core" % circeV,
+      "io.circe" %% "circe-parser" % circeV,
+      "io.circe" %% "circe-generic" % circeV
+    )
+  )
+
+// The append-only source of truth (SPEC §3.2): operation protocol, sequencing, and JSONL backends.
+lazy val journal = project
+  .in(file("modules/journal"))
+  .dependsOn(logic)
+  .settings(commonSettings)
+  .settings(
+    name := "noesis-journal",
+    libraryDependencies ++= Seq(
+      "org.typelevel" %% "cats-core" % "2.13.0",
+      "org.typelevel" %% "cats-effect" % catsEffectV,
+      "co.fs2" %% "fs2-core" % fs2V,
+      "co.fs2" %% "fs2-io" % fs2V,
+      "io.circe" %% "circe-core" % circeV,
+      "io.circe" %% "circe-parser" % circeV,
+      "io.circe" %% "circe-generic" % circeV
+    )
+  )
+
+// Pure inference and query services (SPEC §3.4), including load-bearing justification tracking.
+lazy val reasoner = project
+  .in(file("modules/reasoner"))
+  .dependsOn(logic)
+  .settings(commonSettings)
+  .settings(
+    name := "noesis-reasoner",
+    libraryDependencies ++= Seq(
+      "org.typelevel" %% "cats-core" % "2.13.0",
+      "io.circe" %% "circe-core" % circeV,
+      "io.circe" %% "circe-generic" % circeV
+    )
+  )
+
+// The Knowledge Core (SPEC §3): composes the foundational modules with projections, capture,
+// policy, events, and verbalization. Knows nothing about learning or vocabulary modules.
 lazy val core = project
   .in(file("modules/core"))
+  .dependsOn(logic, journal, reasoner)
   .settings(commonSettings)
   .settings(
     name := "noesis-core",
@@ -100,14 +149,14 @@ lazy val core = project
 // The Learning Engine (SPEC §4): items, belief, scheduling, derived belief.
 lazy val lms = project
   .in(file("modules/lms"))
-  .dependsOn(core % "compile->compile;test->test")
+  .dependsOn(logic, reasoner, core % "compile->compile;test->test")
   .settings(commonSettings)
   .settings(name := "noesis-lms")
 
 // Vocabulary modules (SPEC §5–§8): core upper ontology, crm:, ll:, vf:.
 lazy val vocab = project
   .in(file("modules/vocab"))
-  .dependsOn(core % "compile->compile;test->test", lms)
+  .dependsOn(logic, reasoner, core % "compile->compile;test->test", lms)
   .settings(commonSettings)
   .settings(name := "noesis-vocab")
 
@@ -121,7 +170,7 @@ lazy val launcher = taskKey[String]("write an executable launcher script for the
 
 lazy val cli = project
   .in(file("modules/cli"))
-  .dependsOn(core, lms, vocab)
+  .dependsOn(logic, journal, reasoner, core, lms, vocab)
   .settings(commonSettings)
   .settings(
     name := "noesis-cli",
@@ -163,7 +212,7 @@ lazy val cli = project
 
 lazy val root = project
   .in(file("."))
-  .aggregate(core, lms, vocab, cli)
+  .aggregate(logic, journal, reasoner, core, lms, vocab, cli)
   .settings(
     name := "noesis",
     publish / skip := true

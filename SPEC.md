@@ -30,10 +30,9 @@ Clients: Web / Mobile / CLI UI          MCP agents (external LLM apps)
 │   Capture Service · Learning Engine · Module Host · MCP Gateway      │
 │   Shared services: Verbalizer · Agenda · Search · LLM Gateway        │
 ├──────────────────────────────────────────────────────────────────────┤
-│ Knowledge Core                                                       │
-│   Journal (asserted axioms + annotations)                            │
-│   Projections: inferred graph · current graph · module state         │
-│   Reasoner · SPARQL/DL query · Explanations · Event bus              │
+│ Knowledge Core orchestration · projections · policy · event bus      │
+├───────────────────┬─────────────────────┬────────────────────────────┤
+│ Semantic language │ Append-only journal │ Reasoner · query · explain │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Storage: RDF quad store · operational DB · vector/full-text index    │
 └──────────────────────────────────────────────────────────────────────┘
@@ -41,7 +40,10 @@ Clients: Web / Mobile / CLI UI          MCP agents (external LLM apps)
 
 | Component | Responsibility |
 |---|---|
-| Knowledge Core | Journal, projections, reasoning, query, explanation, events (§3) |
+| Semantic language | OWL-style axiom algebra, identifiers, literals, annotations, fluents, and ternary views (§3.1, §3.6) |
+| Journal | Append-only operation protocol and persistence; the sole source of truth (§3.2) |
+| Reasoner | Graph closure, journal-backed justifications, consistency, profile checks, explanation, and query (§3.4) |
+| Knowledge Core | Composes language, journal, and reasoner with projections, capture, policies, verbalization, and events (§3) |
 | Capture Service | NL → formal pipeline with confirmation; verbalization round-trip (§3.5) |
 | Learning Engine | Items, belief, scheduling, quiz generation & grading, remediation (§4) |
 | Module Host | Loads modules; namespaces their ontology; mediates permissions (§5) |
@@ -59,6 +61,9 @@ Clients: Web / Mobile / CLI UI          MCP agents (external LLM apps)
 - Roles are binary; events and n-ary relations are reified individuals. Language-tagged strings and full XSD datatypes (partial dates like `--05-12` permitted).
 - **Axiom identity:** every asserted axiom has a stable `axiomId` (RDF-star), so annotations, learning items, references, and justifications address axioms, not bare triples. Entity IRIs are opaque UUIDs — names are data (§7.2), so renames never break anything.
 
+The executable language boundary and its serialization compatibility rules are specified in
+[`modules/logic/SPEC.md`](modules/logic/SPEC.md).
+
 ### 3.2 Journal & Projections
 
 The **journal** is an append-only log of operations (`assert`, `retract`, `reclassify`, annotation changes) on axioms. Everything else is a **projection**: cached, event-invalidated, and always rebuildable from the journal —
@@ -68,6 +73,9 @@ The **journal** is an append-only log of operations (`assert`, `retract`, `recla
 - *module state* — e.g., resource balances and custody folded from economic events (§8).
 
 This one principle yields time-travel queries, trivial backup (snapshot + journal), and audit for free. Module TBoxes live in namespaced graphs; free-text notes attach to entities/axioms (indexed for search and LLM context, but non-logical).
+
+The executable operation protocol, replay ordering, and implemented durability guarantees are
+specified in [`modules/journal/SPEC.md`](modules/journal/SPEC.md).
 
 ### 3.3 Annotations & the Policy Cascade
 
@@ -101,6 +109,9 @@ Capture *proposes* a level (and scope) from provenance heuristics — public-URL
 ### 3.4 Reasoning Services
 
 Pluggable reasoner (ELK for EL; HermiT/Openllet for full DL): incremental **consistency** on every commit (inconsistent commits rejected with a justification), classification/realization, **entailment + explanation** (minimal justification sets — these power derived belief §4.4, disclosure filtering §3.3.1, and contradiction UX), SPARQL 1.1 and DL queries over asserted ∪ projected graphs, and entailment diffs emitted as `entailment.changed`.
+
+The executable reasoner boundary, including the compatibility requirements for a future production
+adapter, is specified in [`modules/reasoner/SPEC.md`](modules/reasoner/SPEC.md).
 
 **Contradictions** — from a new capture or a `contradicts` reference link (§3.7) — surface the justification ("conflicts with: *A worksAt Acme*, added 2025-03-02") with resolutions: reject new, retract old, qualify temporally (close a fluent), or mark disputed (excluded from reasoning).
 

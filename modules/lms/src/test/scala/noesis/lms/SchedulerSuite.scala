@@ -3,7 +3,7 @@ package noesis.lms
 import java.time.Instant
 
 import munit.FunSuite
-import noesis.core.model.AxiomId
+import noesis.logic.AxiomId
 
 /** Scheduling (SPEC §4.3). */
 class SchedulerSuite extends FunSuite:

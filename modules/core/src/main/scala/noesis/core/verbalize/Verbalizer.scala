@@ -2,7 +2,7 @@ package noesis.core.verbalize
 
 import java.util.Locale
 
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.projection.KbState
 
 /** Natural-language templates contributed by modules (SPEC §5.1, §5.2).

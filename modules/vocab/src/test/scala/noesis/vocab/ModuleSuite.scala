@@ -6,12 +6,12 @@ import cats.effect.std.{SecureRandom, UUIDGen}
 import cats.syntax.all.*
 import munit.CatsEffectSuite
 import noesis.core.capture.Intent
-import noesis.core.journal.InMemoryJournal
+import noesis.journal.InMemoryJournal
 import noesis.core.kb.{KbConfig, KnowledgeBase}
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.policy.{DisclosurePolicy, PolicyCascade}
 import noesis.core.projection.AxiomRecord
-import noesis.core.query.Query
+import noesis.reasoner.query.Query
 import noesis.lms.{ItemOrigin, ItemPolicy, LearningEngine, QueueMode}
 
 /** Module tests (SPEC §5–§8).
@@ -68,7 +68,7 @@ class ModuleSuite extends CatsEffectSuite:
         assertEquals(problems, Nil, s"the merged module TBox is inconsistent: $problems")
 
   test("modules contribute rules, policies and templates into one configuration"):
-    assert(config.rules.length > noesis.core.reason.RdfsRules.all.length, "no module rules merged")
+    assert(config.rules.length > noesis.reasoner.RdfsRules.all.length, "no module rules merged")
     assert(config.policies.modules.keySet == Set("core", "crm", "ll", "vf"), config.policies.modules.keySet.toString)
     assert(config.templates.byProperty.contains(RelationshipsModule.birthday))
 

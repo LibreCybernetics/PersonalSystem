@@ -3,9 +3,8 @@ package noesis.lms
 import java.time.Instant
 
 import munit.FunSuite
-import noesis.core.model.*
-import noesis.core.projection.Graph
-import noesis.core.reason.Reasoner
+import noesis.logic.*
+import noesis.reasoner.{Graph, Reasoner, Support}
 
 /** Belief and scheduling (SPEC §4.2, §4.3, §4.4).
   *

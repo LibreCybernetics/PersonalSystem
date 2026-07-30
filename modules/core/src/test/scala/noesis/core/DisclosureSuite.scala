@@ -4,11 +4,11 @@ import java.time.Instant
 
 import munit.FunSuite
 import noesis.core.Fixtures.*
-import noesis.core.journal.{JournalEntry, Operation}
-import noesis.core.model.*
+import noesis.journal.{JournalEntry, Operation}
+import noesis.logic.*
 import noesis.core.policy.*
 import noesis.core.projection.{AxiomRecord, KbState, Projections}
-import noesis.core.reason.Reasoner
+import noesis.reasoner.{Reasoner, Support}
 
 /** The privacy model (SPEC §3.3, §3.3.1, §9).
   *

@@ -23,6 +23,9 @@ jobs:
       fail-fast: false
       matrix:
         module:
+          - logic
+          - journal
+          - reasoner
           - core
           - lms
           - vocab

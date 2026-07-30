@@ -1,6 +1,6 @@
 package noesis.vocab
 
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.policy.{ModuleDefaults, PolicyBook}
 import noesis.core.verbalize.Templates
 import noesis.lms.{ItemPolicy, ItemPolicyBook}
