@@ -74,4 +74,4 @@ final case class JournalEntry(seq: Long, at: Instant, operation: Operation) deri
   */
 final case class Commit(entries: List[JournalEntry]):
   def seqRange: Option[(Long, Long)] =
-    entries.headOption.map(h => (h.seq, entries.last.seq))
+    entries.headOption.zip(entries.lastOption).map((first, last) => (first.seq, last.seq))

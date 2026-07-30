@@ -1,5 +1,7 @@
 package noesis.core.verbalize
 
+import java.util.Locale
+
 import noesis.core.model.*
 import noesis.core.projection.KbState
 
@@ -75,7 +77,7 @@ object Naming:
     camel
       .replaceAll("([a-z0-9])([A-Z])", "$1 $2")
       .replaceAll("([A-Z]+)([A-Z][a-z])", "$1 $2")
-      .toLowerCase
+      .toLowerCase(Locale.ROOT)
 
 /** Axiom → natural language (SPEC §5.2).
   *
@@ -172,7 +174,7 @@ final class Verbalizer(naming: NamingContext, templates: Templates = Templates.e
 
   private def article(cls: Iri): String =
     val label = naming.label(cls)
-    if label.nonEmpty && "aeiou".contains(label.toLowerCase.head) then "an" else "a"
+    if label.nonEmpty && "aeiou".contains(label.toLowerCase(Locale.ROOT).head) then "an" else "a"
 
   private def plural(label: String): String =
     if label.endsWith("s") then label else s"${label}s"

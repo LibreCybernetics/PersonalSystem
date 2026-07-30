@@ -80,10 +80,11 @@ class JournalSuite extends CatsEffectSuite:
           .compile
           .drain
         result <- journal.stream.compile.toList.attempt
-      yield assert(
-        result.left.exists(_.isInstanceOf[CorruptJournal]),
-        s"expected CorruptJournal, got $result"
-      )
+      yield
+        val isCorrupt = result.left.exists:
+          case _: CorruptJournal => true
+          case _                 => false
+        assert(isCorrupt, s"expected CorruptJournal, got $result")
 
   test("every operation round-trips through JSON"):
     val operations = List(

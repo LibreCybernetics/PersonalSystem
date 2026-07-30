@@ -1,5 +1,7 @@
 package noesis.cli
 
+import java.util.Locale
+
 import noesis.core.model.*
 import noesis.core.policy.DisclosureDecision
 import noesis.core.projection.KbState
@@ -68,7 +70,7 @@ object Render:
       case DisclosureDecision.Disclose(effective) =>
         val scopes =
           if effective.scopes.isEmpty then "" else effective.scopes.map(_.value).mkString(" (", ", ", ")")
-        s"  ✓ ${verbalizer.verbalize(a)}  [${effective.level.toString.toLowerCase}$scopes]"
+        s"  ✓ ${verbalizer.verbalize(a)}  [${effective.level.toString.toLowerCase(Locale.ROOT)}$scopes]"
       case DisclosureDecision.Redact(reason) =>
         s"  ✗ ${decision.marker} — $reason"
 

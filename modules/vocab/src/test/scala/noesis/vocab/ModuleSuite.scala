@@ -31,6 +31,16 @@ class ModuleSuite extends CatsEffectSuite:
   private val lia = Iri("noesis:e/lia")
   private val acme = Iri("noesis:e/acme")
   private val molina = Iri("noesis:e/molina")
+  private val dogConcept = Iri("noesis:e/c-dog")
+  private val esPerro = Iri("noesis:e/lex-perro")
+  private val enDog = Iri("noesis:e/lex-dog")
+  private val ruSobaka = Iri("noesis:e/lex-sobaka")
+  private val ruMagazin = Iri("noesis:e/lex-magazin")
+  private val enMagazine = Iri("noesis:e/lex-magazine")
+  private val drill = Iri("noesis:e/drill")
+  private val lendEvent = Iri("noesis:e/ev-lend")
+  private val returnEvent = Iri("noesis:e/ev-return")
+  private val me = CoreModule.me
 
   private val modules = Modules.all
   private val config = Modules.configure(KbConfig.default, modules)
@@ -321,7 +331,8 @@ class ModuleSuite extends CatsEffectSuite:
       assertEquals(state.ongoingFluents.size, 1, "only the new name should be current")
       val changeItems = items.filter(_.origin == ItemOrigin.StateChange)
       assertEquals(changeItems.length, 1)
-      assertEquals(changeItems.head.priorityBoost, 1.0, "a rename must be top priority (§7.2)")
+      val change = changeItems.headOption.getOrElse(fail("expected a rename change item"))
+      assertEquals(change.priorityBoost, 1.0, "a rename must be top priority (§7.2)")
 
   test("a fluent-backed change item is scheduled at its property's utility, not a default"):
     // worksAt, hasName and pronouns are all time-varying, so their facts live in fluents and have no
@@ -373,13 +384,6 @@ class ModuleSuite extends CatsEffectSuite:
       assert(!text.contains("Adam"), s"a former name leaked: $text")
 
   // ── Language learning (SPEC §6) ───────────────────────────────────────────
-
-  private val dogConcept = Iri("noesis:e/c-dog")
-  private val esPerro = Iri("noesis:e/lex-perro")
-  private val enDog = Iri("noesis:e/lex-dog")
-  private val ruSobaka = Iri("noesis:e/lex-sobaka")
-  private val ruMagazin = Iri("noesis:e/lex-magazin")
-  private val enMagazine = Iri("noesis:e/lex-magazine")
 
   test("translation is a traversal through the concept, not a word-to-word edge"):
     // c:DOG ← es:perro, en:dog, ru:собака  (SPEC §6)
@@ -467,11 +471,6 @@ class ModuleSuite extends CatsEffectSuite:
     assertEquals(PolicyCascade.sensitivity(record, config.policies), Sensitivity.Public)
 
   // ── Resources & accounting (SPEC §8) ──────────────────────────────────────
-
-  private val drill = Iri("noesis:e/drill")
-  private val lendEvent = Iri("noesis:e/ev-lend")
-  private val returnEvent = Iri("noesis:e/ev-return")
-  private val me = CoreModule.me
 
   /** "Lent my drill to Marco yesterday, back in two weeks" (SPEC §8). */
   private def lendDrill(base: KnowledgeBase[IO]) =
@@ -658,7 +657,7 @@ class ModuleSuite extends CatsEffectSuite:
       )
       result = commit.fold(r => fail(r.render), identity)
       items <- engine.handle(result.events)
-      item = items.head
+      item = items.headOption.getOrElse(fail("expected a learning item for the birthday"))
       outcome <- engine.review(item.id, grade = 1.0, latencyMs = 1200)
       log <- engine.reviewLog
     yield

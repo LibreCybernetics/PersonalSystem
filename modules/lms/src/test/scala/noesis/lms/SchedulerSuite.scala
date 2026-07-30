@@ -50,8 +50,9 @@ class SchedulerSuite extends FunSuite:
     val queue = Scheduler.retentionQueue(List(fading), flat(0.9), days(20))
 
     assertEquals(queue.length, 1)
-    assertEquals(queue.head.mode, QueueMode.Retention)
-    assert(queue.head.reason.contains("below target"), queue.head.reason)
+    val first = queue.headOption.getOrElse(fail("expected fading item in retention queue"))
+    assertEquals(first.mode, QueueMode.Retention)
+    assert(first.reason.contains("below target"), first.reason)
 
   test("high-utility items are scheduled before low-utility ones at equal belief"):
     val important = item("important", belief = 0.5)
@@ -60,7 +61,8 @@ class SchedulerSuite extends FunSuite:
       i => if i.id == important.id then 0.9 else 0.3
 
     val queue = Scheduler.retentionQueue(List(marginal, important), utilities, t0).sortBy(-_.weight)
-    assertEquals(queue.head.item.id, important.id)
+    val first = queue.headOption.getOrElse(fail("expected a retention item"))
+    assertEquals(first.item.id, important.id)
 
   test("items below the suspend threshold are stored but never scheduled"):
     val trivial = item("trivial", belief = 0.1)
@@ -87,8 +89,9 @@ class SchedulerSuite extends FunSuite:
       .elucidationQueue(List(confident, unknown, uncertain), flat(0.8), t0)
       .sortBy(-_.weight)
 
-    assertEquals(queue.head.item.id, uncertain.id, queue.map(e => e.item.id.value -> e.weight).toString)
-    assert(queue.head.reason.contains("uncertain"), queue.head.reason)
+    val first = queue.headOption.getOrElse(fail("expected an elucidation item"))
+    assertEquals(first.item.id, uncertain.id, queue.map(e => e.item.id.value -> e.weight).toString)
+    assert(first.reason.contains("uncertain"), first.reason)
 
   test("a certain item yields no elucidation value at all"):
     val certain = item("certain", belief = 1.0, stability = 10000.0)
@@ -99,7 +102,8 @@ class SchedulerSuite extends FunSuite:
     val ordinary = item("ordinary", belief = 0.5, stability = 10000.0)
 
     val queue = Scheduler.elucidationQueue(List(ordinary, changed), flat(0.8), t0).sortBy(-_.weight)
-    assertEquals(queue.head.item.id, changed.id)
+    val first = queue.headOption.getOrElse(fail("expected a state-change item"))
+    assertEquals(first.item.id, changed.id)
 
   test("a name-change priority boost puts an item at the front of the mixed queue"):
     // SPEC §7.2: name and pronoun supersessions create the highest-priority change items.
@@ -113,14 +117,16 @@ class SchedulerSuite extends FunSuite:
     val urgent = item("urgent", belief = 0.1, stability = 10000.0)
 
     val queue = Scheduler.queue(List(urgent, rename), flat(0.9), t0, QueueMode.Mixed, limit = 5)
-    assertEquals(queue.head.item.id, rename.id, queue.map(e => e.item.id.value -> e.weight).toString)
+    val first = queue.headOption.getOrElse(fail("expected a mixed-queue item"))
+    assertEquals(first.item.id, rename.id, queue.map(e => e.item.id.value -> e.weight).toString)
 
   test("a historical item is ranked below a current one"):
     val historical = item("hist", belief = 0.5, stability = 10000.0, origin = ItemOrigin.Historical)
     val current = item("cur", belief = 0.5, stability = 10000.0)
 
     val queue = Scheduler.elucidationQueue(List(historical, current), flat(0.8), t0).sortBy(-_.weight)
-    assertEquals(queue.head.item.id, current.id)
+    val first = queue.headOption.getOrElse(fail("expected a current elucidation item"))
+    assertEquals(first.item.id, current.id)
 
   test("the mixed queue does not schedule the same item twice"):
     val fading = item("fading", belief = 0.5, stability = 5.0)

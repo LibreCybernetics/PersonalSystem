@@ -16,6 +16,9 @@ import noesis.core.reason.Reasoner
 class BeliefSuite extends FunSuite:
 
   private val t0 = Instant.parse("2026-07-01T12:00:00Z")
+  private val Person = Iri("crm:Person")
+  private val Agent = Iri("crm:Agent")
+  private val alice = Iri("noesis:e/alice")
   private def days(n: Long): Instant = t0.plusSeconds(n * 86400)
 
   private def item(
@@ -130,10 +133,6 @@ class BeliefSuite extends FunSuite:
 
   // ── Derived belief (SPEC §4.4) ─────────────────────────────────────────────
 
-  private val Person = Iri("crm:Person")
-  private val Agent = Iri("crm:Agent")
-  private val alice = Iri("noesis:e/alice")
-
   private def closureFor(axioms: Axiom*) =
     Reasoner.closure(Graph(axioms.map(a => a -> Set[Support](Support.Asserted(a.id))).toMap))
 
@@ -187,7 +186,9 @@ class BeliefSuite extends FunSuite:
     )
 
     val config = DerivedBelief.Config(inferenceDifficulty = 0.0)
-    val combined = DerivedBelief.of(derived, closure, beliefs.get, config).get
+    val combined = DerivedBelief
+      .of(derived, closure, beliefs.get, config)
+      .getOrElse(fail("expected belief from two tracked derivations"))
 
     assert(combined > 0.5, s"two independent paths should reinforce each other, got $combined")
     assert(combined <= 1.0)

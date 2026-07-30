@@ -1,6 +1,7 @@
 package noesis.lms
 
 import java.time.Instant
+import java.util.Locale
 
 import io.circe.derivation.{ConfiguredCodec, ConfiguredEnumCodec}
 import noesis.core.model.*
@@ -11,7 +12,7 @@ opaque type ItemId = String
 object ItemId:
   def of(kind: ItemKind, axioms: Set[AxiomId]): ItemId =
     val key = axioms.toList.sorted.map(_.value).mkString(",")
-    s"it_${kind.toString.toLowerCase}_${Integer.toHexString(key.hashCode)}"
+    s"it_${kind.toString.toLowerCase(Locale.ROOT)}_${Integer.toHexString(key.hashCode)}"
 
   def unsafe(value: String): ItemId = value
 
@@ -114,7 +115,7 @@ enum AnswerSpec derives ConfiguredCodec:
   case Rubric(criteria: String)
 
   def grade(response: String): Option[Double] =
-    def norm(s: String) = s.trim.toLowerCase
+    def norm(s: String) = s.trim.toLowerCase(Locale.ROOT)
     this match
       case Exact(value)   => Some(if norm(response) == norm(value) then 1.0 else 0.0)
       case AnyOf(values)  => Some(if values.map(norm).contains(norm(response)) then 1.0 else 0.0)
