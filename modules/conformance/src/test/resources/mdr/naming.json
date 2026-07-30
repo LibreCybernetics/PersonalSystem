@@ -56,6 +56,18 @@
       "propertyPattern": "^[a-z][A-Za-z0-9]*$"
     },
     {
+      "prefix": "foaf",
+      "kind": "descriptive",
+      "scope": "The subset of the FOAF vocabulary used by the mapped RDF interchange boundary in SPEC §7.3. Descriptive: Noesis records these upstream names and does not coin terms in this namespace.",
+      "authority": "The FOAF Vocabulary Project, FOAF Vocabulary Specification (https://xmlns.com/foaf/spec/). `noesis.vocab.Foaf` records the subset mapped by Noesis.",
+      "semantic": "A name means what the upstream FOAF vocabulary specifies. Noesis maps those terms to its canonical PRM model without treating matching names or inverse-functional properties as automatic identity.",
+      "syntactic": "As published upstream: one name part per term.",
+      "lexical": "As published upstream: UpperCamelCase for classes and lowerCamelCase for properties. Recorded so that a mistyped adapter term fails rather than silently inventing a local FOAF term.",
+      "uniqueness": "One item per name, inherited from upstream. Noesis introduces no synonyms in the FOAF namespace.",
+      "classPattern": "^[A-Z][A-Za-z0-9]*$",
+      "propertyPattern": "^[a-z][A-Za-z0-9]*$"
+    },
+    {
       "prefix": "ref",
       "kind": "prescriptive",
       "scope": "Reserved for the references and locators of SPEC §3.7 and §9. No term is declared yet; the namespace is bound so that the convention is settled before the first one is.",

@@ -132,3 +132,153 @@ class VerbalizerSuite extends FunSuite:
 
     assertEquals(naming.label(alice), "Name")
     assertEquals(naming.label(marco), "Fluent name")
+
+  test("structured naming follows only its declared path and compares link and value recency"):
+    val oldName = Iri("noesis:e/old-name")
+    val newerLink = Iri("noesis:e/newer-link")
+    val unrelated = Iri("noesis:e/unrelated")
+    val structuredNameValue = Iri("test:nameValue")
+    val entries = List(
+      JournalEntry(
+        1L,
+        Instant.EPOCH,
+        Operation.Assert(
+          Axiom.DataAssertion(alice, Vocab.label, Literal.string("Fallback")).id,
+          Axiom.DataAssertion(alice, Vocab.label, Literal.string("Fallback"))
+        )
+      ),
+      JournalEntry(
+        2L,
+        Instant.EPOCH,
+        Operation.Assert(
+          Axiom.ObjectAssertion(alice, hasName, oldName).id,
+          Axiom.ObjectAssertion(alice, hasName, oldName)
+        )
+      ),
+      JournalEntry(
+        3L,
+        Instant.EPOCH,
+        Operation.Assert(
+          Axiom.DataAssertion(oldName, structuredNameValue, Literal.string("Stale")).id,
+          Axiom.DataAssertion(oldName, structuredNameValue, Literal.string("Stale"))
+        )
+      ),
+      JournalEntry(
+        100L,
+        Instant.EPOCH,
+        Operation.Assert(
+          Axiom.DataAssertion(oldName, structuredNameValue, Literal.string("Current by value")).id,
+          Axiom.DataAssertion(oldName, structuredNameValue, Literal.string("Current by value"))
+        )
+      ),
+      JournalEntry(
+        50L,
+        Instant.EPOCH,
+        Operation.Assert(
+          Axiom.ObjectAssertion(alice, hasName, newerLink).id,
+          Axiom.ObjectAssertion(alice, hasName, newerLink)
+        )
+      ),
+      JournalEntry(
+        51L,
+        Instant.EPOCH,
+        Operation.Assert(
+          Axiom.DataAssertion(newerLink, structuredNameValue, Literal.string("Current by link")).id,
+          Axiom.DataAssertion(newerLink, structuredNameValue, Literal.string("Current by link"))
+        )
+      ),
+      JournalEntry(
+        200L,
+        Instant.EPOCH,
+        Operation.Assert(
+          Axiom.ObjectAssertion(alice, worksAt, unrelated).id,
+          Axiom.ObjectAssertion(alice, worksAt, unrelated)
+        )
+      ),
+      JournalEntry(
+        201L,
+        Instant.EPOCH,
+        Operation.Assert(
+          Axiom.DataAssertion(unrelated, structuredNameValue, Literal.string("Wrong path")).id,
+          Axiom.DataAssertion(unrelated, structuredNameValue, Literal.string("Wrong path"))
+        )
+      )
+    )
+    val naming = Naming.from(
+      KbState.replay(entries),
+      schemes = List(Naming.Scheme(hasName, structuredNameValue))
+    )
+
+    assertEquals(naming.label(alice), "Current by value")
+
+  test("an ongoing structured-name link and value outrank assertions and literal labels"):
+    val oldName = Iri("noesis:e/old-name")
+    val currentName = Iri("noesis:e/current-name")
+    val structuredNameValue = Iri("test:nameValue")
+    val labelAxiom = Axiom.DataAssertion(alice, Vocab.label, Literal.string("Fallback"))
+    val oldLink = Axiom.ObjectAssertion(alice, hasName, oldName)
+    val oldValue = Axiom.DataAssertion(oldName, structuredNameValue, Literal.string("Old"))
+    val staleCurrentValue =
+      Axiom.DataAssertion(
+        currentName,
+        structuredNameValue,
+        Literal.string("Stale current value")
+      )
+    val state = KbState.replay(
+      List(
+        JournalEntry(1L, Instant.EPOCH, Operation.Assert(labelAxiom.id, labelAxiom)),
+        JournalEntry(2L, Instant.EPOCH, Operation.Assert(oldLink.id, oldLink)),
+        JournalEntry(3L, Instant.EPOCH, Operation.Assert(oldValue.id, oldValue)),
+        JournalEntry(
+          4L,
+          Instant.EPOCH,
+          Operation.Assert(staleCurrentValue.id, staleCurrentValue)
+        ),
+        JournalEntry(
+          5L,
+          Instant.EPOCH,
+          Operation.OpenFluent(
+            Fluent(FluentId.unsafe("fl_current_name_link"), alice, hasName, Node.Ref(currentName))
+          )
+        ),
+        JournalEntry(
+          6L,
+          Instant.EPOCH,
+          Operation.OpenFluent(
+            Fluent(
+              FluentId.unsafe("fl_current_name_value"),
+              currentName,
+              structuredNameValue,
+              Node.Lit(Literal.string("Current"))
+            )
+          )
+        )
+      )
+    )
+    val naming = Naming.from(
+      state,
+      schemes = List(Naming.Scheme(hasName, structuredNameValue))
+    )
+
+    assertEquals(naming.label(alice), "Current")
+
+  test("structured name values asserted at the same sequence use a stable lexical tie-break"):
+    val name = Iri("noesis:e/name")
+    val structuredNameValue = Iri("test:nameValue")
+    val link = Axiom.ObjectAssertion(alice, hasName, name)
+    val alpha = Axiom.DataAssertion(name, structuredNameValue, Literal.string("Alpha"))
+    val zulu = Axiom.DataAssertion(name, structuredNameValue, Literal.string("Zulu"))
+    val state = KbState.replay(
+      List(
+        JournalEntry(1L, Instant.EPOCH, Operation.Assert(link.id, link)),
+        JournalEntry(2L, Instant.EPOCH, Operation.Assert(zulu.id, zulu)),
+        JournalEntry(2L, Instant.EPOCH, Operation.Assert(alpha.id, alpha))
+      )
+    )
+
+    assertEquals(
+      Naming
+        .from(state, schemes = List(Naming.Scheme(hasName, structuredNameValue)))
+        .label(alice),
+      "Alpha"
+    )

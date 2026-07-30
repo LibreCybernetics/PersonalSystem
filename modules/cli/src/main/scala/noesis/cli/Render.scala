@@ -4,10 +4,12 @@ import java.util.Locale
 
 import noesis.logic.*
 import noesis.journal.Turtle
+import noesis.core.module.AgendaEntry
 import noesis.core.policy.DisclosureDecision
 import noesis.core.projection.KbState
 import noesis.core.verbalize.Verbalizer
 import noesis.lms.{Item, QueueEntry}
+import noesis.vocab.{ContactCard, FollowUpDue, ReminderDue}
 
 /** Terminal rendering.
   *
@@ -84,3 +86,56 @@ object Render:
     */
   def turtle(state: KbState): String =
     Turtle.write(noesis.core.projection.Projections.current(state).triples.toList)
+
+  def contactCard(card: ContactCard, verbalizer: Verbalizer): String =
+    val heading =
+      s"${card.displayName}  <${card.contact.value}>  [${card.completeness.toString.toLowerCase(Locale.ROOT)}]"
+    val birthday = card.birthday.toList.map(date => s"  birthday: ${date.render}")
+    val methods =
+      if card.methods.isEmpty then List("  contact methods: (none)")
+      else
+        "  contact methods:" :: card.methods.map: method =>
+          val metadata = List(
+            method.label,
+            method.purpose,
+            method.rank.map(rank => s"rank $rank")
+          ).flatten
+          val suffix = if metadata.isEmpty then "" else metadata.mkString(" [", ", ", "]")
+          s"    ${method.kind}: ${method.value}$suffix"
+    val employments =
+      if card.employments.isEmpty then Nil
+      else
+        "  employment:" :: card.employments.map: employment =>
+          val role = employment.title.fold("")(title => s" — $title")
+          s"    ${verbalizer.label(employment.organization)}$role"
+    val interactions =
+      if card.recentInteractions.isEmpty then Nil
+      else
+        "  recent interactions:" :: card.recentInteractions.map: interaction =>
+          val summary = interaction.summary.fold("")(value => s" — $value")
+          s"    ${interaction.occurred.render} · ${interaction.channel}$summary"
+    (heading :: birthday ++ methods ++ employments ++ interactions).mkString("\n")
+
+  def contactAgenda(
+      followUps: List[FollowUpDue],
+      reminders: List[ReminderDue],
+      verbalizer: Verbalizer
+  ): String =
+    val followUpLines =
+      if followUps.isEmpty then List("  (none)")
+      else followUps.map: entry =>
+        val marker = if entry.overdue then "!" else " "
+        s"  $marker ${entry.due}  follow up with ${verbalizer.label(entry.contact)}"
+    val reminderLines =
+      if reminders.isEmpty then List("  (none)")
+      else reminders.map: entry =>
+        s"    ${entry.due.render}  ${entry.occasion} — ${verbalizer.label(entry.contact)}"
+    ("follow-ups:" :: followUpLines) ++ ("" :: "reminders:" :: reminderLines) mkString "\n"
+
+  def agenda(entries: List[AgendaEntry], verbalizer: Verbalizer): String =
+    if entries.isEmpty then "agenda:\n  (nothing due)"
+    else
+      val lines = entries.map: entry =>
+        val marker = if entry.overdue then "!" else " "
+        s"  $marker ${entry.due}  ${entry.summary} — ${verbalizer.label(entry.subject)}"
+      "agenda:\n" + lines.mkString("\n")

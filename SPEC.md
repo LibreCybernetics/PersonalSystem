@@ -1,7 +1,7 @@
 # Noesis — Architecture & Specification
 ### A single-user knowledge & learning system on a formal knowledge representation
 
-**Version:** 0.5 (Draft) — full rewrite for concision; single-user scope made explicit; annotation/policy, projection, and agenda mechanisms unified
+**Version:** 0.6 (Draft) — Personal Relationship Management and contact interchange design
 **Status:** For review
 
 ---
@@ -234,7 +234,7 @@ GET  /lms/items/{id}/resources · POST /lms/study-tasks · GET /lms/coverage
 
 ### 5.1 Module Contract
 
-A module is a versioned package declaring: namespaced ontology fragments (TBox/RBox), capture prompt fragments and operators, item types with generators/graders, annotation policies (utility & sensitivity defaults), agenda producers, MCP tools, UI panels, event subscriptions, and permissions. Installing shows the ontology diff for approval; the merged TBox must stay consistent. Module facts are full citizens — same journal, annotations, reasoning, capture UX, belief — specialization is vocabulary plus generators, never a parallel store. Modules run sandboxed with declared permissions; LLM access goes through the shared gateway, so the privacy gate applies uniformly. Modules may reference other modules' public terms (e.g., `ref:creator → core:Agent`).
+A module is a versioned package declaring: namespaced ontology fragments (TBox/RBox), capture prompt fragments and operators, record validators, import/export adapters, naming schemes, item types with generators/graders, annotation policies (utility & sensitivity defaults), agenda producers, MCP tools, UI panels, event subscriptions, and permissions. Installing shows the ontology diff for approval; the merged TBox must stay consistent. Module facts are full citizens — same journal, annotations, reasoning, capture UX, belief — specialization is vocabulary plus generators, never a parallel store. Modules run sandboxed with declared permissions; LLM access goes through the shared gateway, so the privacy gate applies uniformly. Modules may reference other modules' public terms (e.g., `ref:creator → core:Agent`).
 
 ### 5.2 Shared Services
 
@@ -277,19 +277,52 @@ GET /ll/mastery/summary?targetLang · POST /ll/import · GET /ll/reader/gloss
 
 ---
 
-## 7. Module: Relationships (`crm:`)
+## 7. Module: Personal Relationship Management (`crm:`)
 
-**Goals.** People, organizations, relationships, life events, interactions, gifts, preferences — with reasoning over the social graph, and the learning engine keeping the owner *fluent* in their relationships (names, dates, kids, preferences), not merely storing them.
+**Goals.** Traditional contact management (names, addresses, email, phone, online accounts and employment) joins people, organizations, relationships, life events, interactions, gifts, preferences and follow-up in one semantic model. Reasoning operates over the social graph, while the learning engine keeps the owner *fluent* in relationships (names, dates, kids, preferences) rather than treating lookup data such as phone numbers as memory material.
+
+[Monica](https://www.monicahq.com/features), an open-source Personal Relationship Management system, is informative product-design inspiration. Its [published feature set](https://github.com/monicahq/monica#features) and [API resource model](https://www.monicahq.com/api) motivate typed contact methods, addresses, relationships, activities, notes, reminders, tasks, gifts, pets and labels. Noesis does not adopt Monica's storage schema or API: these features remain ordinary journaled axioms and projections, with no parallel contact store. The implementation plan and detailed mapping are recorded in [PRM_PROPOSAL.md](PRM_PROPOSAL.md).
 
 ### 7.1 Ontology
 
 ```
 crm:Agent ⊒ crm:Person, crm:Organization   (⊑ core:Person, core:Organization)
-Data: birthday (partial dates ok) · namePronunciation · contactPoint · metOn/metAt
+crm:NamedEntity ⊒ crm:Person, crm:Organization, crm:CompanionAnimal
+Data: birthday (partial dates ok) · namePronunciation · metOn/metAt
+
+crm:ContactMethod
+  subclasses: EmailAddress · TelephoneNumber · OnlineAccount · PostalAddress
+  contactFor → Agent · contactKind → extensible string token
+  contactValue (time-varying) · contactLabel · contactPurpose
+  contactStatus (active|retired|invalid, time-varying)
+  preferenceRank (time-varying)
+PostalAddress:
+  formattedAddress · streetAddress · extendedAddress · locality · region
+  postalCode · countryCode
+
+crm:ExternalIdentifier: identifierFor → Agent · identifierScheme · identifierValue
+crm:Employment:
+  employmentFor → Person · employer → Organization
+  jobTitle · department · workLocation
+  employmentStatus (active|ended, time-varying)
+
 crm:Interaction  reified: participants · date · channel · note ·
+                 kind from an extensible vocabulary ·
                  mentionedTopic → any KB entity      # ties talk to the whole KB
 crm:LifeEvent · crm:Gift {to/from, occasion, status ∈ idea|planned|given|received}
 crm:Preference (likes/dislikes/allergies/topics-to-avoid)
+crm:ContactNote: about → Agent · noteBody · noteKind · recordedAt
+crm:Circle: member → Agent
+crm:FollowUpPlan: followUpWith → Agent · cadenceDays · qualifyingChannel · paused
+crm:Reminder: about → Agent · due · recurrence · occasion
+crm:CompanionAnimal: companionOf → Agent
+
+Informative FOAF alignment:
+  crm:Agent        ⊑ foaf:Agent
+  crm:Person       ⊑ foaf:Person
+  crm:Organization ⊑ foaf:Organization
+  crm:Circle       ⊑ foaf:Group
+  crm:member       ⊑ foaf:member
 
 Relationships — cardinality-free by design:
   knows (symmetric) ⊒ friendOf, partnerOf
@@ -310,9 +343,11 @@ Opt-in packs:  in-law/kinship chains — they encode family structures
 
 No disjointness between relationship kinds (a co-parent can be a friend and a former partner). Anniversaries attach to *relationships*, not persons, so each partnership has its own dates and gift/occasion logic iterates per relationship.
 
+Contact methods, addresses and employments are reified because each Agent may have several simultaneous values and each value has its own label, purpose, preference, provenance and history. The current fluent capture surface is single-valued per subject/property; reification gives each method or employment its own time-varying status without weakening that invariant. Active Employment records derive the compatibility fact `worksAt`, with their premises retained as its justification. "Last contacted", contact completeness, the current contact card and the next keep-in-touch date are projections, never stored facts.
+
 ### 7.2 Identity & Names
 
-- `hasName` is a fluent whose values are Name objects: `nameValue · nameKind ∈ {chosen, legal, nickname, professional, former} · script/language variants` (the `ll:` verbalizer transliterates: Alice / Алиса). A rename is one supersession (§3.6).
+- `hasName` is a fluent from `NamedEntity` to Name objects: `nameValue · nameKind ∈ {chosen, legal, nickname, professional, former} · script/language variants` (the `ll:` verbalizer transliterates: Alice / Алиса). `NamedEntity` covers people, organizations and companion animals without making animals `core:Agent`s. A rename is one supersession (§3.6).
 - **Former names:** default `sensitive`; excluded from verbalization, search suggestions, quizzes, and MCP. Per name the owner chooses *retain* (hidden, e.g. for legal documents), *suppress* (never displayed, encrypted journal only), or *purge* (hard delete with journal scrubbing).
 - The Verbalizer always uses the **current** name and pronouns, including about past periods ("Alice worked at Acme in early 2026"), unless configured otherwise per person.
 - `pronouns`: time-varying, optionally per-language (grammatical agreement — Russian past tense, Romance adjectives). `gender`: free-text self-description; never an enum, never inferred from names, pronouns, or relationships.
@@ -323,17 +358,25 @@ No disjointness between relationship kinds (a co-parent can be a friend and a fo
 
 "Had lunch with Sarah and her husband Marco; she just started at Molina Labs; their daughter Lía turns 5 on May 12" → one confirmable bundle: Interaction(participants), spouseOf, worksAt-fluent opened (+ NEW org), parentOf, birthday. Quick templates: "gift idea for X: …", "met X at Y through Z". vCard/calendar importers land in the batch queue with lowered `truthConfidence` until confirmed.
 
+Structured contact commands cover contact creation, typed methods, addresses, employment, interactions and follow-up plans. Each command produces one atomic intent bundle and passes through ordinary pre-commit consistency and policy validation. vCard 4.0 is the interchange target: `FN`/`N`/`NICKNAME` map to Name objects; `EMAIL`/`TEL`/`IMPP`/`URL` to ContactMethod; `ADR` to PostalAddress; `ORG`/`TITLE`/`ROLE` to Employment; `RELATED` to relationship candidates; and `UID` to ExternalIdentifier. Import matches yield reviewable identity candidates, never automatic `SameIndividual` assertions. Export is disclosure-filtered and uses current values.
+
+FOAF is the linked-data alignment and mapped RDF boundary, not the canonical contact model. FOAF imports translate `Person`, `Organization`, names, mailboxes, phones, online accounts, groups, membership, birthdays and person-to-person `knows` statements into reviewable PRM candidates with source provenance and lowered confidence. Subject IRIs and inverse-functional FOAF properties are match evidence, never automatic identity merges. Disclosure-filtered export maps current names and allowed contact methods; social edges are opt-in. `crm:knows` is not a subproperty of `foaf:knows`: the former admits Organizations, while FOAF's domain and range are Person. The full FOAF ontology is not imported; stable one-way class and membership alignments are installed, while `testing` or `unstable` contact terms remain adapter mappings. [PRM_PROPOSAL.md](PRM_PROPOSAL.md) records the field-level mapping and privacy constraints.
+
 ### 7.4 Learning, Agenda & Views
 
 - Default item policy: birthday, current name/pronouns, partners'/kids' names, pronunciation, starred preferences; contact data ignored unless starred. Occasion items front-load before their dates; calendar integration triggers **pre-meeting micro-quizzes** and a briefing (facts + belief tint + open loans/favors from §8 + recent interactions).
 - Elucidation cases: "You run into Marco at a conference — who's his partner, and what should you congratulate the family on?" — rubric-graded against the KB.
-- Agenda: occasions with lead times; per-person keep-in-touch cadence vs. last interaction → overdue queue.
-- Views: person page (belief-tinted facts, timeline, gift ledger, agenda), org page (derived colleague clusters), graph explorer (inferred edges rendered distinctly).
-- Sensitivity defaults: `personal`; auto-escalate to `sensitive` for health/finance/legal/conflict notes; facts learned *through* someone about their org → `internal(that scope)`.
+- Agenda: occasions with lead times; per-person keep-in-touch cadence vs. last qualifying interaction → overdue queue. Birthday and anniversary entries are projections of facts, not duplicated Reminder records.
+- Views: contact card (current methods and addresses), person page (belief-tinted facts, timeline, gift ledger, agenda), org page (current employment and derived colleague clusters), graph explorer (inferred edges rendered distinctly).
+- Sensitivity defaults: `personal`; postal-address components and health/finance/legal/identity/conflict notes default to `sensitive`; facts learned *through* someone about their org → `internal(that scope)`. Contact methods and addresses are ignored by learning unless explicitly starred.
+- Monica-style favorites reuse recall-utility and briefing annotations rather than adding another importance flag. Debts and favors reuse `vf:Commitment` / `vf:Claim`; documents and photos use `ref:Reference` once §3.7 exists.
 
 ```
 GET /crm/people/{id}/briefing · GET /crm/graph?root&includeInferred
-POST /crm/interactions · /crm/gifts        # structured quick-capture
+GET /crm/people/{id}/contact-card · GET /crm/follow-ups?due
+POST /crm/contact-methods · /crm/interactions · /crm/gifts
+POST /crm/import/vcard · GET /crm/people/{id}/vcard
+POST /crm/import/foaf · GET /crm/people/{id}/foaf
 ```
 
 ---
@@ -442,8 +485,9 @@ intended matches the specification. Known departures are recorded in
 `modules/conformance/DEVIATIONS.md` with the clause each departs from — a conformance failure that
 is not a recorded deviation is a bug, and must never become a skipped test.
 
-**Not yet cited.** The following are informative today and are the obvious candidates as the
-matching subsystems are built out: [SKOS](https://www.w3.org/TR/skos-reference/) and
+**Informative references.** The following influence the design without making a conformance claim
+and are candidates for narrower normative use as matching subsystems and corpora are built:
+[SKOS](https://www.w3.org/TR/skos-reference/) and
 [SKOS-XL](https://www.w3.org/TR/skos-reference/skos-xl.html) for §7.1's extensible relationship
 vocabulary and §7.2's Name objects; [OWL-Time](https://www.w3.org/TR/owl-time/) for the fluent
 boundaries of §3.6; [Web Annotation](https://www.w3.org/TR/annotation-model/) plus
@@ -452,7 +496,13 @@ gestures at; [OntoLex-Lemon](https://www.w3.org/2016/05/ontolex/) for §6, whose
 it already matches; [SHACL](https://www.w3.org/TR/shacl/) for §3.5.4's validation step;
 [ODRL](https://www.w3.org/TR/odrl-model/) and [DPV](https://w3c.github.io/dpv/) for §3.3's
 disclosure policy and sensitivity levels; and [PROV-O](https://www.w3.org/TR/prov-o/) for §10's
-auditability requirement.
+auditability requirement. For §7, [RFC 6350](https://www.rfc-editor.org/rfc/rfc6350), the
+[W3C vCard Ontology](https://www.w3.org/TR/vcard-rdf/) and the
+[FOAF Vocabulary Specification](https://xmlns.com/foaf/spec/) inform contact and linked-data
+interchange, while
+[Monica's feature set](https://www.monicahq.com/features) and
+[public API](https://www.monicahq.com/api) inform the PRM product surface; none is a conformance
+claim yet.
 
 [ISO/IEC 21838-2](https://standards.iso.org/ittf/PubliclyAvailableStandards/) (Basic Formal
 Ontology) belongs on the same list, and is the likeliest of any of them to become normative. It is
@@ -511,7 +561,11 @@ RDF quad store with RDF-star (Jena TDB2 / Oxigraph); ELK (EL) with HermiT/Openll
 8. **Classification correctness** — the sensitivity model is only as good as its labels; conservative heuristics, reclassification review queues, and the justification-based derivation rule bound the damage.
 9. **Link rot** — optional archival snapshots at link time so locators outlive URLs.
 10. **Utility feedback loops** — unimportant-scored facts are never quizzed, hiding their errors; behavioral boosts self-reinforce. Mitigations: ε-exploration, the "still important?" queue, agent reads discounted in signals.
+11. **Contact identity and merge safety** — names, email addresses and phone numbers are evidence,
+    not identity keys; imports need explainable candidate matching and explicit owner-confirmed
+    merges without losing journal provenance. FOAF inverse-functional properties remain
+    interoperability statements and never bypass that confirmation boundary.
 
 ---
 
-*End of specification v0.5.*
+*End of specification v0.6.*

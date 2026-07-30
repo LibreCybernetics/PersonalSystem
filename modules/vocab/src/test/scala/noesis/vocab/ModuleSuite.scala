@@ -41,6 +41,8 @@ class ModuleSuite extends CatsEffectSuite:
   private val lendEvent = Iri("noesis:e/ev-lend")
   private val returnEvent = Iri("noesis:e/ev-return")
   private val me = CoreModule.me
+  private val oldName = Iri("noesis:e/name-adam")
+  private val newName = Iri("noesis:e/name-alice")
 
   private val modules = Modules.all
   private val config = Modules.configure(KbConfig.default, modules)
@@ -67,10 +69,15 @@ class ModuleSuite extends CatsEffectSuite:
       base.inconsistencies.map: problems =>
         assertEquals(problems, Nil, s"the merged module TBox is inconsistent: $problems")
 
-  test("modules contribute rules, policies and templates into one configuration"):
+  test("modules contribute rules, policies, naming, validation, interchange and agenda"):
     assert(config.rules.length > noesis.reasoner.RdfsRules.all.length, "no module rules merged")
     assert(config.policies.modules.keySet == Set("core", "crm", "ll", "vf"), config.policies.modules.keySet.toString)
     assert(config.templates.byProperty.contains(RelationshipsModule.birthday))
+    assert(config.namingSchemes.nonEmpty, "structured naming scheme was not merged")
+    assert(config.validators.contains(PrmValidation), "PRM validator was not merged")
+    assert(Modules.importers(modules).flatMap(_.formats).contains("vcard"))
+    assert(Modules.exporters(modules).flatMap(_.formats).contains("foaf"))
+    assert(Modules.agendaProducers(modules).contains(PrmAgenda))
 
   test("module prefixes are distinct, so namespaces cannot collide"):
     assertEquals(modules.map(_.prefix).distinct.length, modules.length)
@@ -207,12 +214,22 @@ class ModuleSuite extends CatsEffectSuite:
       assert(!selfLoop)
       assertEquals(problems, Nil, "the chain must not create an irreflexivity violation")
 
-  test("worksAt is time-varying, so employment is captured as a fluent automatically"):
+  test("active Employment derives worksAt with journal-backed premises"):
+    val employment = Iri("noesis:e/employment-alice-acme")
     for
       base <- installed
-      _ <- base.assert(Axiom.ObjectAssertion(alice, RelationshipsModule.worksAt, acme))
+      result <- base.commit(
+        PrmCapture.employment(EmploymentInput(employment, alice, acme))
+      )
+      _ = result.fold(rejected => fail(rejected.render), identity)
+      works <- base.entails(Axiom.ObjectAssertion(alice, RelationshipsModule.worksAt, acme))
+      explanation <- base.explain(Axiom.ObjectAssertion(alice, RelationshipsModule.worksAt, acme))
       state <- base.state
-    yield assertEquals(state.ongoingFluents.size, 1)
+    yield
+      assert(works)
+      assertEquals(state.ongoingFluents.size, 1, "employment status should be the only fluent")
+      val premises = explanation.toList.flatMap(_.justifications).flatMap(_.premises)
+      assertEquals(premises.size, 3, "employee, employer, and active status must justify worksAt")
 
   test("a person asserted to work at a person is rejected via range disjointness"):
     // worksAt range is Organization, Person and Organization are disjoint in core.
@@ -243,8 +260,9 @@ class ModuleSuite extends CatsEffectSuite:
     yield assert(!decision.isDisclosed, "a health note was disclosable to an agent")
 
   test("contact data is below the suspend threshold, so it is stored but not quizzed"):
+    val method = Iri("noesis:e/marco-phone")
     val axiom =
-      Axiom.DataAssertion(marco, RelationshipsModule.contactPoint, Literal.string("+52 555 1234"))
+      Axiom.DataAssertion(method, RelationshipsModule.contactValue, Literal.string("+52 555 1234"))
     val record = AxiomRecord(axiom.id, axiom, AxiomAnnotations.empty, AxiomStatus.Active, 1L)
 
     assert(
@@ -272,8 +290,12 @@ class ModuleSuite extends CatsEffectSuite:
     for
       base <- installed
       engine <- engineFor(base)
+      employment = Iri("noesis:e/employment-sarah-molina")
+      employmentIntents = PrmCapture.employment(
+        EmploymentInput(employment, sarah, molina)
+      ).toList
       result <- base.commit(
-        NonEmptyList.of(
+        NonEmptyList.fromListUnsafe(List(
           Intent.Assert(Axiom.ClassAssertion(sarah, RelationshipsModule.Person)),
           Intent.Assert(Axiom.ClassAssertion(marco, RelationshipsModule.Person)),
           Intent.Assert(Axiom.ClassAssertion(lia, RelationshipsModule.Person)),
@@ -281,7 +303,6 @@ class ModuleSuite extends CatsEffectSuite:
           Intent.Assert(Axiom.ObjectAssertion(sarah, RelationshipsModule.spouseOf, marco)),
           Intent.Assert(Axiom.ObjectAssertion(sarah, RelationshipsModule.parentOf, lia)),
           Intent.Assert(Axiom.ObjectAssertion(marco, RelationshipsModule.parentOf, lia)),
-          Intent.Assert(Axiom.ObjectAssertion(sarah, RelationshipsModule.worksAt, molina)),
           Intent.Assert(
             Axiom.DataAssertion(
               lia,
@@ -289,7 +310,7 @@ class ModuleSuite extends CatsEffectSuite:
               Literal.date(PartialDate.monthDay(5, 12))
             )
           )
-        )
+        ) ++ employmentIntents)
       )
       commit = result.fold(r => fail(r.render), identity)
       _ <- engine.handle(commit.events)
@@ -298,7 +319,11 @@ class ModuleSuite extends CatsEffectSuite:
       // Marco is Lía's parent and Sarah's spouse, so he is derivable as knowing Sarah
       knows <- base.entails(Axiom.ObjectAssertion(marco, RelationshipsModule.knows, sarah))
     yield
-      assertEquals(state.ongoingFluents.size, 1, "the worksAt fluent should have been opened")
+      assertEquals(
+        state.ongoingFluents.size,
+        1,
+        "the active employment-status fluent should have been opened"
+      )
       assert(knows)
       assert(items.exists(_.prompt.contains("birthday")), items.map(_.prompt).toString)
       assert(items.exists(!_.suspended), "auto-activated items should be active")
@@ -310,16 +335,24 @@ class ModuleSuite extends CatsEffectSuite:
       base <- installed
       engine <- engineFor(base)
       _ <- base.commit(
-        NonEmptyList.one(
-          Intent.OpenState(alice, RelationshipsModule.hasName, Node.Lit(Literal.string("Adam")))
+        NonEmptyList.of(
+          Intent.Assert(Axiom.ClassAssertion(oldName, RelationshipsModule.Name)),
+          Intent.Assert(
+            Axiom.DataAssertion(oldName, RelationshipsModule.nameValue, Literal.string("Adam"))
+          ),
+          Intent.OpenState(alice, RelationshipsModule.hasName, Node.Ref(oldName))
         )
       )
       renamed <- base.commit(
-        NonEmptyList.one(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.ClassAssertion(newName, RelationshipsModule.Name)),
+          Intent.Assert(
+            Axiom.DataAssertion(newName, RelationshipsModule.nameValue, Literal.string("Alice"))
+          ),
           Intent.Supersede(
             alice,
             RelationshipsModule.hasName,
-            Node.Lit(Literal.string("Alice")),
+            Node.Ref(newName),
             Some(PartialDate.of(2026, 5, 1))
           )
         )
@@ -335,19 +368,27 @@ class ModuleSuite extends CatsEffectSuite:
       assertEquals(change.priorityBoost, 1.0, "a rename must be top priority (§7.2)")
 
   test("a fluent-backed change item is scheduled at its property's utility, not a default"):
-    // worksAt, hasName and pronouns are all time-varying, so their facts live in fluents and have no
-    // AxiomRecord. If the cascade cannot see them, a rename lands at a neutral 0.5 rather than the
-    // top priority §7.2 requires.
+    // hasName and pronouns are time-varying, so their facts live in fluents and have no AxiomRecord.
+    // If the cascade cannot see them, a rename lands at a neutral 0.5 rather than the top priority
+    // §7.2 requires.
     for
       base <- installed
       engine <- engineFor(base)
       renamed <- base.commit(
         NonEmptyList.of(
-          Intent.OpenState(alice, RelationshipsModule.hasName, Node.Lit(Literal.string("Adam"))),
+          Intent.Assert(Axiom.ClassAssertion(oldName, RelationshipsModule.Name)),
+          Intent.Assert(
+            Axiom.DataAssertion(oldName, RelationshipsModule.nameValue, Literal.string("Adam"))
+          ),
+          Intent.Assert(Axiom.ClassAssertion(newName, RelationshipsModule.Name)),
+          Intent.Assert(
+            Axiom.DataAssertion(newName, RelationshipsModule.nameValue, Literal.string("Alice"))
+          ),
+          Intent.OpenState(alice, RelationshipsModule.hasName, Node.Ref(oldName)),
           Intent.Supersede(
             alice,
             RelationshipsModule.hasName,
-            Node.Lit(Literal.string("Alice")),
+            Node.Ref(newName),
             Some(PartialDate.of(2026, 5, 1))
           )
         )
@@ -363,17 +404,25 @@ class ModuleSuite extends CatsEffectSuite:
     for
       base <- installed
       _ <- base.commit(
-        NonEmptyList.one(
-          Intent.OpenState(alice, RelationshipsModule.hasName, Node.Lit(Literal.string("Adam")))
+        NonEmptyList.of(
+          Intent.Assert(Axiom.ClassAssertion(oldName, RelationshipsModule.Name)),
+          Intent.Assert(
+            Axiom.DataAssertion(oldName, RelationshipsModule.nameValue, Literal.string("Adam"))
+          ),
+          Intent.OpenState(alice, RelationshipsModule.hasName, Node.Ref(oldName))
         )
       )
       _ <- base.assert(Axiom.ObjectAssertion(alice, RelationshipsModule.worksAt, acme))
       _ <- base.commit(
-        NonEmptyList.one(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.ClassAssertion(newName, RelationshipsModule.Name)),
+          Intent.Assert(
+            Axiom.DataAssertion(newName, RelationshipsModule.nameValue, Literal.string("Alice"))
+          ),
           Intent.Supersede(
             alice,
             RelationshipsModule.hasName,
-            Node.Lit(Literal.string("Alice")),
+            Node.Ref(newName),
             Some(PartialDate.of(2026, 5, 1))
           )
         )
@@ -688,19 +737,24 @@ class ModuleSuite extends CatsEffectSuite:
     for
       base <- installed
       engine <- engineFor(base)
+      phone = PrmCapture.method(
+        ContactMethodInput(
+          Iri("noesis:e/marco-phone"),
+          marco,
+          ContactKind.Phone,
+          "+52 555"
+        )
+      ).fold(problems => fail(problems.mkString(", ")), identity)
       commit <- base.commit(
-        NonEmptyList.of(
+        NonEmptyList.fromListUnsafe(List(
           Intent.Assert(
             Axiom.DataAssertion(
               lia,
               RelationshipsModule.birthday,
               Literal.date(PartialDate.monthDay(5, 12))
             )
-          ),
-          Intent.Assert(
-            Axiom.DataAssertion(marco, RelationshipsModule.contactPoint, Literal.string("+52 555"))
           )
-        )
+        ) ++ phone.toList)
       )
       result = commit.fold(r => fail(r.render), identity)
       _ <- engine.handle(result.events)

@@ -1,10 +1,11 @@
 package noesis.vocab
 
-import noesis.core.kb.KbConfig
+import noesis.core.kb.{KbConfig, StateValidator}
+import noesis.core.module.{AgendaProducer, DocumentExporter, DocumentImporter}
 import noesis.logic.*
 import noesis.core.policy.PolicyBook
 import noesis.reasoner.Rule
-import noesis.core.verbalize.Templates
+import noesis.core.verbalize.{Naming, Templates}
 import noesis.lms.ItemPolicyBook
 
 /** The module contract (SPEC §5.1).
@@ -36,6 +37,21 @@ trait Module:
   /** Natural-language templates (SPEC §5.2). */
   def templates: Templates = Templates.empty
 
+  /** Structured naming paths followed by the generic verbalizer (SPEC §5.1, §7.2). */
+  def namingSchemes: List[Naming.Scheme] = Nil
+
+  /** Domain record-shape checks run against the pre-commit scratch projection. */
+  def validators: List[StateValidator] = Nil
+
+  /** Reviewable document import adapters. */
+  def importers: List[DocumentImporter] = Nil
+
+  /** Disclosure-aware document export adapters. */
+  def exporters: List[DocumentExporter] = Nil
+
+  /** Agenda projections; their entries are never persisted as duplicate facts. */
+  def agendaProducers: List[AgendaProducer] = Nil
+
   def iri(local: String): Iri = Iri(s"$prefix:$local")
 
 /** Installs modules into a single configuration.
@@ -52,6 +68,8 @@ object Modules:
         .withRules(module.rules)
         .withPolicies(module.policies)
         .withTemplates(module.templates)
+        .withNamingSchemes(module.namingSchemes)
+        .withValidators(module.validators)
 
   /** The combined item policies of a set of modules. */
   def itemPolicies(modules: List[Module]): ItemPolicyBook =
@@ -59,6 +77,13 @@ object Modules:
 
   /** The combined ontology, in installation order. */
   def ontology(modules: List[Module]): List[Axiom] = modules.flatMap(_.ontology)
+
+  def importers(modules: List[Module]): List[DocumentImporter] = modules.flatMap(_.importers)
+
+  def exporters(modules: List[Module]): List[DocumentExporter] = modules.flatMap(_.exporters)
+
+  def agendaProducers(modules: List[Module]): List[AgendaProducer] =
+    modules.flatMap(_.agendaProducers)
 
   /** Every module the MVP ships. */
   val all: List[Module] = List(CoreModule, RelationshipsModule, LanguageModule, ResourcesModule)

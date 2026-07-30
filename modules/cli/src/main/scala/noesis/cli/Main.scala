@@ -7,15 +7,113 @@ import cats.effect.{ExitCode, IO}
 import cats.syntax.all.*
 import com.monovore.decline.effect.CommandIOApp
 import com.monovore.decline.{Argument, Opts}
-import fs2.io.file.Path
+import fs2.io.file.{Files, Path}
 import noesis.core.capture.Intent
 import noesis.core.kb.CommitResult
+import noesis.core.module.{ExportContext, ExportOptions, ImportBatch}
 import noesis.logic.*
 import noesis.core.policy.DisclosurePolicy
+import noesis.core.verbalize.Naming
 import noesis.reasoner.query.PatternSyntax
 import noesis.reasoner.Support
 import noesis.lms.{ItemId, QueueMode}
-import noesis.vocab.{CoreModule, Ledger}
+import noesis.vocab.*
+
+enum ContactCommand:
+  case Add(name: String, id: Option[String], organization: Boolean)
+  case MethodAdd(
+      contact: String,
+      value: String,
+      kind: ContactKind,
+      id: Option[String],
+      label: Option[String],
+      purpose: Option[String],
+      rank: Option[Int]
+  )
+  case AddressAdd(
+      contact: String,
+      formatted: String,
+      id: Option[String],
+      street: Option[String],
+      extended: Option[String],
+      locality: Option[String],
+      region: Option[String],
+      postalCode: Option[String],
+      countryCode: Option[String],
+      label: Option[String],
+      purpose: Option[String]
+  )
+  case MethodRetire(id: String)
+  case EmploymentAdd(
+      person: String,
+      organization: String,
+      id: Option[String],
+      title: Option[String],
+      department: Option[String],
+      location: Option[String]
+  )
+  case InteractionAdd(
+      participant: String,
+      others: List[String],
+      on: PartialDate,
+      channel: String,
+      id: Option[String],
+      note: Option[String]
+  )
+  case RelationshipAdd(
+      first: String,
+      second: String,
+      others: List[String],
+      kind: String,
+      id: Option[String],
+      description: Option[String],
+      anniversary: Option[PartialDate]
+  )
+  case NoteAdd(
+      contact: String,
+      body: String,
+      kind: String,
+      id: Option[String],
+      sensitivity: Sensitivity
+  )
+  case PreferenceAdd(
+      contact: String,
+      polarity: String,
+      text: String,
+      id: Option[String],
+      context: Option[String]
+  )
+  case FollowUpSet(
+      contact: String,
+      days: Int,
+      id: Option[String],
+      channel: Option[String]
+  )
+  case ReminderAdd(
+      contact: String,
+      due: PartialDate,
+      occasion: String,
+      id: Option[String],
+      recurrence: Option[String]
+  )
+  case CompanionAdd(owner: String, name: String, id: Option[String], others: List[String])
+  case CircleAdd(name: String, member: String, others: List[String], id: Option[String])
+  case GiftAdd(
+      contact: String,
+      description: String,
+      status: String,
+      id: Option[String],
+      occasion: Option[String]
+  )
+  case Show(contact: String)
+  case Due(on: java.time.LocalDate)
+  case Import(path: String, format: String, dryRun: Boolean)
+  case Export(
+      contact: String,
+      format: String,
+      includeContactData: Boolean,
+      includeSocialGraph: Boolean
+  )
 
 /** What the CLI was asked to do. */
 enum Command:
@@ -45,6 +143,7 @@ enum Command:
   case Loans
   case Export
   case AsOf(date: java.time.LocalDate)
+  case Contact(command: ContactCommand)
 
 object Main
     extends CommandIOApp(
@@ -70,6 +169,11 @@ object Main
     Either
       .catchNonFatal(java.time.LocalDate.parse(raw))
       .fold(e => Validated.invalidNel(s"not a date: ${e.getMessage}"), Validated.valid)
+
+  private given Argument[ContactKind] = Argument.from(
+    "email|phone|sms|whatsapp|signal|telegram|matrix|website|social|other"
+  ): raw =>
+    ContactKind.parse(raw).fold(Validated.invalidNel, Validated.valid)
 
   private val rootOpt: Opts[Path] = Opts
     .option[String]("root", "workspace directory (default ~/.noesis)")
@@ -169,12 +273,175 @@ object Main
   private val asOf = Opts.subcommand("as-of", "show the graph as it stood on a past date"):
     Opts.argument[java.time.LocalDate]("date").map(Command.AsOf.apply)
 
+  private val contactAdd = Opts.subcommand("add", "add a person or organization contact"):
+    (
+      Opts.argument[String]("name"),
+      Opts.option[String]("id", "entity handle; defaults to a name-derived handle").orNone,
+      Opts.flag("organization", "create an organization instead of a person").orFalse
+    ).mapN(ContactCommand.Add.apply)
+
+  private val contactMethodAdd = Opts.subcommand("method-add", "add a typed contact method"):
+    (
+      Opts.argument[String]("contact"),
+      Opts.argument[String]("value"),
+      Opts.option[ContactKind]("kind", "contact method kind"),
+      Opts.option[String]("id", "method record handle").orNone,
+      Opts.option[String]("label", "display label such as mobile").orNone,
+      Opts.option[String]("purpose", "purpose such as home or work").orNone,
+      Opts.option[Int]("rank", "lower values are preferred").orNone
+    ).mapN(ContactCommand.MethodAdd.apply)
+
+  private val contactAddressAdd = Opts.subcommand("address-add", "add a structured postal address"):
+    (
+      Opts.argument[String]("contact"),
+      Opts.argument[String]("formatted"),
+      Opts.option[String]("id", "address record handle").orNone,
+      Opts.option[String]("street", "street address").orNone,
+      Opts.option[String]("extended", "apartment, suite, or other extension").orNone,
+      Opts.option[String]("locality", "city or locality").orNone,
+      Opts.option[String]("region", "state or region").orNone,
+      Opts.option[String]("postal-code", "postal code").orNone,
+      Opts.option[String]("country", "ISO alpha-2 country code").orNone,
+      Opts.option[String]("label", "display label").orNone,
+      Opts.option[String]("purpose", "purpose such as home or work").orNone
+    ).mapN(ContactCommand.AddressAdd.apply)
+
+  private val contactMethodRetire =
+    Opts.subcommand("method-retire", "retire a contact method without deleting its history"):
+      Opts.argument[String]("method").map(ContactCommand.MethodRetire.apply)
+
+  private val contactEmploymentAdd = Opts.subcommand("employment-add", "add a current employment"):
+    (
+      Opts.argument[String]("person"),
+      Opts.option[String]("at", "organization handle"),
+      Opts.option[String]("id", "employment record handle").orNone,
+      Opts.option[String]("title", "job title").orNone,
+      Opts.option[String]("department", "department").orNone,
+      Opts.option[String]("location", "work location").orNone
+    ).mapN(ContactCommand.EmploymentAdd.apply)
+
+  private val contactInteractionAdd = Opts.subcommand("interaction-add", "record an interaction"):
+    (
+      Opts.argument[String]("participant"),
+      Opts.options[String]("with", "additional participant").orEmpty,
+      Opts.option[PartialDate]("on", "interaction date"),
+      Opts.option[String]("channel", "in-person, phone, video, message, email, or other"),
+      Opts.option[String]("id", "interaction record handle").orNone,
+      Opts.option[String]("note", "brief interaction summary").orNone
+    ).mapN(ContactCommand.InteractionAdd.apply)
+
+  private val contactRelationshipAdd =
+    Opts.subcommand("relationship-add", "add a reified relationship"):
+      (
+        Opts.argument[String]("first"),
+        Opts.argument[String]("second"),
+        Opts.options[String]("with", "additional participant").orEmpty,
+        Opts.option[String]("kind", "relationship kind"),
+        Opts.option[String]("id", "relationship record handle").orNone,
+        Opts.option[String]("description", "self-described relationship text").orNone,
+        Opts.option[PartialDate]("anniversary", "relationship anniversary").orNone
+      ).mapN(ContactCommand.RelationshipAdd.apply)
+
+  private val contactNoteAdd = Opts.subcommand("note-add", "add a contact note"):
+    (
+      Opts.argument[String]("contact"),
+      Opts.argument[String]("body"),
+      Opts.option[String]("kind", "note kind").withDefault("general"),
+      Opts.option[String]("id", "note record handle").orNone,
+      Opts.option[Sensitivity]("sensitivity", "note sensitivity").withDefault(Sensitivity.Personal)
+    ).mapN(ContactCommand.NoteAdd.apply)
+
+  private val contactPreferenceAdd = Opts.subcommand("preference-add", "add a preference"):
+    (
+      Opts.argument[String]("contact"),
+      Opts.argument[String]("polarity"),
+      Opts.argument[String]("text"),
+      Opts.option[String]("id", "preference record handle").orNone,
+      Opts.option[String]("context", "optional context").orNone
+    ).mapN(ContactCommand.PreferenceAdd.apply)
+
+  private val contactFollowUp = Opts.subcommand("follow-up-set", "set a keep-in-touch cadence"):
+    (
+      Opts.argument[String]("contact"),
+      Opts.option[Int]("every", "cadence in days"),
+      Opts.option[String]("id", "follow-up plan handle").orNone,
+      Opts.option[String]("channel", "only count this interaction channel").orNone
+    ).mapN(ContactCommand.FollowUpSet.apply)
+
+  private val contactReminderAdd = Opts.subcommand("reminder-add", "add a one-time reminder"):
+    (
+      Opts.argument[String]("contact"),
+      Opts.option[PartialDate]("due", "due date"),
+      Opts.option[String]("occasion", "occasion or prompt"),
+      Opts.option[String]("id", "reminder record handle").orNone,
+      Opts.option[String]("recurrence", "recurrence description").orNone
+    ).mapN(ContactCommand.ReminderAdd.apply)
+
+  private val contactCompanionAdd = Opts.subcommand("companion-add", "add a companion animal"):
+    (
+      Opts.argument[String]("owner"),
+      Opts.argument[String]("name"),
+      Opts.option[String]("id", "companion animal handle").orNone,
+      Opts.options[String]("with", "additional associated contact").orEmpty
+    ).mapN(ContactCommand.CompanionAdd.apply)
+
+  private val contactCircleAdd = Opts.subcommand("circle-add", "create a contact circle"):
+    (
+      Opts.argument[String]("name"),
+      Opts.argument[String]("member"),
+      Opts.options[String]("with", "additional member").orEmpty,
+      Opts.option[String]("id", "circle handle").orNone
+    ).mapN(ContactCommand.CircleAdd.apply)
+
+  private val contactGiftAdd = Opts.subcommand("gift-add", "record a gift idea or gift"):
+    (
+      Opts.argument[String]("contact"),
+      Opts.argument[String]("description"),
+      Opts.option[String]("status", "idea, planned, given, or received").withDefault("idea"),
+      Opts.option[String]("id", "gift record handle").orNone,
+      Opts.option[String]("occasion", "occasion").orNone
+    ).mapN(ContactCommand.GiftAdd.apply)
+
+  private val contactShow = Opts.subcommand("show", "show a structured contact card"):
+    Opts.argument[String]("contact").map(ContactCommand.Show.apply)
+
+  private val contactDue = Opts.subcommand("due", "show due follow-ups and reminders"):
+    Opts
+      .option[java.time.LocalDate]("on", "agenda date")
+      .withDefault(java.time.LocalDate.now())
+      .map(ContactCommand.Due.apply)
+
+  private val contactImport = Opts.subcommand("import", "import vCard or FOAF/RDF contacts"):
+    (
+      Opts.argument[String]("path"),
+      Opts.option[String]("format", "vcard or foaf"),
+      Opts.flag("dry-run", "parse and validate without committing").orFalse
+    ).mapN(ContactCommand.Import.apply)
+
+  private val contactExport = Opts.subcommand("export", "export one contact as vCard or FOAF"):
+    (
+      Opts.argument[String]("contact"),
+      Opts.option[String]("format", "vcard or foaf"),
+      Opts.flag("include-contact-data", "include disclosed mailbox, phone and account data").orFalse,
+      Opts.flag("include-social", "include the disclosed person-to-person social graph").orFalse
+    ).mapN(ContactCommand.Export.apply)
+
+  private val contact = Opts.subcommand("contact", "personal relationship management"):
+    (
+      contactAdd orElse contactMethodAdd orElse contactAddressAdd orElse contactMethodRetire orElse
+        contactEmploymentAdd orElse contactInteractionAdd orElse contactRelationshipAdd orElse
+        contactNoteAdd orElse contactPreferenceAdd orElse contactFollowUp orElse
+        contactReminderAdd orElse contactCompanionAdd orElse contactCircleAdd orElse
+        contactGiftAdd orElse contactShow orElse contactDue orElse contactImport orElse contactExport
+    ).map(Command.Contact.apply)
+
   def main: Opts[IO[ExitCode]] =
     (
       rootOpt,
       init orElse assertCmd orElse retract orElse closeState orElse supersede orElse
         show orElse query orElse entails orElse explain orElse check orElse journal orElse
         queue orElse answer orElse items orElse disclose orElse loans orElse exportCmd orElse asOf
+          orElse contact
     ).mapN(run)
 
   // ── Execution ─────────────────────────────────────────────────────────────
@@ -407,6 +674,9 @@ object Main
           _ <- assertions.traverse_(a => IO.println(s"  ${verbalizer.verbalize(a)}"))
         yield ExitCode.Success
 
+      case Command.Contact(contactCommand) =>
+        executeContact(workspace, contactCommand)
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   /** Builds an assertion, deciding from the ontology whether the value is a reference or a literal.
@@ -445,6 +715,314 @@ object Main
 
   private def node(value: String): Node =
     if value.contains(':') then Node.Ref(Iri(value)) else Node.Lit(Literal.parse(value))
+
+  private def executeContact(
+      workspace: Workspace,
+      command: ContactCommand
+  ): IO[ExitCode] =
+    command match
+      case ContactCommand.Add(name, id, organization) =>
+        val contact = Workspace.iri(id.getOrElse(slug(name)))
+        commitStructured(
+          workspace,
+          PrmCapture.contact(
+            ContactInput(
+              contact,
+              name,
+              if organization then ContactEntityKind.Organization else ContactEntityKind.Person,
+              if organization then "professional" else "chosen"
+            )
+          )
+        )
+
+      case ContactCommand.MethodAdd(contact, value, kind, id, label, purpose, rank) =>
+        val owner = Workspace.iri(contact)
+        val method = id
+          .map(Workspace.iri)
+          .getOrElse(PrmIds.child(owner, "method", s"${kind.value}\u0000$value"))
+        commitStructured(
+          workspace,
+          PrmCapture.method(
+            ContactMethodInput(method, owner, kind, value, label, purpose, rank)
+          )
+        )
+
+      case ContactCommand.AddressAdd(
+            contact,
+            formatted,
+            id,
+            street,
+            extended,
+            locality,
+            region,
+            postalCode,
+            countryCode,
+            label,
+            purpose
+          ) =>
+        val owner = Workspace.iri(contact)
+        val address = id
+          .map(Workspace.iri)
+          .getOrElse(PrmIds.child(owner, "address", formatted))
+        commitStructured(
+          workspace,
+          PrmCapture.address(
+            PostalAddressInput(
+              address,
+              owner,
+              formatted,
+              street,
+              extended,
+              locality,
+              region,
+              postalCode,
+              countryCode,
+              label,
+              purpose
+            )
+          )
+        )
+
+      case ContactCommand.MethodRetire(id) =>
+        workspace.kb.commit(PrmCapture.retire(Workspace.iri(id)))
+          .flatMap(reportCommit(workspace, _))
+
+      case ContactCommand.EmploymentAdd(person, organization, id, title, department, location) =>
+        val employee = Workspace.iri(person)
+        val employer = Workspace.iri(organization)
+        val record = id
+          .map(Workspace.iri)
+          .getOrElse(PrmIds.child(employee, "employment", employer.value))
+        workspace.kb
+          .commit(
+            PrmCapture.employment(
+              EmploymentInput(record, employee, employer, title, department, location)
+            )
+          )
+          .flatMap(reportCommit(workspace, _))
+
+      case ContactCommand.InteractionAdd(participant, others, on, channel, id, note) =>
+        val participants = (participant :: others).map(Workspace.iri).distinct
+        val record = id
+          .map(Workspace.iri)
+          .getOrElse(
+            PrmIds.record(
+              "interaction",
+              s"${participants.map(_.value).sorted.mkString("\u0000")}\u0000${on.render}\u0000$channel"
+            )
+          )
+        commitStructured(
+          workspace,
+          PrmCapture.interaction(
+            InteractionInput(record, participants, on, channel, summary = note)
+          )
+        )
+
+      case ContactCommand.RelationshipAdd(
+            first,
+            second,
+            others,
+            kind,
+            id,
+            description,
+            anniversary
+          ) =>
+        val participants = (first :: second :: others).map(Workspace.iri).distinct
+        val record = id
+          .map(Workspace.iri)
+          .getOrElse(
+            PrmIds.record(
+              "relationship",
+              s"$kind\u0000${participants.map(_.value).sorted.mkString("\u0000")}"
+            )
+          )
+        commitStructured(
+          workspace,
+          PrmCapture.relationship(
+            RelationshipInput(record, participants, kind, description, anniversary)
+          )
+        )
+
+      case ContactCommand.NoteAdd(contact, body, kind, id, sensitivity) =>
+        val owner = Workspace.iri(contact)
+        val record = id.map(Workspace.iri).getOrElse(PrmIds.child(owner, "note", body))
+        commitStructured(
+          workspace,
+          PrmCapture.note(NoteInput(record, owner, body, kind, sensitivity = sensitivity))
+        )
+
+      case ContactCommand.PreferenceAdd(contact, polarity, text, id, context) =>
+        val owner = Workspace.iri(contact)
+        val record = id
+          .map(Workspace.iri)
+          .getOrElse(PrmIds.child(owner, "preference", s"$polarity\u0000$text"))
+        commitStructured(
+          workspace,
+          PrmCapture.preference(
+            PreferenceInput(record, owner, polarity, text, context)
+          )
+        )
+
+      case ContactCommand.FollowUpSet(contact, days, id, channel) =>
+        val owner = Workspace.iri(contact)
+        val record = id
+          .map(Workspace.iri)
+          .getOrElse(PrmIds.child(owner, "follow-up", channel.getOrElse("all")))
+        commitStructured(
+          workspace,
+          PrmCapture.followUp(FollowUpInput(record, owner, days, channel))
+        )
+
+      case ContactCommand.ReminderAdd(contact, due, occasion, id, recurrence) =>
+        val owner = Workspace.iri(contact)
+        val record = id
+          .map(Workspace.iri)
+          .getOrElse(PrmIds.child(owner, "reminder", s"${due.render}\u0000$occasion"))
+        commitStructured(
+          workspace,
+          PrmCapture.reminder(ReminderInput(record, owner, due, occasion, recurrence))
+        )
+
+      case ContactCommand.CompanionAdd(owner, name, id, others) =>
+        val companions = (owner :: others).map(Workspace.iri).distinct
+        val record = id
+          .map(Workspace.iri)
+          .getOrElse(PrmIds.record("companion", s"$name\u0000${companions.map(_.value).sorted.mkString}"))
+        commitStructured(
+          workspace,
+          PrmCapture.companionAnimal(CompanionAnimalInput(record, name, companions))
+        )
+
+      case ContactCommand.CircleAdd(name, member, others, id) =>
+        val members = (member :: others).map(Workspace.iri).distinct
+        val record = id.map(Workspace.iri).getOrElse(PrmIds.record("circle", name))
+        commitStructured(workspace, PrmCapture.circle(CircleInput(record, name, members)))
+
+      case ContactCommand.GiftAdd(contact, description, status, id, occasion) =>
+        val recipient = Workspace.iri(contact)
+        val record = id
+          .map(Workspace.iri)
+          .getOrElse(PrmIds.child(recipient, "gift", s"$status\u0000$description"))
+        commitStructured(
+          workspace,
+          PrmCapture.gift(
+            GiftInput(record, description, to = Some(recipient), status = status, occasion = occasion)
+          )
+        )
+
+      case ContactCommand.Show(contact) =>
+        val target = Workspace.iri(contact)
+        for
+          state <- workspace.kb.state
+          verbalizer <- workspace.kb.verbalizer
+          code <-
+            if !state.entities.contains(target) then
+              IO.println(s"no such contact: $contact").as(ExitCode.Error)
+            else
+              IO.println(Render.contactCard(Prm.contactCard(state, target), verbalizer))
+                .as(ExitCode.Success)
+        yield code
+
+      case ContactCommand.Due(on) =>
+        for
+          state <- workspace.kb.state
+          verbalizer <- workspace.kb.verbalizer
+          entries = Modules.agendaProducers(Modules.all).flatMap(_.entries(state, on))
+          _ <- IO.println(Render.agenda(entries, verbalizer))
+        yield ExitCode.Success
+
+      case ContactCommand.Import(path, format, dryRun) =>
+        Files[IO].readUtf8(Path(path)).compile.string.flatMap: document =>
+          val normalized = format.toLowerCase(Locale.ROOT)
+          val parsed = Modules
+            .importers(Modules.all)
+            .find(_.formats.contains(normalized))
+            .toRight(List(s"unknown contact import format: $normalized"))
+            .flatMap(_.parse(document))
+          parsed match
+            case Left(problems) =>
+              print(problems.map("  " + _)).as(ExitCode.Error)
+            case Right(batches) =>
+              workspace.kb.state.flatMap: state =>
+                val candidates = batches.flatMap: batch =>
+                  val (name, methods) = Prm.importEvidence(batch.record, batch.intents)
+                  Prm.duplicateCandidates(state, name, methods).map(batch.record -> _)
+                val report = candidates.traverse_(
+                  (entry: (Iri, DuplicateCandidate)) =>
+                    val (incoming, candidate) = entry
+                    IO.println(
+                      s"possible duplicate ${incoming.display} → ${candidate.contact.display}: " +
+                        candidate.reasons.mkString("; ")
+                    )
+                )
+                if dryRun then
+                  val operations = batches.map(_.intents.length).sum
+                  report *> IO.println(
+                    s"dry run: ${batches.length} record batch(es), $operations intent(s), nothing committed"
+                  ).as(ExitCode.Success)
+                else report *> commitBatches(workspace, batches)
+
+      case ContactCommand.Export(contact, format, includeContactData, includeSocialGraph) =>
+        val target = Workspace.iri(contact)
+        for
+          state <- workspace.kb.state
+          closure <- workspace.kb.closure
+          naming = Naming.from(
+            state,
+            Workspace.config.namingProperties,
+            Workspace.config.namingSchemes
+          )
+          normalized = format.toLowerCase(Locale.ROOT)
+          rendered = Modules
+            .exporters(Modules.all)
+            .find(_.formats.contains(normalized))
+            .toRight(List(s"unknown contact export format: $normalized"))
+            .flatMap(
+              _.render(
+                ExportContext(
+                  state,
+                  closure,
+                  naming,
+                  Workspace.config.policies,
+                  DisclosurePolicy.personal("contact export")
+                ),
+                target,
+                ExportOptions(includeContactData, includeSocialGraph)
+              )
+            )
+          code <- rendered match
+            case Left(problems) => print(problems).as(ExitCode.Error)
+            case Right(document) => IO.println(document).as(ExitCode.Success)
+        yield code
+
+  private def commitStructured(
+      workspace: Workspace,
+      planned: Either[List[String], NonEmptyList[Intent]]
+  ): IO[ExitCode] =
+    planned match
+      case Left(problems) => print(problems.map("invalid contact input: " + _)).as(ExitCode.Error)
+      case Right(intents) =>
+        workspace.kb.commit(intents).flatMap(reportCommit(workspace, _))
+
+  private def commitBatches(
+      workspace: Workspace,
+      batches: List[ImportBatch]
+  ): IO[ExitCode] =
+    batches.foldLeftM(ExitCode.Success): (status, batch) =>
+      if status != ExitCode.Success then status.pure[IO]
+      else
+        IO.println(s"importing ${batch.record.display}") *>
+          workspace.kb.commit(batch.intents).flatMap(reportCommit(workspace, _))
+
+  private def slug(value: String): String =
+    val ascii = java.text.Normalizer
+      .normalize(value, java.text.Normalizer.Form.NFKD)
+      .replaceAll("\\p{M}", "")
+      .toLowerCase(Locale.ROOT)
+      .replaceAll("[^a-z0-9]+", "-")
+      .stripPrefix("-")
+      .stripSuffix("-")
+    if ascii.nonEmpty then ascii else PrmIds.record("contact", value).local
 
   private def reportCommit(
       workspace: Workspace,

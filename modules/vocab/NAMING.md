@@ -27,6 +27,7 @@ for items whose naming was never ours to control.
 |---|---|---|
 | `core:`, `crm:`, `ll:`, `ref:`, `noesis:` | prescriptive | this project |
 | `vf:` | descriptive | ValueFlows |
+| `foaf:` | descriptive | FOAF Vocabulary Project |
 | `rdf:`, `rdfs:`, `xsd:`, `owl:` | descriptive | W3C |
 
 The distinction decides what a failing name *means*. A `crm:` term that breaks its rule is a bug to
@@ -48,6 +49,12 @@ term exists is cheaper than renaming afterwards.
 `core:` carries the only cross-namespace agreement: `vf:Agent ≡ core:Agent`. That is an equivalence
 axiom rather than a shared name, which is what the uniqueness rules mean by "one name per item" — two
 namespaces may denote one thing, and the axiom is where that is said.
+
+`foaf:` is an interchange vocabulary rather than the canonical PRM model. Its convention is
+descriptive because the names come from the
+[FOAF Vocabulary Specification](https://xmlns.com/foaf/spec/); Noesis maps a deliberately limited
+subset without minting local terms in that namespace. The canonical contact model remains in
+`crm:`, while vCard is an interchange format and therefore introduces no bound ontology namespace.
 
 ## What counts as a declared term
 

@@ -20,7 +20,7 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `reasoner` | `ReasonerSuite`, `QuerySuite`: inference, fixpoint behavior, journal-backed justifications, consistency, EL warnings, and graph-pattern queries |
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
-| `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios |
+| `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts |
 | `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
@@ -94,9 +94,10 @@ instead of weakening the assertion.
 
 - **Vocabulary module:** Evidence includes registration in `Modules.all` and `ModuleSuite` coverage
   against the unmodified core. The merged ontology, rules, policies, item policies, and templates
-  are covered as applicable; declarations tested only in isolation are insufficient. Domain and
-  range declarations are included where CLI value typing depends on the ontology. When CLI behavior
-  is in scope, `noesis check` also confirms that the merged TBox remains consistent. Every term the
+  are covered as applicable; contributed naming, validation, interchange and agenda seams are
+  included when present. Declarations tested only in isolation are insufficient. Domain and range
+  declarations are included where CLI value typing depends on the ontology. When CLI behavior is
+  in scope, `noesis check` also confirms that the merged TBox remains consistent. Every term the
   module declares is checked against the naming convention register by `NamingConformanceSuite`; a
   term that would need a new rule needs `modules/vocab/NAMING.md` and its corpus updated first,
   since ISO/IEC 11179-5 conformance is a claim about the namespace, not about the term.
