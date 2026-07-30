@@ -71,7 +71,9 @@ object Datatypes:
     */
   def canonical(datatype: Iri, lexical: String): Either[String, String] =
     if !isValid(datatype, lexical) then
-      Left(s"'$lexical' is not in the lexical space of ${datatype.value}")
+      // Named compactly: this message reaches the owner through capture, and an absolute XSD IRI
+      // tells them nothing that `xsd:integer` does not.
+      Left(s"'$lexical' is not in the lexical space of ${datatype.display}")
     else if datatype == Xsd.boolean then Right(if lexical == "true" || lexical == "1" then "true" else "false")
     else if datatype == Xsd.integer then Right(canonicalInteger(lexical))
     else if datatype == Xsd.decimal then Right(canonicalDecimal(lexical))

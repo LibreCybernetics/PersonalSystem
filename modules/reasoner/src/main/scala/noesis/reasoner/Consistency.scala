@@ -45,7 +45,7 @@ object Consistency:
       combined = jDisjoint.headOption.getOrElse(Justification.empty)
     yield Inconsistency(
       kind = InconsistencyKind.DisjointClassMembership,
-      detail = s"${individual.value} is both ${left.local} and ${right.local}, which are disjoint",
+      detail = s"${individual.display} is both ${left.local} and ${right.local}, which are disjoint",
       conflicting = Set(
         Axiom.ClassAssertion(individual, left),
         Axiom.ClassAssertion(individual, right),
@@ -65,7 +65,7 @@ object Consistency:
       jS <- jSame.toList.sorted.headOption.toList
     yield Inconsistency(
       kind = InconsistencyKind.SameAndDifferent,
-      detail = s"${a.value} is asserted both the same as and different from ${b.value}",
+      detail = s"${a.display} is asserted both the same as and different from ${b.display}",
       conflicting = Set(Axiom.SameIndividual(a, b), Axiom.DifferentIndividuals(a, b)),
       justification = jS.merge(jDiff)
     )
@@ -80,7 +80,7 @@ object Consistency:
       jA <- jAssertion.toList.sorted.headOption.toList
     yield Inconsistency(
       kind = InconsistencyKind.IrreflexiveSelfLoop,
-      detail = s"${subject.value} ${property.local} itself, but ${property.local} is irreflexive",
+      detail = s"${subject.display} ${property.local} itself, but ${property.local} is irreflexive",
       conflicting = Set(Axiom.ObjectAssertion(subject, property, obj)),
       justification = jI.merge(jA)
     )

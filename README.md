@@ -8,9 +8,10 @@ you should review today — is a projection recomputed from it. A learning engin
 have internalized each fact and quizzes you to close the gap between what the system knows and what
 you know.
 
-[SPEC.md](SPEC.md) is the design document and the authority on intent. This repository is an **MVP**
-of it: the Knowledge Core and Learning Engine are complete and well covered by tests, the three
-domain modules work end to end, and the LLM, MCP and HTTP surfaces are not built. See
+[SPEC.md](SPEC.md) is the authority on intended design; [DESIGN.md](DESIGN.md) records the principles
+and constraints of the current implementation. This repository is an **MVP** of the spec: the
+Knowledge Core and Learning Engine are complete and well covered by tests, the three domain modules
+work end to end, and the LLM, MCP and HTTP surfaces are not built. See
 [what is and isn't implemented](#what-is-implemented).
 
 ## Quick start
@@ -108,10 +109,9 @@ modules/vocab   Vocabulary modules — core upper ontology, crm:, ll:, vf:
 modules/cli     Command-line interface
 ```
 
-Dependencies point one way only: `logic` is the semantic foundation; `journal` and `reasoner` depend
-only on it; `core` composes all three and knows nothing about learning or vocabularies; `lms` knows
-nothing about domain vocabularies. The runtime uses cats-effect, fs2, circe, and decline. Each
-foundational module has its own README and implementation specification.
+The runtime uses cats-effect, fs2, circe, and decline. See [DESIGN.md](DESIGN.md) for module
+boundaries and dependency rules. Each foundational module has its own README and implementation
+specification.
 
 ## Development
 
@@ -189,8 +189,6 @@ namespaces, IPC, PID, UTS, cgroup, and network namespaces are separated.
 The network namespace has no normal network interface. HTTPS is relayed through a host-side CONNECT
 proxy which accepts port 443 only, resolves names outside the sandbox, rejects IP literals and
 non-public addresses, and permits only the model providers and Scala/Maven repositories by default.
-This limits accidental network access and straightforward exfiltration, but an allowed provider
-host remains an exfiltration channel and receives repository content as part of normal agent use.
 Add required package hosts deliberately:
 
 ```bash
@@ -207,42 +205,6 @@ When a user systemd manager is available, the wrapper also creates a transient s
 `NOESIS_AGENT_MEMORY_HIGH`, `NOESIS_AGENT_MEMORY_MAX`, `NOESIS_AGENT_TASKS_MAX`, and
 `NOESIS_AGENT_CPU_QUOTA`, or set `NOESIS_AGENT_SYSTEMD_SCOPE=0` to skip the scope.
 
-This is strong process isolation, not a virtual machine. It shares the host kernel and maps back to
-the invoking user, so a kernel/user-namespace escape would regain that user's authority. For
-actively hostile native code, run the flake under a dedicated OS account with no private files, or
-inside a disposable VM. Same-UID kernel facilities such as the user's kernel keyring are likewise
-not a credential boundary. The host must be Linux with unprivileged user namespaces enabled; on
-NixOS, leave `security.unprivilegedUsernsClone` enabled.
-
-Codex is intentionally run with `danger-full-access` and Claude with `acceptEdits` *inside* the
-outer sandbox. Those settings let the agents use the isolated worktree without layering a weaker or
-fail-open inner sandbox over Bubblewrap; they do not grant access outside the outer namespace.
-
-## Design notes
-
-**The journal is the only thing written.** The state fold, the reasoner closure, learning items and
-ledger balances are all projections, cached in memory and invalidated on commit. A CLI invocation
-reads the two append-only files and recomputes everything else, so no on-disk state can go stale.
-
-**Justifications are shared infrastructure.** Disclosure filtering, belief in derived facts and
-contradiction messages are the same data viewed three ways. Computing it once in the reasoner is what
-keeps those three from drifting apart.
-
-**Sensitivity fails closed.** Unlabeled assertions default to `personal`, not `public`; a premise
-that cannot be resolved is treated as `sensitive`; `sensitive` is undisclosable regardless of grants.
-
-**Belief is not confidence.** `belief` is how well the owner knows a fact; `truthConfidence` is how
-likely it is to be true. They are never combined.
-
-Two model decisions depart from a literal reading of the spec, both commented at their definitions:
-
-- `Fluent.isOngoing` also requires an absent `endReason`, not only an absent `validTo`. A
-  supersession whose boundary date is unknown has definitely ended, and treating it as ongoing put
-  two simultaneous current employers into the current graph.
-- `IrreflexiveProperty` was added to the axiom language. Without it the spec's own
-  `worksAt ∘ worksAt⁻ ⊑ colleagueOf` makes everyone their own colleague.
-
-On the open questions in §12, the code takes these positions: the EL profile is checked and warned
-about but never enforced, since §3.1 sets DL as the ceiling; justification count and size are capped
-(§12.4); agent reads are weighted far below owner reads in utility signals, and every session
-reserves a slice for low-utility items so a mis-scored fact stays discoverable (§12.10).
+The host must be Linux with unprivileged user namespaces enabled; on NixOS, leave
+`security.unprivilegedUsernsClone` enabled. See [DESIGN.md](DESIGN.md#isolated-agent-security-model)
+for the sandbox's security principles, trust boundary and threat model.

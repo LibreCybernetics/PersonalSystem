@@ -421,8 +421,9 @@ class ModuleSuite extends CatsEffectSuite:
       frChien = Iri("noesis:e/lex-chien")
       // One assertion...
       _ <- base.assert(Axiom.ObjectAssertion(frChien, LanguageModule.lexicalizes, dogConcept))
+      // Written the way a person writes a query — compact names, which the term parser expands.
       bgp = PatternSyntax
-        .parse(s"${frChien.value} ${LanguageModule.translationOf.value} ?other")
+        .parse(s"${frChien.display} ${LanguageModule.translationOf.display} ?other")
         .fold(fail(_), identity)
       // ...and it translates to all three others.
       solutions <- base.query(bgp)

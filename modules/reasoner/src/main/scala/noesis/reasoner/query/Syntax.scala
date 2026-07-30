@@ -24,7 +24,10 @@ object PatternSyntax:
     * `?p rdf:type crm:Person . ?p crm:worksAt ?org`
     */
   def parse(text: String): Either[String, BasicGraphPattern] =
-    val clauses = text.split('.').map(_.trim).filter(_.nonEmpty).toList
+    // A `.` only terminates a clause when it stands alone. Splitting on every `.` was safe while
+    // terms were compact names, and stopped being safe the moment they became absolute IRIs —
+    // `https://noesis.librecybernetics.ws/...` is four clause separators under the naive rule.
+    val clauses = text.split("""\s+\.(?:\s+|$)""").map(_.trim).filter(_.nonEmpty).toList
     val parsed = clauses.traverseEither: clause =>
       clause.split("\\s+").toList match
         case s :: p :: rest if rest.nonEmpty =>

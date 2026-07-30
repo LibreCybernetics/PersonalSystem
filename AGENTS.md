@@ -13,14 +13,15 @@ drift.
 deliberately describe work that is not implemented yet. Do not implement speculative scope merely
 to make the current code match the design document.
 
-Operational notes for LLM agents working in this repository. Read [README.md](README.md) for what the
-project is and [TESTING.md](TESTING.md) before changing or validating code; this file is about how to
-change it without breaking it.
+Operational notes for LLM agents working in this repository. Before changing or validating code,
+read [README.md](README.md) for what the project is, follow the architecture, principles and
+invariants in [DESIGN.md](DESIGN.md), and read [TESTING.md](TESTING.md) for how to verify it. This
+file is about how to change the project without breaking it.
 
 **[SPEC.md](SPEC.md) is the authority on intent.** It is a design document, not documentation of the
 code — it describes more than is built. When code and spec disagree, that is a finding to report, not
-a bug to silently fix. Two deliberate departures are already recorded in README and commented at
-their definitions (`Fluent.isOngoing`, `IrreflexiveProperty`); do not "correct" them.
+a bug to silently fix. Deliberate departures are recorded in [DESIGN.md](DESIGN.md) and commented at
+their definitions; do not "correct" them.
 
 ## Commands
 
@@ -35,73 +36,6 @@ sbt cli/launcher                            # writes an executable launcher, pri
 - Toolchain: Scala 3.8.4, sbt 2.0.4, JDK 25, all pinned in `flake.nix`. sbt 2 is a `version`+`src`
   override of nixpkgs' sbt 1.x. Do not add a dependency without adding it to `build.sbt`.
 
-## Architecture
-
-```
-logic  ← journal
-  ↑
-reasoner
-
-logic + journal + reasoner  ← core  ← lms  ← vocab  ← cli
-```
-
-Dependencies point one way and must stay that way:
-
-- `logic` is the persisted semantic language and depends on no Noesis module.
-- `journal` and `reasoner` depend only on `logic`; neither knows about application policy.
-- `core` composes those foundations. It knows nothing about learning, vocabulary modules or the CLI.
-  It must never import from them.
-- `lms` reads the Knowledge Core and reacts to its events; it never writes to the KB.
-- `vocab` declares vocabulary as data. A module is a value implementing `Module`, not a plugin with
-  lifecycle hooks.
-- Modules extend the system through three seams only: `Rule` (inference), `PolicyBook` /
-  `ItemPolicyBook` (annotation and item defaults), `Templates` (verbalization). If you find yourself
-  adding a module-specific branch inside `core`, the seam is wrong.
-
-Key files:
-
-| Concern | File |
-|---|---|
-| Axiom language | `modules/logic/src/main/scala/noesis/logic/Axiom.scala` |
-| Journal operations | `modules/journal/src/main/scala/noesis/journal/Operation.scala`, `Journal.scala` |
-| Journal → state fold | `modules/core/src/main/scala/noesis/core/projection/KbState.scala` |
-| State projections | `modules/core/src/main/scala/noesis/core/projection/Projections.scala` |
-| Reasoner graph | `modules/reasoner/src/main/scala/noesis/reasoner/Graph.scala` |
-| Inference rules | `modules/reasoner/src/main/scala/noesis/reasoner/Rule.scala` (+ module rules in `vocab/`) |
-| Fixpoint, closure | `modules/reasoner/src/main/scala/noesis/reasoner/Reasoner.scala` |
-| Consistency, EL profile | `modules/reasoner/src/main/scala/noesis/reasoner/Consistency.scala` |
-| Annotation cascade | `modules/core/src/main/scala/noesis/core/policy/Policy.scala` |
-| Disclosure rule | `modules/core/src/main/scala/noesis/core/policy/Disclosure.scala` |
-| Intent → operations | `modules/core/src/main/scala/noesis/core/capture/Capture.scala` |
-| Service surface | `modules/core/src/main/scala/noesis/core/kb/KnowledgeBase.scala` |
-| Belief, derived belief | `modules/lms/src/main/scala/noesis/lms/Belief.scala` |
-| Scheduling | `modules/lms/src/main/scala/noesis/lms/Scheduler.scala` |
-| Module contract | `modules/vocab/src/main/scala/noesis/vocab/Module.scala` |
-
-## Invariants — do not break these
-
-1. **Only the journal is written.** Everything else is a projection. Never persist a derived value
-   (a balance, a closure, an item's belief) as though it were truth. If you need it across processes,
-   recompute it — `cli/Workspace.open` shows the pattern.
-2. **Validation precedes the journal.** `KnowledgeBase.commit` plans → checks consistency on a
-   *scratch* projection → appends → invalidates → emits. Never append first and clean up after; the
-   journal must never contain a state the reasoner rejects.
-3. **A commit is atomic.** A bundle either lands whole or not at all. Do not add a partial-success
-   path.
-4. **Justifications are load-bearing.** Disclosure filtering (§3.3.1), derived belief (§4.4) and
-   contradiction messages (§3.4) all read the same justification data. A change that keeps facts
-   correct but drops or coarsens justifications silently breaks the privacy model.
-5. **Sensitivity fails closed.** Unlabeled assertions default to `personal`; an unresolvable premise
-   resolves to `sensitive`; `sensitive` is undisclosable regardless of grants. Never add a path that
-   defaults to `public`.
-6. **Belief ≠ truthConfidence.** Memory versus world. Never combine them.
-7. **No LLM calls.** There is no model in the loop and no API key. A rubric-graded answer returns
-   `None` rather than a guessed grade, because a fabricated grade corrupts the review log §12.3 needs.
-   Do not "fill in" the grader.
-8. **The verbalizer owns naming.** Display names come from `Verbalizer.label`, never from an IRI's
-   local part. Former names are `sensitive` and must not reach output (§7.2).
-9. **Rules must be monotone.** A `Rule` may only add facts, or the fixpoint will not terminate.
-
 ## Conventions
 
 - **Scala 3 indentation syntax** throughout: `:` block openers, `end`-less definitions, no braces
@@ -112,11 +46,6 @@ Key files:
   each type stating what it is and which spec decision forced its shape, e.g. "`max` within a
   justification because you need *all* its premises; `min` across because you need only *one*". Match
   that density — do not add narration of what the code plainly does, and do not strip the rationale.
-- **Sum types are `enum`.** Journal-serialized types derive `ConfiguredCodec` and rely on the
-  `given Configuration` in `modules/logic/src/main/scala/noesis/logic/JsonConfig.scala`
-  (discriminator `type`, defaults honored).
-- **Opaque types** for identifiers (`Iri`, `AxiomId`, `FluentId`, `ItemId`) with explicit circe
-  instances in the companion.
 
 ## Traps hit in this codebase
 
@@ -165,10 +94,10 @@ These cost real time. Check here before debugging from scratch.
 
 **A vocabulary module:** implement `Module` in `modules/vocab` and add it to `Modules.all`.
 
-**An inference rule:** implement `Rule` in `reasoner` or a vocabulary module, keep it monotone,
-combine premise justifications with
-`Rule.combine` / `combineAll` (never fabricate `Justification.empty` for a real premise), and add it
-to `RdfsRules.all` for core rules or the module's `rules` for domain rules.
+**An inference rule:** follow the monotonicity and provenance requirements in
+[DESIGN.md](DESIGN.md), implement `Rule` in `reasoner` or a vocabulary module, combine premise
+justifications with `Rule.combine` / `combineAll`, and add it to `RdfsRules.all` for core rules or
+the module's `rules` for domain rules.
 
 **An axiom case:** change `logic`; `Axiom` has exhaustive matches in `signature`, `individuals`,
 `manchester` and

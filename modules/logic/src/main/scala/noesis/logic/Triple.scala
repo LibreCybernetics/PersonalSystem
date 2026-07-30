@@ -8,8 +8,11 @@ enum Node derives ConfiguredCodec:
   case Ref(iri: Iri)
   case Lit(literal: Literal)
 
+  /** For display and diagnostics, so it abbreviates. Serializations do their own rendering, where
+    * abbreviating is a decision about a grammar rather than about legibility.
+    */
   def render: String = this match
-    case Ref(iri) => iri.value
+    case Ref(iri) => iri.display
     case Lit(l)   => l.render
 
   def asIri: Option[Iri] = this match
@@ -21,7 +24,7 @@ object Node:
 
 /** A triple view over an axiom, so queries and exports have one uniform shape to work on. */
 final case class Triple(subject: Iri, property: Iri, obj: Node):
-  def render: String = s"${subject.value} ${property.value} ${obj.render}"
+  def render: String = s"${subject.display} ${property.display} ${obj.render}"
 
 object Triple:
   given Order[Triple] = Order.by(t => (t.subject, t.property, t.obj))

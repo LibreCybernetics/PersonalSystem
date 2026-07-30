@@ -14,31 +14,7 @@ as a behavior change: the case that demonstrates it, and the reason the alternat
 
 ---
 
-## D1 — Stored identifiers are compact names, not absolute IRIs
-
-**Clause:** RDF 1.1 §3.2; RFC 3987 §2.2
-**What we do:** `Iri` holds `crm:worksAt`, `noesis:e/<uuid>`, `xsd:string`. `Iri.parse` accepts a
-compact name as readily as an absolute IRI, and `Namespaces` expands at the boundary — export, MCP,
-N-Triples — rather than in storage.
-**Why:** journal lines stay legible, CLI arguments stay typable, and axiom identifiers stay short.
-Nothing in a local-first single-user system dereferences these identifiers, so the absolute form
-buys nothing internally and costs length everywhere.
-**Consequence:** a bare `Iri` is not by itself an RDF term. Any surface that emits RDF must expand
-first; `NTriples.render` does.
-**Cost to close:** every axiom's canonical JSON changes, so every `AxiomId` changes and journals
-need migrating.
-
-## D2 — Minted entity IRIs are not legal Turtle compact names
-
-**Clause:** RDF 1.1 Turtle §6.5 (`PN_LOCAL`)
-**What we do:** mint `noesis:e/<uuid>`. `/` is not in `PN_CHARS`, so this is a well-formed *IRI*
-but not a well-formed *PNAME* — Turtle would need `noesis:e\/<uuid>`.
-**Why:** the pattern predates the namespace map and appears in existing journals; changing it would
-not retroactively fix identifiers already minted, so the escape has to exist regardless.
-**Consequence:** a Turtle writer must escape `/` in local names. N-Triples is unaffected: it writes
-absolute IRIs in angle brackets, which is why the conformance corpus is N-Triples.
-
-## D3 — Two partial-date shapes have no XSD datatype
+## D1 — Two partial-date shapes have no XSD datatype
 
 **Clause:** XSD 1.1 Part 2 §3.3.9–§3.3.15
 **What we do:** a year with a day but no month (`2026---12`) and a wholly unknown date (`unknown`)
@@ -48,7 +24,7 @@ carry `core:partialDate`. The other six shapes map onto `xsd:date`, `gYearMonth`
 `xsd:date` that is not in its lexical space would be worse than naming the gap.
 **Consequence:** a consumer that only understands XSD datatypes cannot interpret these two.
 
-## D4 — Years outside 0001–9999 are not supported
+## D2 — Years outside 0001–9999 are not supported
 
 **Clause:** XSD 1.1 Part 2 §3.3.9
 **What we do:** `PartialDate.render` pads years to four digits with `%04d`. XSD admits more than
@@ -57,7 +33,7 @@ year at all.
 **Why:** no capture path produces one, and supporting them would mean a real date-lexical parser.
 **Consequence:** a negative year renders as `-005` rather than the conformant `-0005`.
 
-## D5 — JCS is not applied to numbers outside the IEEE-754 double range
+## D3 — JCS is not applied to numbers outside the IEEE-754 double range
 
 **Clause:** RFC 8785 §3.2.2.3
 **What we do:** `Canonical` emits such a number's own lexical form instead of rejecting the input.
@@ -67,7 +43,7 @@ lexical, and everything else journaled is a sequence number or a value in `[0,1]
 **Consequence:** a hand-edited journal containing `1e400` canonicalizes to something JCS does not
 define. Covered by the `number-too-wide` case in `LogicSuite`.
 
-## D6 — Irregular grandfathered language tags are rejected
+## D4 — Irregular grandfathered language tags are rejected
 
 **Clause:** RFC 5646 §2.2.8
 **What we do:** `LanguageTag.isWellFormed` implements the `langtag` and `privateuse` productions.
@@ -76,7 +52,7 @@ The irregular grandfathered tags (`i-klingon`, `en-GB-oed`, `sgn-BE-FR`, …) do
 would be data, not grammar, and it would need maintaining.
 **Consequence:** `i-klingon` is not accepted; `tlh` is.
 
-## D7 — Language tags are checked for well-formedness, not validity
+## D5 — Language tags are checked for well-formedness, not validity
 
 **Clause:** RFC 5646 §2.2.9
 **What we do:** check the grammar. Do not check subtags against the IANA Language Subtag Registry.
@@ -84,7 +60,7 @@ would be data, not grammar, and it would need maintaining.
 update cadence. Treating it as a code question would bake a snapshot into the binary.
 **Consequence:** `qq-Zzzz` is well-formed and would be accepted, though no such language exists.
 
-## D8 — Noesis has no blank nodes
+## D6 — Noesis has no blank nodes
 
 **Clause:** RDF 1.1 §3.4; N-Triples §2
 **What we do:** `NTriples.parseLine` rejects `_:label` in either position, with a message naming
@@ -95,7 +71,7 @@ is what lets annotations, learning items and justifications address it.
 **Consequence:** N-Triples documents using blank nodes cannot be read. This excludes most of the
 W3C `rdf-tests` corpus, which is the main reason F1 below is not simply "vendor it".
 
-## D9 — Only the conjunctive core of SPARQL is implemented
+## D7 — Only the conjunctive core of SPARQL is implemented
 
 **Clause:** SPARQL 1.1 Query Language §5, §18
 **What we do:** `Query.solve` evaluates basic graph patterns over a closure. No `OPTIONAL`, `UNION`,
@@ -106,7 +82,7 @@ notation, not SPARQL grammar.
 **Consequence:** no SPARQL conformance can be claimed. `PatternSyntax` is separate from `Query`
 precisely so a real parser can be placed in front of the same evaluator later.
 
-## D10 — The OWL 2 axiom algebra is a subset
+## D8 — The OWL 2 axiom algebra is a subset
 
 **Clause:** OWL 2 Structural Specification §8–§9
 **What we do:** implement the RDFS core plus the role constructs the shipped vocabularies use.
@@ -114,7 +90,7 @@ precisely so a real parser can be placed in front of the same evaluator later.
 the OWL 2 RDF mapping.
 **Why:** stated in `modules/logic/SPEC.md` §1 — OWL 2 DL is the ceiling, not a claim of completeness.
 **Consequence:** the ternary view is an internal query projection, not a serialization. A real
-OWL 2 mapping to RDF belongs in a serialization module when Turtle export lands.
+OWL 2 mapping to RDF would belong beside `Turtle` in `noesis-journal` if OWL-level export is ever needed.
 
 ---
 
@@ -128,10 +104,24 @@ own published test data. Two corpora should be vendored to replace them:
 the [JCS test data](https://github.com/cyberphone/json-canonicalization/tree/master/testdata)
 (Apache 2.0) and the literal/IRI slices of [W3C `rdf-tests`](https://github.com/w3c/rdf-tests)
 (W3C Test Suite Licence). Both need a licence header and an attribution note. `Manifest` and
-`NTriples` are shaped so they drop in beside what is here; D8 limits how much of `rdf-tests` is
+`NTriples` are shaped so they drop in beside what is here; D6 limits how much of `rdf-tests` is
 usable.
 
-**F2 — SPARQL BGP conformance.** Blocked on D9 and on a SPARQL parser; the W3C manifests are Turtle.
+**F2 — SPARQL BGP conformance.** Blocked on D7 and on a SPARQL parser; the W3C manifests are Turtle.
 
 **F3 — An OWL 2 EL profile corpus.** `Profile` now lives in `noesis-logic` with no reasoner
 dependency, so a syntactic profile-checker corpus can run against that module alone.
+
+---
+
+## Closed
+
+**Stored identifiers are compact names** (was D1). Closed by expanding a bound prefix in `Iri.apply`,
+so `Iri("crm:worksAt")` *is* the absolute IRI and no compact name survives construction. Storage is
+now RDF 1.1 §3.2-conformant with no boundary left that could forget to expand. Compact names remain
+as input notation and as `Iri.display` for messages. Cost paid: every `AxiomId` changed.
+
+**Minted entity IRIs are not legal Turtle compact names** (was D2). Closed by `Turtle`, which
+escapes `PN_LOCAL_ESC` characters — `noesis:e\/alice` — and falls back to an absolute IRI in angle
+brackets when a local part cannot be spelled as a `PN_LOCAL` at all. Verified in
+`TurtleConformanceSuite` against an independently written transcription of the grammar.

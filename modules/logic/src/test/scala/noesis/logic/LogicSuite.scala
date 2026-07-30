@@ -25,10 +25,12 @@ class LogicSuite extends CatsEffectSuite:
     val axiom = Axiom.ClassAssertion(alice, person)
     // RFC 8785 orders members by key, so this is independent of the order the fields are declared
     // in — which is the whole reason the identifier can be promised stable across releases.
-    val canonical = """{"cls":"crm:Person","individual":"noesis:e/alice","type":"ClassAssertion"}"""
+    val canonical =
+      """{"cls":"https://noesis.librecybernetics.ws/ns/crm#Person",""" +
+        """"individual":"https://noesis.librecybernetics.ws/e/alice","type":"ClassAssertion"}"""
 
     assertEquals(Canonical.noesis(axiom.asJson), canonical)
-    assertEquals(axiom.id.value, "ax_aac1c4d358b98ea4ea0fc681")
+    assertEquals(axiom.id.value, "ax_6163a9a70b0bade1d1a74637")
 
   test("every triple-shaped axiom round-trips through the ternary view"):
     val property = Iri("crm:knows")
@@ -59,7 +61,7 @@ class LogicSuite extends CatsEffectSuite:
 
   test("IRI structure distinguishes vocabulary terms, opaque entities, and unqualified names"):
     assertEquals(Iri("crm:Person").prefix, Some("crm"))
-    assertEquals(Iri("urn:example:Person").prefix, Some("urn"))
+    assertEquals(Iri("urn:example:Person").prefix, None, "urn is not a bound prefix")
     assertEquals(Iri("noesis:e/alice").prefix, None)
     assertEquals(Iri("Person").prefix, None)
     assertEquals(Iri(":Person").prefix, None)
@@ -73,7 +75,7 @@ class LogicSuite extends CatsEffectSuite:
       iri <- Iri.fresh[IO]
       fluent <- FluentId.fresh[IO]
     yield
-      assert(iri.value.startsWith("noesis:e/"))
+      assert(iri.value.startsWith(s"${Namespaces.base}e/"))
       assert(fluent.value.startsWith("fl_"))
 
   test("every axiom case exposes the exact signature, individuals, property, and rendering"):
@@ -399,8 +401,10 @@ class LogicSuite extends CatsEffectSuite:
     val canonical = Canonical.noesis(axiom.asJson)
     assertEquals(
       canonical,
-      """{"property":"rdfs:label","subject":"noesis:e/alice","type":"DataAssertion",""" +
-        """"value":{"datatype":"rdf:langString","language":"en","lexical":"Alice"}}"""
+      """{"property":"http://www.w3.org/2000/01/rdf-schema#label",""" +
+        """"subject":"https://noesis.librecybernetics.ws/e/alice","type":"DataAssertion",""" +
+        """"value":{"datatype":"http://www.w3.org/1999/02/22-rdf-syntax-ns#langString",""" +
+        """"language":"en","lexical":"Alice"}}"""
     )
     assertEquals(Canonical.bytes(axiom.asJson).length, canonical.getBytes("UTF-8").length)
 
@@ -423,32 +427,57 @@ class LogicSuite extends CatsEffectSuite:
     assertEquals(Iri.parse("crm:a<b"), Left("illegal character '<' in IRI: crm:a<b"))
     assertEquals(Iri.parse("crm:a\\b"), Left("illegal character '\\' in IRI: crm:a\\b"))
 
-  test("compact names split at the first colon, unlike the display accessors"):
-    assertEquals(Iri("crm:worksAt").splitCompact, Some(("crm", "worksAt")))
-    assertEquals(Iri("noesis:e/abc").splitCompact, Some(("noesis", "e/abc")))
-    // The *first* colon is the prefix boundary: a URN's later colons belong to its local part.
-    assertEquals(Iri("urn:uuid:0-0").splitCompact, Some(("urn", "uuid:0-0")))
-    assertEquals(Iri("nocolon").splitCompact, None)
-    assertEquals(Iri("crm:").splitCompact, None)
-    assertEquals(Iri(":leading").splitCompact, None)
-    // `prefix` deliberately hides `noesis` for display; `splitCompact` must not.
-    assertEquals(Iri("noesis:e/abc").prefix, None)
+  test("a bound prefix expands at construction; an unbound one is left alone"):
+    assertEquals(Iri("crm:worksAt").value, s"${Namespaces.base}ns/crm#worksAt")
+    assertEquals(Iri("xsd:string").value, s"${Namespaces.xsd}string")
+    assertEquals(Iri("noesis:e/abc").value, s"${Namespaces.base}e/abc")
+    // Unbound schemes pass through untouched, so external identifiers survive intact.
+    assertEquals(Iri("https://example.org/a").value, "https://example.org/a")
+    assertEquals(Iri("urn:uuid:0-0").value, "urn:uuid:0-0")
+    assertEquals(Iri("unbound:thing").value, "unbound:thing")
+    assertEquals(Iri("nocolon").value, "nocolon")
+    assertEquals(Iri("crm:").value, "crm:", "a prefix with no local part is not a compact name")
+    assertEquals(Iri(":leading").value, ":leading")
+    // `absolute` is the escape hatch that skips expansion entirely.
+    assertEquals(Iri.absolute("crm:worksAt").value, "crm:worksAt")
+    // Expanding twice is expanding once: the result is no longer a compact name.
+    assertEquals(Iri(Iri("crm:worksAt").value), Iri("crm:worksAt"))
 
-  test("namespaces expand and compact, preferring the longest match"):
+  test("namespaces split and abbreviate, preferring the longest match"):
     val ns = Namespaces.default
-    assertEquals(ns.expand(Iri("xsd:string")), Some(Iri(s"${Namespaces.xsd}string")))
-    assertEquals(ns.expand(Iri("crm:worksAt")), Some(Iri(s"${Namespaces.base}ns/crm#worksAt")))
-    assertEquals(ns.expand(Iri("unbound:thing")), None)
-    assertEquals(ns.expand(Iri("nocolon")), None)
-    assertEquals(ns.compact(Iri(s"${Namespaces.xsd}string")), Some(Iri("xsd:string")))
-    // `crm:` is nested inside `noesis:`, so the longer binding has to win.
-    assertEquals(ns.compact(Iri(s"${Namespaces.base}ns/crm#worksAt")), Some(Iri("crm:worksAt")))
+    assertEquals(ns.split(Iri("crm:worksAt")), Some(("crm", "worksAt")))
+    assertEquals(ns.compact(Iri("xsd:string")), Some("xsd:string"))
+    // `ns/crm#` is nested inside the `noesis:` base, so the longer binding has to win.
+    assertEquals(ns.compact(Iri("crm:worksAt")), Some("crm:worksAt"))
+    assertEquals(ns.compact(Iri("noesis:e/abc")), Some("noesis:e/abc"))
     assertEquals(ns.compact(Iri("https://elsewhere.example/x")), None)
-    assertEquals(ns.compact(Iri(Namespaces.xsd)), None, "a bare namespace has no local part")
+    assertEquals(ns.compact(Iri.absolute(Namespaces.xsd)), None, "a bare namespace has no local part")
+    assertEquals(ns.expandName("crm:worksAt"), Some(s"${Namespaces.base}ns/crm#worksAt"))
+    assertEquals(ns.expandName("nocolon"), None)
+    assertEquals(ns.expandName(":leading"), None)
+    assertEquals(ns.expandName("crm:"), None)
     assertEquals(
-      Namespaces(Map.empty).withPrefix("ex", "https://example.org/").expand(Iri("ex:a")),
-      Some(Iri("https://example.org/a"))
+      Namespaces(Map.empty).withPrefix("ex", "https://example.org/").expandName("ex:a"),
+      Some("https://example.org/a")
     )
+    assertEquals(
+      Namespaces(Map.empty).withPrefix("ex", "https://example.org/").expand(Iri.absolute("ex:a")),
+      Some(Iri.absolute("https://example.org/a"))
+    )
+
+  test("display accessors read through the namespace bindings"):
+    assertEquals(Iri("crm:worksAt").prefix, Some("crm"))
+    assertEquals(Iri("crm:worksAt").local, "worksAt")
+    // `noesis:` is hidden from display: a minted entity has no readable prefix worth showing.
+    assertEquals(Iri("noesis:e/abc").prefix, None)
+    assertEquals(Iri("noesis:e/abc").local, "e/abc")
+    assert(Iri("noesis:e/abc").isOpaque)
+    assert(!Iri("crm:worksAt").isOpaque)
+    // An IRI in no bound namespace still renders as its last segment rather than in full.
+    assertEquals(Iri("https://elsewhere.example/path/Thing").local, "Thing")
+    assertEquals(Iri("https://elsewhere.example/vocab#Thing").local, "Thing")
+    assertEquals(Iri("urn:example:Thing").local, "Thing")
+    assertEquals(Iri("https://elsewhere.example/x").prefix, None)
 
   // ── XSD datatypes ──────────────────────────────────────────────────────────
 
@@ -738,3 +767,14 @@ class LogicSuite extends CatsEffectSuite:
     assert(!Literal.tagged("Alice", "i-klingon").isWellFormed)
     // A datatype violation and a tag violation are both violations.
     assert(!Literal("4.2", Xsd.integer).isWellFormed)
+
+  test("a compact name splits at the first colon, however many follow"):
+    // `crm:a:b` abbreviates `…#a:b`; splitting at the last colon would look for a prefix `crm:a`.
+    assertEquals(Namespaces.default.expandName("crm:a:b"), Some(s"${Namespaces.base}ns/crm#a:b"))
+    assertEquals(Iri("crm:a:b").value, s"${Namespaces.base}ns/crm#a:b")
+
+  test("an unbound IRI's local part is its last segment, by whichever separator comes last"):
+    assertEquals(Iri("https://elsewhere.example/a#b#c").local, "c")
+    assertEquals(Iri("https://elsewhere.example/a#b/c").local, "c")
+    assertEquals(Iri("https://elsewhere.example/a/b#c").local, "c")
+    assertEquals(Iri("urn:a:b:c").local, "c")

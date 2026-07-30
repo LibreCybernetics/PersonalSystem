@@ -118,9 +118,9 @@ object Capture:
               CaptureProblem(
                 close,
                 if closed.isEmpty then
-                  s"no state to close for ${subject.value} ${property.local}"
+                  s"no state to close for ${subject.display} ${property.local}"
                 else
-                  s"no open state for ${subject.value} ${property.local}; " +
+                  s"no open state for ${subject.display} ${property.local}; " +
                     s"${closed.size} closed one(s) exist: ${closed.map(_.describe).mkString("; ")}"
               )
             )
@@ -139,7 +139,7 @@ object Capture:
                 Left(
                   CaptureProblem(
                     supersede,
-                    s"no open state to supersede for ${subject.value} ${property.local}"
+                    s"no open state to supersede for ${subject.display} ${property.local}"
                   )
                 )
 
