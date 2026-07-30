@@ -15,12 +15,12 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | Module | Suites and responsibility |
 |---|---|
 | `logic` | `LogicSuite`: canonical JSON and stable identifiers, codecs, the axiom algebra, triple projection, literals, annotations, and temporal values |
-| `journal` | `JournalSuite`: operation codecs, append ordering, atomic bundles, concurrent appends, JSON Lines persistence, reopening, and corrupt-input failure |
+| `journal` | `JournalSuite`: operation codecs, append ordering, atomic bundles, concurrent appends, JSON Lines persistence, reopening, and corrupt-input failure. `SerializationSuite`: N-Triples reading and writing, and Turtle output |
 | `reasoner` | `ReasonerSuite`, `QuerySuite`: inference, fixpoint behavior, journal-backed justifications, consistency, EL warnings, and graph-pattern queries |
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios |
-| `conformance` | `JcsConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
+| `conformance` | `JcsConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
 The `conformance` module answers a different question from the rest and is gated differently. See
@@ -129,6 +129,10 @@ contract crosses module seams.
   decay/update boundaries, scheduling consequences, and derived-premise handling as applicable.
 - **CLI behavior:** exercise the launcher with a disposable workspace and cover parsing, rendered
   output, and persistence/reopen behavior affected by the change.
+- **RDF serialization:** the format belongs in `noesis-journal`, which owns reading and writing
+  alike, with unit claims in `SerializationSuite` and grammar conformance in `modules/conformance`.
+  A writer must be checked against an independently written transcription of the grammar, not
+  against its own idea of what is legal.
 - **Anything a normative reference governs:** add the vector to the matching corpus under
   `modules/conformance/src/test/resources`, not to a module suite. A new axiom case must also
   declare its `Profile.elWarning` result and, where it introduces a datatype or identifier form, its

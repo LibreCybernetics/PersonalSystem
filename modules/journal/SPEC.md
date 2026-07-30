@@ -3,6 +3,21 @@
 **Status:** Implemented module contract  
 **Authority:** Refines root `SPEC.md` §3.2, §3.5.6, and §10.
 
+## 0. Scope
+
+The journal module owns the append-only log *and* the serializations that read and write it. Both
+directions live together on purpose: a format that can be written but not read back is a format
+whose round trip nobody checks, and the two halves share their term syntax (`RdfTerms`) rather than
+transcribing it twice and drifting.
+
+- **JSON Lines** (§4) — the journal's own on-disk form, read and written.
+- **N-Triples** (`NTriples`) — read and written. Line-based and prefix-free, so a term carries its
+  own absolute IRI and parsing needs no context.
+- **Turtle** (`Turtle`) — written. This is what root SPEC §10 promises for export, so the output has
+  to be a document other tools accept: the `@prefix` block is generated from the bindings it
+  abbreviates rather than maintained by hand, and a term is abbreviated only when the abbreviation
+  is a legal `PNAME_LN`, falling back to an absolute IRI when it is not.
+
 ## 1. Source-of-truth contract
 
 The journal is an append-only sequence of operations. Everything outside it is a discardable
@@ -69,12 +84,22 @@ Readers must replay existing valid journals exactly. A wire-format change requir
 a version discriminator or unambiguous decoder, and a migration that preserves sequence order,
 operation meaning, and axiom identities.
 
-The typed-literal change is the worked example. Literals moved from a circe sum with a `type`
-discriminator to a lexical/datatype pair; the decoder tells the two apart by which key is present
-rather than by a version field, so existing journals replay unchanged. Axiom identities did *not*
-survive that release: adopting RFC 8785 reordered canonical members, which changes every `AxiomId`.
-That was accepted deliberately at `0.1.0-SNAPSHOT`, before any journal existed to migrate, and is
-the last such break the identifier is permitted.
+Two changes at `0.1.0-SNAPSHOT` exercised this, and only one of them kept axiom identities.
+
+**Typed literals kept them.** Literals moved from a circe sum with a `type` discriminator to a
+lexical/datatype pair; the decoder tells the two apart by which key is present rather than by a
+version field, so existing journals replay unchanged.
+
+**Two changes broke them.** Adopting RFC 8785 reordered canonical members, and expanding compact
+names into absolute IRIs changed what those members contain — each changes every `AxiomId`. Neither
+is recoverable by a decoder, because the identifier *is* the content. Both were taken deliberately
+before any released journal existed to migrate, and the migration for the second is the constructor
+itself: a journal written when compact names were stored decodes through `Iri.apply`, so its
+identifiers expand on the way in, and its axioms acquire the identifiers they would have had.
+
+The guarantee in §6 of the logic specification — that an unchanged axiom keeps its `AxiomId` across
+releases — therefore takes effect at the first tagged release, not from the start of this branch.
+Saying so is the point: a compatibility promise the history disproves is worth less than none.
 
 ## 7. Normative references
 
@@ -86,6 +111,8 @@ Cited normatively only where Noesis conforms *and* the conformance is tested; de
 | [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) / [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — JSON, I-JSON | §4.1. I-JSON matters specifically: it forbids duplicate keys, lone surrogates and integers beyond 2^53, each of which would break replay determinism |
 | [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JCS | §4.2, via `noesis.logic.Canonical` |
 | [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) | `JournalEntry.at`. The open stand-in for ISO 8601, which is paywalled |
+| [RDF 1.1 N-Triples](https://www.w3.org/TR/n-triples/) | `NTriples`, reading and writing. No blank nodes (D6) |
+| [RDF 1.1 Turtle](https://www.w3.org/TR/turtle/) §6 | `Turtle`, writing only. Prefixed names, IRIREFs, literal syntax and the `@prefix` directive |
 
 ## 8. Informative references
 

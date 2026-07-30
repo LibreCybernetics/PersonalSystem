@@ -5,6 +5,7 @@ import scala.util.Using
 
 import io.circe.syntax.*
 import munit.FunSuite
+import noesis.journal.{NTriples, Turtle}
 import noesis.logic.*
 
 /** Conformance to the normative references, driven by corpora rather than by hand-written cases.
@@ -80,12 +81,28 @@ final class IriConformanceSuite extends ConformanceSuite:
         s"${cite(manifest.citation, vector.id)}: ${Iri.parse(vector.value)}"
       )
 
-  test("every bound namespace expands and compacts back to the same compact name"):
+  test("every bound prefix expands at construction and abbreviates back to itself"):
     Namespaces.default.byPrefix.foreach: (prefix, namespace) =>
-      val compact = Iri(s"$prefix:local")
-      assertEquals(Namespaces.default.expand(compact), Some(Iri(s"${namespace}local")), prefix)
-      assertEquals(Namespaces.default.compact(Iri(s"${namespace}local")), Some(compact), prefix)
+      val iri = Iri(s"$prefix:local")
+      assertEquals(iri.value, s"${namespace}local", s"$prefix should expand at construction")
+      assertEquals(Namespaces.default.compact(iri), Some(s"$prefix:local"), prefix)
       assert(Iri.parse(namespace).isRight, s"the $prefix namespace must itself be a legal IRI")
+
+  test("every stored identifier is an absolute IRI"):
+    // The point of expanding at construction: there is no surface left that can emit a compact
+    // name by forgetting to expand, because no compact name survives construction.
+    val stored = List(
+      Iri("crm:worksAt"),
+      Iri("xsd:string"),
+      Iri("core:partialDate"),
+      Xsd.date,
+      Rdf.langString,
+      Vocab.label,
+      Vocab.rdfType
+    )
+    stored.foreach: iri =>
+      assert(iri.value.startsWith("http"), s"${iri.value} is not absolute")
+      assertEquals(Iri.parse(iri.value), Right(iri), iri.value)
 
 final class LanguageTagConformanceSuite extends ConformanceSuite:
   private val manifest = Manifest.load[LanguageTagCase]("bcp47/tags.json")
@@ -184,3 +201,91 @@ final class NTriplesConformanceSuite extends ConformanceSuite:
       io.circe.parser.decode[Literal](Canonical.noesis(literal.asJson)),
       Right(literal)
     )
+
+/** Turtle output is checked against an independently written transcription of the grammar rather
+  * than against the writer's own idea of what is legal. The writer decides abbreviation by asking
+  * whether every character is plain or escapable; the regexes below come from the productions in
+  * Turtle §6.5. Two different formulations of the same rule catch what one cannot.
+  */
+final class TurtleConformanceSuite extends ConformanceSuite:
+  // PN_LOCAL_ESC (§6.5). Written out rather than derived, so a change to the writer's set does not
+  // silently change what this accepts.
+  private val esc = """\\[-_~.!$&'()*+,;=/?#@%]"""
+  private val first = s"""(?:[A-Za-z0-9_]|$esc)"""
+  private val middle = s"""(?:[A-Za-z0-9_.-]|$esc)"""
+  private val last = s"""(?:[A-Za-z0-9_-]|$esc)"""
+  private val pnLocal = s"""$first(?:$middle*$last)?"""
+  private val pnPrefix = """[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?"""
+  private val pnameLn = s"""$pnPrefix:$pnLocal"""
+  private val iriRef = """<[^<>"{}|^`\\\x00-\x20]*>"""
+  private val directive = s"""@prefix $pnPrefix: $iriRef \\."""
+
+  private val corpus =
+    Using
+      .Manager: use =>
+        val stream = Option(getClass.getResourceAsStream("/ntriples/positive.nt"))
+          .getOrElse(sys.error("the N-Triples corpus is missing"))
+        use(Source.fromInputStream(stream, "UTF-8")).mkString
+      .fold(err => sys.error(err.getMessage), identity)
+
+  private val triples = NTriples.parse(corpus).fold(err => fail(err), identity)
+
+  test("every prefix directive matches the Turtle grammar"):
+    val lines = Turtle.write(triples).linesIterator.takeWhile(_.nonEmpty).toList
+    assert(lines.nonEmpty, "a document using prefixed names must declare them")
+    lines.foreach(line => assert(line.matches(directive), s"not a legal @prefix directive: $line"))
+
+  test("every prefix used in a statement is declared, and every declaration is used"):
+    val document = Turtle.write(triples)
+    val declared = document.linesIterator
+      .takeWhile(_.nonEmpty)
+      .map(line => line.stripPrefix("@prefix ").takeWhile(_ != ':'))
+      .toSet
+    val used = document.linesIterator
+      .dropWhile(_.nonEmpty)
+      .flatMap(line => s"(?<![<\\w])$pnameLn".r.findAllMatchIn(line).map(_.matched.takeWhile(_ != ':')))
+      .toSet
+    assertEquals(used.diff(declared), Set.empty[String], "undeclared prefixes")
+    assertEquals(declared.diff(used), Set.empty[String], "declared but unused prefixes")
+
+  test("every abbreviated term denotes the IRI it stands for"):
+    // The real conformance question: an abbreviation is only correct if resolving it under the
+    // declared namespace gives back the identifier that was abbreviated.
+    val terms = triples.flatMap(t => List(t.subject, t.property))
+    terms.foreach: iri =>
+      val written = Turtle.term(iri)
+      if written.startsWith("<") then
+        assertEquals(written, s"<${iri.value}>", "an unabbreviated term is its own absolute IRI")
+        assert(written.matches(iriRef), s"not a legal IRIREF: $written")
+      else
+        assert(written.matches(pnameLn), s"not a legal PNAME_LN: $written")
+        val (prefix, local) = (written.takeWhile(_ != ':'), written.dropWhile(_ != ':').drop(1))
+        val resolved = Namespaces.default.byPrefix(prefix) + local.replaceAll(esc, "").pipe(_ => unescapeLocal(local))
+        assertEquals(Iri.absolute(resolved), iri, s"$written does not denote ${iri.value}")
+
+  test("a minted entity IRI abbreviates with an escaped solidus"):
+    // The shape that has no unescaped spelling: PN_CHARS excludes '/', so `e/alice` is only a
+    // legal local name once the solidus is escaped.
+    assertEquals(Turtle.term(Iri("noesis:e/alice")), """noesis:e\/alice""")
+    assert(Turtle.term(Iri("noesis:e/alice")).matches(pnameLn))
+
+  test("a term whose local part cannot be spelled falls back to an absolute IRI"):
+    // A space is neither plain nor escapable, so abbreviation is impossible and the writer must
+    // not invent an escape for it.
+    val awkward = Iri.absolute(s"${Namespaces.base}ns/crm#has space")
+    assertEquals(Turtle.term(awkward), s"<${awkward.value}>")
+
+  test("literal syntax carries a language tag or a datatype, never both"):
+    val document = Turtle.write(triples)
+    val literals = """"(?:[^"\\]|\\.)*"(?:@[A-Za-z0-9-]+|\^\^(?:<[^>]*>|""" + pnameLn + "))?"
+    document.linesIterator
+      .dropWhile(_.nonEmpty)
+      .filter(_.contains('"'))
+      .foreach: line =>
+        val objectPart = line.dropWhile(_ != '"').stripSuffix(" .")
+        assert(objectPart.matches(literals), s"not a legal literal: $objectPart")
+
+  private def unescapeLocal(local: String): String =
+    local.replaceAll("""\\(.)""", "$1")
+
+  extension [A](a: A) private def pipe[B](f: A => B): B = f(a)

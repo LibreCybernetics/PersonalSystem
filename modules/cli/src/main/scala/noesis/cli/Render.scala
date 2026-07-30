@@ -3,6 +3,7 @@ package noesis.cli
 import java.util.Locale
 
 import noesis.logic.*
+import noesis.journal.Turtle
 import noesis.core.policy.DisclosureDecision
 import noesis.core.projection.KbState
 import noesis.core.verbalize.Verbalizer
@@ -74,46 +75,12 @@ object Render:
       case DisclosureDecision.Redact(reason) =>
         s"  ✗ ${decision.marker} — $reason"
 
-  /** Turtle export (SPEC §10: full export anytime, no lock-in). */
-  def turtle(state: KbState): String =
-    val prefixes = List(
-      "@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .",
-      "@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .",
-      "@prefix owl:   <http://www.w3.org/2002/07/owl#> .",
-      "@prefix core:  <https://noesis.local/core#> .",
-      "@prefix crm:   <https://noesis.local/crm#> .",
-      "@prefix ll:    <https://noesis.local/ll#> .",
-      "@prefix vf:    <https://w3id.org/valueflows#> .",
-      "@prefix noesis: <https://noesis.local/> ."
-    )
-
-    val triples = noesis.core.projection.Projections
-      .current(state)
-      .triples
-      .toList
-      .sortBy(t => (t.subject.value, t.property.value, t.obj.render))
-      .map(t => s"${term(t.subject)} ${term(t.property)} ${node(t.obj)} .")
-
-    (prefixes ++ List("") ++ triples).mkString("\n")
-
-  private def term(iri: Iri): String =
-    if iri.value.startsWith("noesis:e/") then s"<${iri.value}>" else iri.value
-
-  private def node(n: Node): String = n match
-    case Node.Ref(iri)     => term(iri)
-    case Node.Lit(literal) => this.literal(literal)
-
-  /** Turtle/N-Triples literal syntax. Now that a literal carries its own datatype, this is a direct
-    * transcription rather than a per-case table: a language tag suppresses the datatype, and
-    * `xsd:string` is the implicit datatype that Turtle omits.
+  /** Turtle export (SPEC §10: full export anytime, no lock-in).
+    *
+    * The serialization itself lives in `noesis-journal`, which owns reading and writing alike; the
+    * CLI's job is only to choose what to export. The prefix block used to be maintained here by
+    * hand and had drifted from the bindings it claimed to mirror — declaring `core:` and `vf:` as
+    * namespaces those prefixes no longer meant, and never declaring `xsd:` at all.
     */
-  private def literal(l: Literal): String =
-    val quoted = s"\"${escape(l.lexical)}\""
-    l.language match
-      case Some(tag)                        => s"$quoted@$tag"
-      case None if l.datatype == Xsd.string => quoted
-      case None =>
-        val absolute = Namespaces.default.expand(l.datatype).getOrElse(l.datatype)
-        s"$quoted^^<${absolute.value}>"
-
-  private def escape(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"")
+  def turtle(state: KbState): String =
+    Turtle.write(noesis.core.projection.Projections.current(state).triples.toList)

@@ -11,10 +11,13 @@ DL is the system's ceiling, not a claim that this algebra presently implements a
 
 ## 2. Identifiers and literals
 
-- An `Iri` is an opaque string value holding either an absolute IRI or a compact name. Minted
-  entities use `noesis:e/<uuid>`; vocabulary terms use readable prefixed names. `Iri.parse`
-  validates what both forms must satisfy; `Namespaces` resolves compact names to absolute IRIs at
-  export boundaries, not in storage (deviation D1).
+- An `Iri` is an opaque string value holding an **absolute IRI**. Compact names are input and
+  display notation only: `Iri.apply` expands a bound prefix, so `Iri("crm:worksAt")` *is*
+  `https://noesis.librecybernetics.ws/ns/crm#worksAt` and no compact name survives construction.
+  Expanding at the single constructor rather than at each boundary is what makes "everything stored
+  is an RDF term" an invariant rather than a convention — there is nowhere left to forget.
+  `Iri.display` abbreviates again for messages; serializations do their own rendering, because there
+  abbreviating is a decision about a grammar rather than about legibility.
 - `AxiomId` is the prefix `ax_` followed by the first twelve SHA-256 bytes of the axiom's canonical
   form. **Canonical means RFC 8785**, applied after absent optionals are dropped deeply. This is
   what makes §6.2 enforceable: without a fixed member order, reordering two fields in `Axiom` would
@@ -27,7 +30,7 @@ DL is the system's ceiling, not a claim that this algebra presently implements a
   mapping for each datatype minted; capture canonicalizes numerals so that one fact typed twice does
   not become two axioms.
 - Partial dates distinguish absent components from invented values, and carry whichever XSD date
-  datatype their known components determine. Two shapes have no XSD counterpart (deviation D3).
+  datatype their known components determine. Two shapes have no XSD counterpart (deviation D1).
 
 ## 2.1 Profile checking
 
@@ -86,20 +89,20 @@ a completeness claim.
 
 | Reference | Governs | Scope |
 |---|---|---|
-| [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JSON Canonicalization Scheme | `Canonical`, and therefore `AxiomId` and every journal line | Full, except numbers outside the IEEE-754 double range (D5) |
+| [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JSON Canonicalization Scheme | `Canonical`, and therefore `AxiomId` and every journal line | Full, except numbers outside the IEEE-754 double range (D3) |
 | [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) / [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — JSON, I-JSON | the serialized form JCS is applied to | Full |
 | [FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) — SHA-256 | the digest in `AxiomId` | Full |
-| [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987) / [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986) — IRI, URI | `Iri.parse` | Scheme syntax and excluded characters; compact names are also admitted (D1, D2) |
+| [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987) / [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986) — IRI, URI | `Iri.parse`, and the form every stored identifier takes | Scheme syntax and excluded characters |
 | [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562) — UUID | `Iri.fresh`, `FluentId.fresh` | Version 4 only. Obsoletes RFC 4122 |
-| [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) §3.3 | the shape of `Literal` | Literals and language-tagged strings. No blank nodes (D8) |
-| [XSD 1.1 Part 2](https://www.w3.org/TR/xmlschema11-2/) §3.3 | `Datatypes` lexical spaces and canonical mappings | The datatypes Noesis mints (D3, D4) |
-| [BCP 47](https://www.rfc-editor.org/info/bcp47) — RFC 5646 §2.1 | `LanguageTag` | Well-formedness of `langtag` and `privateuse` (D6, D7) |
+| [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) §3.3 | the shape of `Literal` | Literals, language-tagged strings, and IRIs as terms. No blank nodes (D6) |
+| [XSD 1.1 Part 2](https://www.w3.org/TR/xmlschema11-2/) §3.3 | `Datatypes` lexical spaces and canonical mappings | The datatypes Noesis mints (D1, D2) |
+| [BCP 47](https://www.rfc-editor.org/info/bcp47) — RFC 5646 §2.1 | `LanguageTag` | Well-formedness of `langtag` and `privateuse` (D4, D5) |
 | [OWL 2 Profiles](https://www.w3.org/TR/owl2-profiles/) §4 | `Profile` | EL membership of the implemented axiom cases |
-| [OWL 2 Structural Specification](https://www.w3.org/TR/owl2-syntax/) and [Direct Semantics](https://www.w3.org/TR/owl2-direct-semantics/) | what each implemented axiom case *means* | The implemented subset (D10) |
+| [OWL 2 Structural Specification](https://www.w3.org/TR/owl2-syntax/) and [Direct Semantics](https://www.w3.org/TR/owl2-direct-semantics/) | what each implemented axiom case *means* | The implemented subset (D8) |
 
 ## 8. Informative references
 
 - [OWL 2 Manchester Syntax](https://www.w3.org/TR/owl2-manchester-syntax/) — the shape `Axiom.manchester` renders towards. A W3C Note, and the rendering is approximate; not conformance-tested.
-- [OWL 2 Mapping to RDF Graphs](https://www.w3.org/TR/owl2-mapping-to-rdf/) — what `Triples` would have to implement to be a serialization rather than a query view (D10).
+- [OWL 2 Mapping to RDF Graphs](https://www.w3.org/TR/owl2-mapping-to-rdf/) — what `Triples` would have to implement to be a serialization rather than a query view (D8).
 - [RDF 1.2 Concepts](https://www.w3.org/TR/rdf12-concepts/) — Candidate Recommendation as of April 2026. Where triple terms land, and therefore the eventual standard footing for the RDF-star axiom identity of root SPEC §3.1. Tracked, not adopted.
 - [UAX #15](https://www.unicode.org/reports/tr15/) — Unicode normalization. Not applied: `AxiomId` hashes the lexical form as given, so two normalizations of one name yield two identifiers. A candidate deviation once names are captured from more than one source.

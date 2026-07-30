@@ -11,7 +11,7 @@ enum Term:
 
   def render: String = this match
     case Var(n)   => s"?$n"
-    case Ref(i)   => i.value
+    case Ref(i)   => i.display
     case Lit(l)   => l.render
 
 /** One triple pattern. `rdf:type` in the property position matches class assertions. */
