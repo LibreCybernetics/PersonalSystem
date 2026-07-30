@@ -14,7 +14,8 @@ deliberately describe work that is not implemented yet. Do not implement specula
 to make the current code match the design document.
 
 Operational notes for LLM agents working in this repository. Read [README.md](README.md) for what the
-project is; this file is about how to change it without breaking it.
+project is and [TESTING.md](TESTING.md) before changing or validating code; this file is about how to
+change it without breaking it.
 
 **[SPEC.md](SPEC.md) is the authority on intent.** It is a design document, not documentation of the
 code — it describes more than is built. When code and spec disagree, that is a finding to report, not
@@ -26,20 +27,11 @@ their definitions (`Fluent.isOngoing`, `IrreflexiveProperty`); do not "correct" 
 ```bash
 nix develop --command sbt -batch <task>     # everything runs inside the flake devshell
 sbt compile                                 # all seven modules + CLI
-sbt logic/testOnly 'noesis.logic.*'         #   4 tests
-sbt journal/testOnly 'noesis.journal.*'     #   8
-sbt reasoner/testOnly 'noesis.reasoner.*'   #  39
-sbt core/testOnly 'noesis.core.*'           #  65
-sbt lms/testOnly 'noesis.lms.*'             #  36
-sbt vocab/testOnly 'noesis.vocab.*'         #  41
 sbt cli/launcher                            # writes an executable launcher, prints its path
 ```
 
-- **`sbt test` is incremental in sbt 2** and prints `Total 0` for unchanged modules. It is not
-  evidence the suite passed. Use the `testOnly` forms above to actually run everything, and quote the
-  real counts when reporting.
-- **`sbt cli/run` merges arguments** across multiple `run` commands in one session, so a multi-step
-  CLI scenario cannot be scripted through it. Use `sbt cli/launcher` and invoke the script.
+- Testing commands, suite responsibilities, change-specific evidence, CI gates, and reporting rules
+  are centralized in [TESTING.md](TESTING.md).
 - Toolchain: Scala 3.8.4, sbt 2.0.4, JDK 25, all pinned in `flake.nix`. sbt 2 is a `version`+`src`
   override of nixpkgs' sbt 1.x. Do not add a dependency without adding it to `build.sbt`.
 
@@ -98,8 +90,7 @@ Key files:
    path.
 4. **Justifications are load-bearing.** Disclosure filtering (§3.3.1), derived belief (§4.4) and
    contradiction messages (§3.4) all read the same justification data. A change that keeps facts
-   correct but drops or coarsens justifications silently breaks the privacy model. Tests assert on
-   justifications for this reason — do not weaken them to facts-only.
+   correct but drops or coarsens justifications silently breaks the privacy model.
 5. **Sensitivity fails closed.** Unlabeled assertions default to `personal`; an unresolvable premise
    resolves to `sensitive`; `sensitive` is undisclosable regardless of grants. Never add a path that
    defaults to `public`.
@@ -126,9 +117,6 @@ Key files:
   (discriminator `type`, defaults honored).
 - **Opaque types** for identifiers (`Iri`, `AxiomId`, `FluentId`, `ItemId`) with explicit circe
   instances in the companion.
-- **Tests are behavioral and named as claims** — `"a conclusion derivable from public facts alone is
-  public, whatever other derivation paths exist"`, not `"testDisclosure3"`. Prefer pinning a property
-  over a magic constant where the spec calls the model provisional (§12.3).
 
 ## Traps hit in this codebase
 
@@ -153,8 +141,7 @@ These cost real time. Check here before debugging from scratch.
   types `assert s p v` from the ontology, so a property lacking `PropertyRange` fell through to the
   literal branch and stored `spouseOf "marco"` — a string — instead of a reference to Marco. Being
   the inverse of a typed property is *not* enough (`childOf` had the same bug). When adding a
-  relationship to a vocabulary module, declare its domain and range explicitly; `ModuleSuite` has a
-  test enumerating the social properties that guards this.
+  relationship to a vocabulary module, declare its domain and range explicitly.
 - **Range declarations interact with disjointness.** `crm`'s social properties range over `Agent`,
   not `Person`, because Person and Organization are disjoint in core and a narrower range would make
   "I know this company" an inconsistency rather than a fact.
@@ -166,8 +153,6 @@ These cost real time. Check here before debugging from scratch.
   instead of an override.
 - **Covariant type parameters** cannot appear in a method parameter's contravariant position — see
   `Patch.applyTo[B >: A]`.
-- **munit `assertEquals` requires matching types**; a `Set[(Node.Ref, Node)]` will not compare against
-  `Set[(Node, Node)]`. Ascribe explicitly.
 - **Tuple destructuring in a lambda parameter list** (`((a, b), i) => ...`) is not legal Scala 3;
   destructure in the body.
 - **Fluent-backed facts have no `AxiomRecord`.** They are projections, so the annotation cascade
@@ -178,16 +163,12 @@ These cost real time. Check here before debugging from scratch.
 
 ## Adding things
 
-**A vocabulary module:** implement `Module` in `modules/vocab`, add it to `Modules.all`, and add
-integration tests to `ModuleSuite` that exercise it against the *unmodified* core — testing the
-declarations in isolation proves nothing. Check `noesis check` still reports the merged TBox
-consistent.
+**A vocabulary module:** implement `Module` in `modules/vocab` and add it to `Modules.all`.
 
 **An inference rule:** implement `Rule` in `reasoner` or a vocabulary module, keep it monotone,
 combine premise justifications with
 `Rule.combine` / `combineAll` (never fabricate `Justification.empty` for a real premise), and add it
-to `RdfsRules.all` for core rules or the module's `rules` for domain rules. Assert on the derived
-fact *and* its justification.
+to `RdfsRules.all` for core rules or the module's `rules` for domain rules.
 
 **An axiom case:** change `logic`; `Axiom` has exhaustive matches in `signature`, `individuals`,
 `manchester` and
@@ -196,10 +177,9 @@ check are easy to leave wrong rather than missing.
 
 **A journal operation:** change `journal`, then handle the case in `KbState.step` *and*
 `Events.forOperation` (the CLI rebuilds learning state by replaying events, so an operation the event
-derivation ignores becomes invisible after a restart), and add a round-trip case to `JournalSuite`.
+derivation ignores becomes invisible after a restart).
 
 ## Reporting
 
-State test counts from an actual run, not from this file. If a test fails or a step was skipped, say
-so with the output. When you find a spec/code disagreement, report it rather than resolving it
-unilaterally.
+Follow [TESTING.md](TESTING.md) when reporting verification. When you find a spec/code disagreement,
+report it rather than resolving it unilaterally.

@@ -196,7 +196,7 @@
 
           shellHook = ''
             echo "Noesis dev shell — sbt $(sbt --script-version 2>/dev/null || echo 2.0.4), JDK ${jdk.version}"
-            echo "  sbt test          run the test suite"
+            echo "  see TESTING.md    run explicit test suites and verification"
             echo "  sbt cli/run --help  exercise the CLI"
           '';
         };
