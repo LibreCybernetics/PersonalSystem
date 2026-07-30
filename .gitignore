@@ -1,0 +1,44 @@
+# ── Noesis workspaces ────────────────────────────────────────────────────────
+# A workspace is an append-only journal plus a review log, and it holds the
+# owner's actual personal facts — including everything the spec classifies as
+# `sensitive` (health, finances, identity history). Committing one would publish
+# exactly the data §3.3.1 exists to keep on the device, so the two filenames the
+# CLI writes are ignored wherever they appear.
+journal.jsonl
+reviews.jsonl
+.noesis/
+
+# ── sbt ──────────────────────────────────────────────────────────────────────
+# sbt 2 puts all build output under target/out/.
+target/
+project/target/
+project/project/
+
+# ── Scala tooling ────────────────────────────────────────────────────────────
+.bsp/
+.bloop/
+.metals/
+.scala-build/
+# Written by Metals when it configures the build; not part of the build itself.
+project/metals.sbt
+
+# ── nix ──────────────────────────────────────────────────────────────────────
+# Build result symlinks. flake.lock is deliberately NOT ignored — it pins the
+# toolchain and belongs in version control.
+result
+result-*
+# direnv's cache. An .envrc, if one is added, should stay tracked.
+.direnv/
+
+# ── JVM crash artifacts ──────────────────────────────────────────────────────
+hs_err_pid*.log
+replay_pid*.log
+core.*
+
+# ── Editors and OS ───────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+*.swp
+*~
+.DS_Store
