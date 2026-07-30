@@ -39,6 +39,9 @@ object Scheduler:
   /** Below this utility an item is stored-but-suspended: in the KB, not in your head. */
   val suspendThreshold: Double = 0.15
 
+  /** At or below this entropy an item is effectively settled: a question would tell us nothing. */
+  val minEntropy: Double = 0.01
+
   /** Fraction of each session spent sampling low-utility items so mis-scored utility stays
     * discoverable (SPEC §4.3, §12.10).
     */
@@ -84,7 +87,7 @@ object Scheduler:
       val belief = Belief.at(item, now)
       val entropy = Belief.entropy(belief)
 
-      if utility < suspendThreshold || entropy <= 0.01 then None
+      if utility < suspendThreshold || entropy <= minEntropy then None
       else
         val weight = entropy * utility * recencyBoost(item) + item.priorityBoost
         Some(
@@ -144,24 +147,24 @@ object Scheduler:
       now: Instant,
       limit: Int
   ): List[QueueEntry] =
-    val slots = math.max(if limit >= 10 then (limit * explorationFraction).toInt else 0, 0)
-    if slots == 0 then ranked
-    else
-      val chosen = ranked.map(_.item.id).toSet
-      val explorable = all
-        .filter(item => item.isActive && !chosen(item.id) && utilityOf(item) < suspendThreshold)
-        .sortBy(item => Belief.at(item, now))
-        .take(slots)
-        .map: item =>
-          QueueEntry(
-            item,
-            QueueMode.Elucidation,
-            weight = 0.0,
-            belief = Belief.at(item, now),
-            utility = utilityOf(item),
-            reason = "exploration sample: checking a low-utility score is right"
-          )
-      ranked.dropRight(explorable.length) ++ explorable
+    // Truncation is what keeps a short session free of exploration: a tenth of anything under ten
+    // slots is none, so no separate floor is needed.
+    val slots = (limit * explorationFraction).toInt.max(0)
+    val chosen = ranked.map(_.item.id).toSet
+    val explorable = all
+      .filter(item => item.isActive && !chosen(item.id) && utilityOf(item) < suspendThreshold)
+      .sortBy(item => Belief.at(item, now))
+      .take(slots)
+      .map: item =>
+        QueueEntry(
+          item,
+          QueueMode.Elucidation,
+          weight = 0.0,
+          belief = Belief.at(item, now),
+          utility = utilityOf(item),
+          reason = "exploration sample: checking a low-utility score is right"
+        )
+    ranked.dropRight(explorable.length) ++ explorable
 
   /** Allocates a session budget across modules in proportion to their utility mass (SPEC §4.3). */
   def budget(

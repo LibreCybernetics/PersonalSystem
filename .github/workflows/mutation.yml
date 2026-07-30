@@ -54,9 +54,21 @@ jobs:
           --reporters console
           --reporters html
           --reporters json
-          --thresholds.high 60
-          --thresholds.low 41
-          --thresholds.break 40"
+          --thresholds.high 100
+          --thresholds.low 100
+          --thresholds.break 99"
+
+      # Stryker4s requires `break` to be strictly below `low`, so 99 is the strictest threshold it
+      # will accept. Every module is at 100%, so the report itself is the gate: any mutant left
+      # alive or uncovered fails the build.
+      - name: Require a 100% mutation score
+        run: >-
+          nix shell nixpkgs#jq --command jq -e -r
+          '[.files[].mutants[] | select(.status == "Survived" or .status == "NoCoverage")] as $alive
+           | if ($alive | length) == 0 then "all mutants killed"
+             else ($alive | map("\(.mutatorName) -> \(.replacement)") | join("\n")), halt_error(1)
+             end'
+          "$(ls -1dt modules/${{ matrix.module }}/target/stryker4s-report/*/report.json | head -1)"
 
       - name: Upload mutation report
         if: always()
