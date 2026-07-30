@@ -1,5 +1,6 @@
 package noesis.lms
 
+import java.util.Locale
 
 import cats.effect.{Clock, Ref, Sync}
 import cats.syntax.all.*
@@ -160,7 +161,8 @@ final class LearningEngine[F[_]: {Sync, Clock}](
     * must be overwritten, and misnaming someone is the failure the system exists to prevent (§7.2).
     */
   private def changePriority(property: Iri): Double =
-    if property.local.toLowerCase.contains("name") || property.local.toLowerCase.contains("pronoun")
+    val normalized = property.local.toLowerCase(Locale.ROOT)
+    if normalized.contains("name") || normalized.contains("pronoun")
     then 1.0
     else 0.4
 
@@ -179,7 +181,7 @@ final class LearningEngine[F[_]: {Sync, Clock}](
   def utilityOf(records: Map[AxiomId, AxiomRecord])(item: Item): Double =
     val utilities =
       item.axioms.toList.flatMap(records.get).map(PolicyCascade.recallUtility(_, policies))
-    if utilities.isEmpty then 0.5 else utilities.max
+    utilities.maxOption.getOrElse(0.5)
 
   /** Records for the cascade to resolve against, covering fluent-backed facts as well as axioms.
     *
@@ -296,16 +298,16 @@ final class LearningEngine[F[_]: {Sync, Clock}](
           case None => Sync[F].unit
           case Some(history) =>
             val ordered = history.sortBy(_.at)
-            val last = ordered.last
-            store.put(
-              item.copy(
-                belief = last.beliefAfter,
-                stability = last.stabilityAfter,
-                lastReviewed = Some(last.at),
-                reviewCount = ordered.length,
-                lapseCount = ordered.count(_.grade < 0.6)
+            ordered.lastOption.fold(Sync[F].unit): last =>
+              store.put(
+                item.copy(
+                  belief = last.beliefAfter,
+                  stability = last.stabilityAfter,
+                  lastReviewed = Some(last.at),
+                  reviewCount = ordered.length,
+                  lapseCount = ordered.count(_.grade < 0.6)
+                )
               )
-            )
     *> reviews.traverse_(store.log)
 
   private def kindFor(axiom: Axiom): ItemKind =

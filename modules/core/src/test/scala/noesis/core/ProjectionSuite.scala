@@ -24,6 +24,8 @@ class ProjectionSuite extends FunSuite:
 
   private val aliceIsPerson = Axiom.ClassAssertion(alice, Person)
   private val marcoIsPerson = Axiom.ClassAssertion(marco, Person)
+  private val fl1 = FluentId.unsafe("fl_1")
+  private val fl2 = FluentId.unsafe("fl_2")
 
   test("replay reconstructs asserted axioms with their annotations"):
     val annotations = AxiomAnnotations.ownerConfirmed.withUtility(0.9)
@@ -77,7 +79,8 @@ class ProjectionSuite extends FunSuite:
       Operation.Annotate(aliceIsPerson.id, AnnotationPatch(recallUtility = Patch.of(0.95)))
     )
 
-    val annotations = state.axiom(aliceIsPerson.id).map(_.annotations).get
+    val annotations =
+      state.axiom(aliceIsPerson.id).map(_.annotations).getOrElse(fail("axiom not projected"))
     assertEquals(annotations.recallUtility, Some(0.95))
     assertEquals(annotations.truthConfidence, Some(0.5), "untouched dimension changed")
     assertEquals(annotations.sensitivity, Some(Sensitivity.Personal))
@@ -88,7 +91,8 @@ class ProjectionSuite extends FunSuite:
       Operation.Reclassify(aliceIsPerson.id, Sensitivity.Internal, Set(orgAcme))
     )
 
-    val annotations = state.axiom(aliceIsPerson.id).map(_.annotations).get
+    val annotations =
+      state.axiom(aliceIsPerson.id).map(_.annotations).getOrElse(fail("axiom not projected"))
     assertEquals(annotations.sensitivity, Some(Sensitivity.Internal))
     assertEquals(annotations.knowledgeScope, Set(orgAcme))
 
@@ -105,9 +109,6 @@ class ProjectionSuite extends FunSuite:
     assertEquals(KbState.replay(entries).seq, 3L)
 
   // ── Fluents (SPEC §3.6) ───────────────────────────────────────────────────
-
-  private val fl1 = FluentId.unsafe("fl_1")
-  private val fl2 = FluentId.unsafe("fl_2")
 
   test("an ongoing fluent materializes into the current graph as a plain triple"):
     val fluent = Fluent(fl1, alice, worksAt, Node.Ref(acme), Some(PartialDate.of(2026, 1, 1)))
@@ -142,7 +143,7 @@ class ProjectionSuite extends FunSuite:
       Operation.SupersedeFluent(fl1, replacement, Some(boundary))
     )
 
-    val closed = state.fluent(fl1).get
+    val closed = state.fluent(fl1).getOrElse(fail("superseded fluent not projected"))
     assertEquals(closed.validTo, Some(boundary))
     assertEquals(closed.endReason, Some(EndReason.Superseded))
     assertEquals(closed.supersededBy, Some(fl2))

@@ -1,5 +1,7 @@
 package noesis.cli
 
+import java.util.Locale
+
 import cats.data.{NonEmptyList, Validated}
 import cats.effect.{ExitCode, IO}
 import cats.syntax.all.*
@@ -353,7 +355,7 @@ object Main
           assertions = closure.assertions.toList.sortBy(_.id.value)
           (disclosed, redacted) <- kb.disclosable(assertions, policy)
           _ <- IO.println(
-            s"policy '$name': max=${level.toString.toLowerCase}" +
+            s"policy '$name': max=${level.toString.toLowerCase(Locale.ROOT)}" +
               (if scopes.isEmpty then "" else scopes.mkString(", scopes=[", ", ", "]"))
           )
           _ <- IO.println(s"${disclosed.length} disclosed, ${redacted.length} withheld")

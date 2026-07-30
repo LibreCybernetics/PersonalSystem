@@ -35,9 +35,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-sbt-
 
-      - name: Run all test suites
+      - name: Run static analysis and all test suites
         run: >-
           nix develop --command sbt -batch
-          "core/testOnly noesis.core.*;
+          "clean;
+          compile;
+          core/testOnly noesis.core.*;
           lms/testOnly noesis.lms.*;
           vocab/testOnly noesis.vocab.*"

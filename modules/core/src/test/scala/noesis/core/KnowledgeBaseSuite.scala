@@ -63,7 +63,10 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       rejected match
         case Left(CommitRejected.Inconsistent(problems)) =>
           assert(problems.nonEmpty)
-          assert(problems.head.justification.premises.nonEmpty, "rejection must carry a justification")
+          assert(
+            problems.forall(_.justification.premises.nonEmpty),
+            "rejection must carry a justification"
+          )
         case other => fail(s"expected an inconsistency rejection, got $other")
       assertEquals(after.length, before.length, "a rejected commit must not write to the journal")
 
@@ -278,9 +281,11 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       explanation <- base.explain(derived)
     yield
       assert(entailed)
-      val justification = explanation.get.justifications.head
+      val found = explanation.getOrElse(fail("expected an explanation for the entailed fact"))
+      val justification =
+        found.justifications.headOption.getOrElse(fail("expected at least one justification"))
       assertEquals(justification.size, 2)
-      assert(explanation.get.isDerived, "an entailment should not be reported as asserted")
+      assert(found.isDerived, "an entailment should not be reported as asserted")
 
   test("query over the knowledge base sees fluent-backed and inferred facts together"):
     for
@@ -298,14 +303,18 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
     yield
       val warnings = result.fold(r => fail(r.render), _.profileWarnings)
       assertEquals(warnings.length, 1)
-      assert(warnings.head._2.contains("EL"), warnings.head._2)
+      val warning = warnings.headOption.getOrElse(fail("expected an EL profile warning"))
+      assert(warning._2.contains("EL"), warning._2)
 
   test("time travel: stateAt reconstructs an earlier journal prefix"):
     for
       base <- kb()
       first <- base.assert(Axiom.ClassAssertion(alice, Person))
       _ <- base.assert(Axiom.ClassAssertion(marco, Person))
-      firstSeq = first.fold(r => fail(r.render), _.commit.entries.head.seq)
+      firstSeq = first.fold(
+        r => fail(r.render),
+        _.commit.entries.headOption.fold(fail("expected a journal entry"))(_.seq)
+      )
       earlier <- base.stateAt(firstSeq)
       latest <- base.state
     yield

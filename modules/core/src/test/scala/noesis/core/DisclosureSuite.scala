@@ -249,7 +249,9 @@ class DisclosureSuite extends FunSuite:
     val resolver = new SupportResolver(state, PolicyBook.empty)
     val derived = Axiom.ObjectAssertion(alice, colleagueOf, marco)
 
-    val effective = Disclosure.effectiveLevel(closure.justificationsFor(derived), resolver).get
+    val effective = Disclosure
+      .effectiveLevel(closure.justificationsFor(derived), resolver)
+      .getOrElse(fail("derived fact had no effective disclosure level"))
     assertEquals(effective.level, Sensitivity.Internal)
     assertEquals(effective.scopes, Set(orgAcme, otherOrg))
 
@@ -310,7 +312,9 @@ class DisclosureSuite extends FunSuite:
     val resolver = new SupportResolver(state, PolicyBook.empty)
 
     val materialized = Axiom.ObjectAssertion(alice, worksAt, acme)
-    val effective = Disclosure.effectiveLevel(closure.justificationsFor(materialized), resolver).get
+    val effective = Disclosure
+      .effectiveLevel(closure.justificationsFor(materialized), resolver)
+      .getOrElse(fail("materialized fluent had no effective disclosure level"))
 
     assertEquals(effective.level, Sensitivity.Internal)
     assertEquals(effective.scopes, Set(orgAcme))

@@ -138,13 +138,13 @@ object DerivedBelief:
         Option.when(known.nonEmpty):
           val combined = config.tnorm match
             case Tnorm.Product => known.product
-            case Tnorm.Min     => known.min
+            case Tnorm.Min     => known.minOption.getOrElse(1.0)
           val discount = 1.0 - config.inferenceDifficulty * (justification.size - 1).max(0)
           Belief.clamp(combined * discount.max(0.0))
 
       if perPath.isEmpty then None
       else if config.noisyOr then Some(Belief.clamp(1.0 - perPath.map(1.0 - _).product))
-      else Some(perPath.max)
+      else perPath.maxOption
 
   /** Attenuated credit to propagate back to premise items after reviewing a derived fact (§4.4). */
   def backPropagatedCredit(grade: Double, justificationSize: Int): Double =

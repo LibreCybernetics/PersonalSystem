@@ -1,6 +1,6 @@
 ThisBuild / organization := "ws.librecybernetics"
 ThisBuild / version := "0.1.0-SNAPSHOT"
-ThisBuild / scalaVersion := "3.7.4"
+ThisBuild / scalaVersion := "3.8.4"
 
 val catsEffectV = "3.6.3"
 val fs2V = "3.12.2"
@@ -8,20 +8,75 @@ val circeV = "0.14.10"
 val declineV = "2.5.0"
 val munitV = "1.1.1"
 val munitCatsEffectV = "2.1.0"
+val scapegoatV = "3.3.6"
+val wartremoverV = "3.6.1"
+
+// Warts.unsafe includes inference/style checks whose Scala 3 implementations flag opaque-type
+// interpolation and intentional API defaults. Keep the gate on concrete correctness hazards.
+val wartremoverChecks = Seq(
+  "ArrayEquals",
+  "ArrayToString",
+  "AsInstanceOf",
+  "EitherProjectionPartial",
+  "GlobalExecutionContext",
+  "IsInstanceOf",
+  "IterableOps",
+  "JavaNetURLConstructors",
+  "LeakingSealed",
+  "MapContains",
+  "MapUnit",
+  "Null",
+  "OptionPartial",
+  "PlatformDefault",
+  "Return",
+  "StringPlusAny",
+  "ThreadSleep",
+  "Throw",
+  "TripleQuestionMark",
+  "TryPartial"
+)
 
 lazy val commonSettings = Seq(
   scalacOptions ++= Seq(
     "-deprecation",
     "-feature",
     "-unchecked",
+    "-Werror",
+    "-Wnonunit-statement",
+    "-Wsafe-init",
     "-Wunused:all",
     "-Wvalue-discard",
-    "-source:3.7"
+    "-source:3.8"
   ),
+  libraryDependencies ++= Seq(
+    compilerPlugin(
+      ("com.sksamuel.scapegoat" %% "scalac-scapegoat-plugin" % scapegoatV)
+        .cross(CrossVersion.full)
+    ),
+    compilerPlugin(
+      ("org.wartremover" %% "wartremover" % wartremoverV)
+        .cross(CrossVersion.full)
+    )
+  ),
+  Compile / scalacOptions ++= {
+    val reportDir = (Compile / target).value / "scapegoat"
+    Seq(
+      "-Xplugin-require:scapegoat",
+      "-Xplugin-require:wartremover",
+      s"-P:scapegoat:dataDir:${reportDir.getAbsolutePath}",
+      "-P:scapegoat:reports:xml",
+      "-P:scapegoat:consoleOutput:true",
+      "-P:scapegoat:minimalLevel:warning",
+      // Scala 3 reports compiler-generated case-class equality for every Double field as source.
+      "-P:scapegoat:disabledInspections:ComparingFloatingPointTypes"
+    ) ++ wartremoverChecks.map(wart =>
+      s"-P:wartremover:traverser:org.wartremover.warts.$wart"
+    )
+  },
   libraryDependencies ++= Seq(
     "org.scalameta" %% "munit" % munitV % Test,
     "org.typelevel" %% "munit-cats-effect" % munitCatsEffectV % Test
-  )
+  ),
 )
 
 // The Knowledge Core (SPEC §3): journal, projections, reasoning, query,

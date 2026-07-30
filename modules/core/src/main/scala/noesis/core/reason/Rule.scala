@@ -187,12 +187,15 @@ object RdfsRules:
     private def composed(view: ClosureView, steps: List[ChainStep])(using
         ReasonerConfig
     ): List[(Iri, Iri, Set[Justification])] =
-      steps.tail.foldLeft(view.relationFor(steps.head)): (acc, step) =>
-        val next = view.relationFor(step).groupMap(_._1)(e => (e._2, e._3))
-        for
-          (x, mid, jLeft) <- acc
-          (z, jRight) <- next.getOrElse(mid, Nil)
-        yield (x, z, Rule.combine(jLeft, jRight))
+      steps match
+        case first :: rest =>
+          rest.foldLeft(view.relationFor(first)): (acc, step) =>
+            val next = view.relationFor(step).groupMap(_._1)(e => (e._2, e._3))
+            for
+              (x, mid, jLeft) <- acc
+              (z, jRight) <- next.getOrElse(mid, Nil)
+            yield (x, z, Rule.combine(jLeft, jRight))
+        case Nil => Nil
 
   /** The default rule set. */
   val all: List[Rule] = List(

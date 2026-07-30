@@ -224,7 +224,10 @@ class ReasonerSuite extends FunSuite:
     val problems = Consistency.check(closure)
 
     assertEquals(problems.map(_.kind), List(InconsistencyKind.DisjointClassMembership))
-    assert(problems.head.justification.premises.nonEmpty, "a rejection needs a justification")
+    assert(
+      problems.forall(_.justification.premises.nonEmpty),
+      "a rejection needs a justification"
+    )
 
   test("disjointness is detected through inference, not only on asserted classes"):
     // alice is only asserted to be a Person; Organization membership is derived via range.

@@ -22,9 +22,8 @@
             package: builtins.elem (lib.getName package) [ "claude-code" ];
         };
 
-        # The JDK the build and the produced launcher run on. sbt 2 requires 17+;
-        # 21 is the current LTS and what CI should match.
-        jdk = pkgs.jdk21;
+        # The JDK the build, CI and produced launcher run on.
+        jdk = pkgs.jdk25;
 
         # nixpkgs currently ships sbt 1.x. The sbt 2.x distribution has an
         # identical layout, so overriding version + src is enough to keep nix

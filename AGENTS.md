@@ -24,7 +24,7 @@ sbt cli/launcher                            # writes an executable launcher, pri
   real counts when reporting.
 - **`sbt cli/run` merges arguments** across multiple `run` commands in one session, so a multi-step
   CLI scenario cannot be scripted through it. Use `sbt cli/launcher` and invoke the script.
-- Toolchain: Scala 3.7.4, sbt 2.0.4, JDK 21, all pinned in `flake.nix`. sbt 2 is a `version`+`src`
+- Toolchain: Scala 3.8.4, sbt 2.0.4, JDK 25, all pinned in `flake.nix`. sbt 2 is a `version`+`src`
   override of nixpkgs' sbt 1.x. Do not add a dependency without adding it to `build.sbt`.
 
 ## Architecture

@@ -16,11 +16,11 @@ domain modules work end to end, and the LLM, MCP and HTTP surfaces are not built
 ## Quick start
 
 ```bash
-nix develop            # JDK 21, sbt 2.0.4, coursier, scala-cli, metals
+nix develop            # JDK 25, sbt 2.0.4, coursier, scala-cli, metals
 sbt cli/launcher       # writes an executable launcher and prints its path
 ```
 
-The launcher lands at `target/out/jvm/scala-3.7.4/noesis-cli/noesis`. It defaults to a workspace at
+The launcher lands at `target/out/jvm/scala-3.8.4/noesis-cli/noesis`. It defaults to a workspace at
 `~/.noesis`; pass `--root DIR` to use another. A workspace is two append-only files —
 `journal.jsonl` and `reviews.jsonl` — and nothing else.
 
@@ -119,8 +119,9 @@ sbt vocab/testOnly 'noesis.vocab.*' #  41
 Note that plain `sbt test` is incremental in sbt 2 and reports `Total 0` for modules whose inputs
 have not changed. Use the explicit `testOnly` forms above when you want to see all 189 tests run.
 
-The build is strict: `-Wunused:all` and `-Wvalue-discard` are on. Warnings are not errors, but the
-tree is kept warning-free.
+The build treats warnings as errors and enables unused, discarded-value, non-`Unit` statement and
+safe-initialization diagnostics. Scapegoat and a curated WartRemover safety profile run as compiler
+plugins for both production and test compilation.
 
 ## Isolated coding agents
 
@@ -185,7 +186,7 @@ default sessions live under `$XDG_STATE_HOME/noesis-agents`, falling back to
 
 The wrapper starts an empty mount namespace and exposes only the session repository/worktree, its
 private state, `/proc`, a minimal `/dev`, and the exact Nix store closure of the pinned tool
-environment. The environment contains JDK 21, sbt 2.0.4, the Scala tools, Git, Codex, Claude Code,
+environment. The environment contains JDK 25, sbt 2.0.4, the Scala tools, Git, Codex, Claude Code,
 and basic POSIX utilities. `/tmp` is an in-memory private filesystem. Linux capabilities, nested user
 namespaces, IPC, PID, UTS, cgroup, and network namespaces are separated.
 

@@ -1,5 +1,7 @@
 package noesis.core.policy
 
+import java.util.Locale
+
 import noesis.core.model.*
 import noesis.core.projection.KbState
 import noesis.core.reason.Closure
@@ -153,7 +155,7 @@ object Disclosure:
           val actual = effectiveLevel(justifications, resolver)
           DisclosureDecision.Redact(
             actual.fold("no disclosable justification"): d =>
-              s"requires ${d.level.toString.toLowerCase}" +
+              s"requires ${d.level.toString.toLowerCase(Locale.ROOT)}" +
                 (if d.scopes.nonEmpty then d.scopes.map(_.value).mkString("(", ", ", ")") else "")
           )
 
