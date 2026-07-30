@@ -4,10 +4,11 @@ import cats.data.NonEmptyList
 import cats.effect.IO
 import munit.CatsEffectSuite
 import noesis.core.Fixtures.*
-import noesis.core.capture.Intent
+import noesis.core.capture.{CaptureProblem, Intent}
 import noesis.core.event.Event
 import noesis.core.kb.*
 import noesis.logic.*
+import noesis.reasoner.{Inconsistency, InconsistencyKind, Justification, Support}
 import noesis.reasoner.query.Query
 import noesis.core.verbalize.{Naming, Templates}
 
@@ -402,3 +403,135 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       _ <- base.assert(axiom, AxiomAnnotations.ownerConfirmed.withSensitivity(Sensitivity.Internal))
       violations <- base.policyViolations
     yield assert(violations.exists(_.contains("knowledgeScope")), violations.toString)
+
+  test("every public event variant keeps its stable event-bus name"):
+    val axiom = Axiom.ClassAssertion(alice, Person)
+    val id = axiom.id
+    val events = List(
+      Event.AxiomAdded(id, axiom) -> "axiom.added",
+      Event.AxiomRetracted(id, axiom) -> "axiom.retracted",
+      Event.AnnotationsChanged(id) -> "axiom.annotated",
+      Event.EntailmentChanged(Set(axiom), Set.empty) -> "entailment.changed",
+      Event.StateChanged(FluentId.unsafe("fl_1"), alice, worksAt, None, Some(Node.Ref(acme))) ->
+        "state.changed",
+      Event.BeliefUpdated("item", 0.5) -> "belief.updated",
+      Event.ReviewCompleted("item", 1.0) -> "review.completed",
+      Event.AgendaDue("item", "due") -> "agenda.due"
+    )
+    assertEquals(events.map(_._1.name), events.map(_._2))
+
+  test("annotation, reclassification, and dispute intents reject malformed targets and accept existing ones"):
+    val axiom = Axiom.ClassAssertion(alice, Person)
+    val missing = AxiomId.unsafe("ax_missing")
+    val nonEmpty = AnnotationPatch(recallUtility = Patch.of(0.8))
+    for
+      base <- kb()
+      _ <- base.assert(axiom)
+      emptyPatch <- base.commit(NonEmptyList.one(Intent.Annotate(axiom.id, AnnotationPatch())))
+      missingPatch <- base.commit(NonEmptyList.one(Intent.Annotate(missing, nonEmpty)))
+      validPatch <- base.commit(NonEmptyList.one(Intent.Annotate(axiom.id, nonEmpty)))
+      missingClass <- base.commit(
+        NonEmptyList.one(Intent.Reclassify(missing, Sensitivity.Internal, Set(orgAcme)))
+      )
+      validClass <- base.commit(
+        NonEmptyList.one(Intent.Reclassify(axiom.id, Sensitivity.Internal, Set(orgAcme)))
+      )
+      missingDispute <- base.commit(NonEmptyList.one(Intent.Dispute(missing, Some("note"))))
+      validDispute <- base.commit(NonEmptyList.one(Intent.Dispute(axiom.id, Some("note"))))
+    yield
+      assertEquals(
+        emptyPatch.left.map(_.render),
+        Left("commit rejected — cannot capture:\n  empty annotation patch")
+      )
+      assertEquals(
+        missingPatch.left.map(_.render),
+        Left("commit rejected — cannot capture:\n  no such axiom: ax_missing")
+      )
+      assert(validPatch.isRight)
+      assertEquals(
+        missingClass.left.map(_.render),
+        Left("commit rejected — cannot capture:\n  no such axiom: ax_missing")
+      )
+      assert(validClass.isRight)
+      assertEquals(
+        missingDispute.left.map(_.render),
+        Left("commit rejected — cannot capture:\n  no such axiom: ax_missing")
+      )
+      assert(validDispute.isRight)
+
+  test("superseding without an open state reports the exact subject and property"):
+    for
+      base <- kb()
+      result <- base.commit(
+        NonEmptyList.one(Intent.Supersede(alice, worksAt, Node.Ref(acme)))
+      )
+    yield assertEquals(
+      result.left.map(_.render),
+      Left(
+        "commit rejected — cannot capture:\n" +
+          "  no open state to supersede for noesis:e/alice worksAt"
+      )
+    )
+
+  test("a repeated close lists distinct historical states with an explicit separator"):
+    for
+      base <- kb()
+      _ <- base.commit(NonEmptyList.one(Intent.OpenState(alice, worksAt, Node.Ref(acme))))
+      _ <- base.commit(NonEmptyList.one(Intent.CloseState(alice, worksAt)))
+      _ <- base.commit(NonEmptyList.one(Intent.OpenState(alice, worksAt, Node.Ref(molina))))
+      _ <- base.commit(NonEmptyList.one(Intent.CloseState(alice, worksAt)))
+      result <- base.commit(NonEmptyList.one(Intent.CloseState(alice, worksAt)))
+    yield
+      val rendered = result.left.map(_.render).fold(identity, _ => fail("expected capture rejection"))
+      assert(rendered.contains("no open state for noesis:e/alice worksAt; 2 closed one(s) exist:"))
+      val descriptions = rendered.split("exist: ", 2).toList.drop(1).mkString
+      assert(descriptions.contains("]; "), descriptions)
+
+  test("commit rejection rendering preserves headings, indentation, and line separators"):
+    val axiom = Axiom.ClassAssertion(alice, Person)
+    val inconsistency = Inconsistency(
+      InconsistencyKind.SameAndDifferent,
+      "contradiction",
+      Set(axiom),
+      Justification.of(
+        Support.Asserted(AxiomId.unsafe("ax_a")),
+        Support.Asserted(AxiomId.unsafe("ax_b"))
+      )
+    )
+    assertEquals(
+      CommitRejected.Inconsistent(
+        List(inconsistency, inconsistency.copy(detail = "second contradiction"))
+      ).render,
+      "commit rejected — inconsistent:\n" +
+        "  [same-and-different] contradiction (from: ax_a, ax_b)\n" +
+        "  [same-and-different] second contradiction (from: ax_a, ax_b)"
+    )
+    assertEquals(
+      CommitRejected.NotCaptured(
+        NonEmptyList.of(
+          CaptureProblem(Intent.Retract(axiom.id), "first"),
+          CaptureProblem(Intent.Retract(axiom.id), "second")
+        )
+      ).render,
+      "commit rejected — cannot capture:\n  first\n  second"
+    )
+
+  test("entailment events cover removals and omit empty diffs"):
+    val subclass = Axiom.SubClassOf(Person, Agent)
+    val assertion = Axiom.ClassAssertion(alice, Person)
+    val annotation = AnnotationPatch(recallUtility = Patch.of(0.7))
+    for
+      base <- kb()
+      _ <- base.commit(NonEmptyList.of(Intent.Assert(subclass), Intent.Assert(assertion)))
+      annotated <- base.commit(NonEmptyList.one(Intent.Annotate(assertion.id, annotation)))
+      retracted <- base.commit(NonEmptyList.one(Intent.Retract(assertion.id)))
+    yield
+      val annotationEvents = annotated.fold(r => fail(r.render), _.events)
+      val annotationChanges = annotationEvents.collect:
+        case change: Event.EntailmentChanged => change
+      assertEquals(annotationChanges, Nil)
+      val changes = retracted.fold(r => fail(r.render), _.events).collect:
+        case change: Event.EntailmentChanged => change
+      assertEquals(changes.length, 1)
+      assertEquals(changes.flatMap(_.added), Nil)
+      assert(changes.exists(_.removed.contains(Axiom.ClassAssertion(alice, Agent))))

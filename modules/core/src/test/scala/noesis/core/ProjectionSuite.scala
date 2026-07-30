@@ -182,10 +182,13 @@ class ProjectionSuite extends FunSuite:
     assert(fluent.isOngoing)
 
   test("openFluentsFor finds the matching state and ignores closed and unrelated ones"):
+    val fl3 = FluentId.unsafe("fl_3")
     val state = replay(
       Operation.OpenFluent(Fluent(fl1, alice, worksAt, Node.Ref(acme))),
       Operation.OpenFluent(Fluent(fl2, marco, worksAt, Node.Ref(molina))),
-      Operation.CloseFluent(fl2, Some(PartialDate.of(2026, 1, 1)), EndReason.Ended)
+      Operation.CloseFluent(fl2, Some(PartialDate.of(2026, 1, 1)), EndReason.Ended),
+      Operation.OpenFluent(Fluent(fl3, sarah, knows, Node.Ref(lia))),
+      Operation.CloseFluent(fl3, Some(PartialDate.of(2026, 1, 1)), EndReason.Ended)
     )
 
     assertEquals(state.openFluentsFor(alice, worksAt).map(_.id), List(fl1))
@@ -199,3 +202,41 @@ class ProjectionSuite extends FunSuite:
       Operation.OpenFluent(Fluent(fl1, alice, worksAt, Node.Ref(acme)))
     )
     assertEquals(state.entities, Set(marco, alice, acme))
+
+  test("undisputing changes only a disputed record, never a retracted one"):
+    val active = replay(
+      Operation.Assert(aliceIsPerson.id, aliceIsPerson),
+      Operation.Undispute(aliceIsPerson.id)
+    )
+    val disputed = replay(
+      Operation.Assert(aliceIsPerson.id, aliceIsPerson),
+      Operation.Dispute(aliceIsPerson.id),
+      Operation.Undispute(aliceIsPerson.id)
+    )
+    val retracted = replay(
+      Operation.Assert(aliceIsPerson.id, aliceIsPerson),
+      Operation.Retract(aliceIsPerson.id),
+      Operation.Undispute(aliceIsPerson.id)
+    )
+
+    assertEquals(active.axiom(aliceIsPerson.id).map(_.status), Some(AxiomStatus.Active))
+    assertEquals(disputed.axiom(aliceIsPerson.id).map(_.status), Some(AxiomStatus.Active))
+    assertEquals(retracted.axiom(aliceIsPerson.id).map(_.status), Some(AxiomStatus.Retracted))
+
+  test("about returns active axioms and fluents that mention an entity in either position"):
+    val aliceKnowsMarco = Axiom.ObjectAssertion(alice, knows, marco)
+    val sarahIsPerson = Axiom.ClassAssertion(sarah, Person)
+    val subjectFluent = Fluent(fl1, alice, worksAt, Node.Ref(acme))
+    val valueFluent = Fluent(fl2, marco, knows, Node.Ref(alice))
+    val unrelatedFluent = Fluent(FluentId.unsafe("fl_3"), sarah, worksAt, Node.Ref(molina))
+    val state = replay(
+      Operation.Assert(aliceKnowsMarco.id, aliceKnowsMarco),
+      Operation.Assert(sarahIsPerson.id, sarahIsPerson),
+      Operation.OpenFluent(subjectFluent),
+      Operation.OpenFluent(valueFluent),
+      Operation.OpenFluent(unrelatedFluent)
+    )
+    val (axioms, fluents) = state.about(alice)
+
+    assertEquals(axioms.map(_.axiom).toSet, Set(aliceKnowsMarco))
+    assertEquals(fluents.map(_.id).toSet, Set(fl1, fl2))

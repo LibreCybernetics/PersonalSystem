@@ -152,11 +152,17 @@ object Disclosure:
       passing.minByOption(d => (d.level.rank, d.scopes.size, d.via.size)) match
         case Some(effective) => DisclosureDecision.Disclose(effective)
         case None =>
-          val actual = effectiveLevel(justifications, resolver)
-          DisclosureDecision.Redact(
-            actual.fold("no disclosable justification"): d =>
+          // Guarded by `justifications.nonEmpty` above, so an effective level necessarily exists.
+          // Keeping an unreachable fallback here obscures a privacy-sensitive invariant.
+          val actual = effectiveLevel(justifications, resolver).toList
+            .map: d =>
               s"requires ${d.level.toString.toLowerCase(Locale.ROOT)}" +
-                (if d.scopes.nonEmpty then d.scopes.map(_.value).mkString("(", ", ", ")") else "")
+                (if d.scopes.nonEmpty then
+                   d.scopes.map(_.value).toList.sorted.mkString("(", ", ", ")")
+                 else "")
+            .mkString
+          DisclosureDecision.Redact(
+            actual
           )
 
   /** Filters a set of axioms down to what `policy` may see.
