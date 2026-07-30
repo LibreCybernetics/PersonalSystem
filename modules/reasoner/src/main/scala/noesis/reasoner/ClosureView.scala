@@ -87,6 +87,10 @@ final class ClosureView(val facts: Map[Axiom, Set[Justification]]):
   lazy val dataByProperty: Map[Iri, List[(Iri, Literal, Set[Justification])]] =
     dataAssertions.groupMap(_._1._2)((e, js) => (e._1, e._3, js))
 
+  /** (subject, property) → (literal, justifications) — the data-property lookup index. */
+  lazy val dataBySubjectProperty: Map[(Iri, Iri), List[(Literal, Set[Justification])]] =
+    dataAssertions.groupMap(e => (e._1._1, e._1._2))((e, js) => (e._3, js))
+
   lazy val sameIndividuals: List[((Iri, Iri), Set[Justification])] =
     collect { case Axiom.SameIndividual(a, b) => (a, b) }
 

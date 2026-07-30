@@ -28,25 +28,29 @@ The launcher lands at `target/out/jvm/scala-3.8.4/noesis-cli/noesis`. It default
 ```bash
 noesis init                                   # install the module ontologies
 
-# Capture. Bare words become entities; prefixed names are vocabulary terms.
-noesis assert lia rdf:type crm:Person
-noesis assert lia rdfs:label Lía
+# Structured contacts. Bare handles become noesis:e/ entities.
+noesis contact add 'Lía García' --id lia
+noesis contact add Sarah --id sarah
+noesis contact add Marco --id marco
+noesis contact add 'Molina Labs' --id molina --organization
+noesis contact method-add lia 'lia@example.com' --kind email --label personal
+noesis contact method-add lia '+52 55 1234' --kind phone --label mobile
+noesis contact employment-add sarah --at molina --title Researcher
+noesis contact interaction-add sarah --with marco --on 2026-07-30 --channel in-person
+
+# Generic semantic capture remains available; prefixed names are vocabulary terms.
 noesis assert lia crm:birthday 05-12          # a yearless partial date
-noesis assert sarah rdfs:label Sarah
-noesis assert marco rdfs:label Marco
-noesis assert molina rdfs:label 'Molina Labs'
 noesis assert sarah crm:spouseOf marco
 noesis assert sarah crm:parentOf lia
 noesis assert marco crm:parentOf lia
-noesis assert sarah crm:worksAt molina        # time-varying, so this opens a fluent
 
 # Ask what follows from what you said.
 noesis entails sarah crm:knows marco          # yes — spouseOf ⊑ partnerOf ⊑ knows
 noesis explain sarah crm:knows marco          # ...and the premises it used
 noesis query "?p crm:parentOf noesis:e/lia"   # Sarah, Marco
 
-# States change. This is one supersession, not a delete plus an insert.
-noesis supersede sarah crm:worksAt noesis:e/acme --on 2026-07-01
+# States change. A contact method retires without deleting its history.
+noesis contact method-retire <methodId>
 noesis as-of 2026-03-15                       # the graph as it stood in March
 
 # Learning.
@@ -57,11 +61,14 @@ noesis review <itemId> 1.0
 # Boundaries and hygiene.
 noesis disclose tutor --level public          # what an external agent would be allowed to see
 noesis loans                                  # derived from the event ledger, never stored
+noesis contact show lia                       # current contact card
+noesis contact due                            # follow-ups and reminders
+noesis contact export lia --format vcard
 noesis check                                  # consistency, annotation policies, OWL profile
 noesis export                                 # Turtle
 ```
 
-`noesis --help` lists all 18 subcommands.
+`noesis --help` lists the top-level commands; `noesis contact --help` lists the PRM operations.
 
 ## What is implemented
 
@@ -75,12 +82,12 @@ noesis export                                 # Turtle
 | §3.5 Capture | Intent → operations → validated atomic commit; nothing reaches the journal before the reasoner accepts it |
 | §3.6 Fluents | Open, close and supersede; the plain-assertion sugar; current-graph materialization; `state.changed` carrying both old and new value |
 | §4 Learning engine | Items drafted from events by policy; belief with α-update and exponential decay by stability; retention and elucidation queues; belief in derived facts; change items at elevated priority; durable review log |
-| §5 Modules | The module contract as a plain value: ontology, rules, policies, item policies and templates, merged into one configuration |
+| §5 Modules | The module contract as a plain value: ontology, rules, policies, item policies, templates, naming schemes, validators, document adapters and agenda producers, merged into one configuration |
 | §5.2 Verbalizer | Template-first, always using current names (§7.2) |
 | §6 `ll:` | Interlingual hub-and-spoke; translation derived as `Lexeme → Concept → Lexeme`; false friends, cognates, belief-tensor keys |
-| §7 `crm:` | Cardinality-free relationships, the `colleagueOf` chain, the `metamourOf` rule, renames as supersessions |
+| §7 `crm:` PRM | Structured names; concurrent email, phone, online and postal contact methods; employment; relationships; interactions; notes; preferences; reminders; follow-up; circles; companion animals; gifts; duplicate-candidate detection; vCard 4.0 and mapped FOAF/RDF interchange; cardinality-free social reasoning |
 | §8 `vf:` | ValueFlows alignment; custody, loans and balances as folds over event history |
-| §10 | Local-first, append-only, Turtle export |
+| §10 | Local-first, append-only, Turtle, vCard and mapped FOAF/RDF export |
 
 ### Not implemented
 
@@ -95,7 +102,9 @@ noesis export                                 # Turtle
   does not meet §10's "500 ms at 10⁶ axioms". The implementation and its compatibility contract are
   isolated in `noesis-reasoner`; an external engine must preserve journal-backed justifications as
   well as entailment results.
-- **No agenda service** (§5.2), no sync, no end-to-end encryption.
+- **No calendar-backed shared agenda or briefing UI** (§5.2). The PRM module does expose projected
+  follow-ups and reminders through `noesis contact due`. Sync and end-to-end encryption are also
+  unimplemented.
 
 ## Layout
 

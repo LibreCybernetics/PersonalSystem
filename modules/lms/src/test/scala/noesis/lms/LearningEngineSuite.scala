@@ -27,7 +27,7 @@ class LearningEngineSuite extends CatsEffectSuite:
   private def named: IO[KnowledgeBase[IO]] =
     for
       base <- Fixtures.kb()
-      _ <- base.assert(Axiom.DataAssertion(Fixtures.sarah, hasName, Literal.string("Sarah")))
+      _ <- base.assert(Axiom.DataAssertion(Fixtures.sarah, Vocab.label, Literal.string("Sarah")))
     yield base
 
   private def engineOn(
@@ -109,9 +109,13 @@ class LearningEngineSuite extends CatsEffectSuite:
     // *change* item, because the entrenched old answer is what will interfere.
     val previous = Axiom.ObjectAssertion(Fixtures.sarah, Fixtures.worksAt, Fixtures.acme)
     val current = Axiom.ObjectAssertion(Fixtures.sarah, Fixtures.worksAt, Fixtures.molina)
+    val policies = activating.withProperty(
+      Fixtures.worksAt,
+      ItemPolicy.DraftForReview
+    )
 
     for
-      engine <- engineOn(named)
+      engine <- engineOn(named, policies)
       _ <- engine.onAxiomAdded(previous.id, previous)
       changed <- engine.onStateChanged(
         Fixtures.sarah,
@@ -127,6 +131,7 @@ class LearningEngineSuite extends CatsEffectSuite:
       assertEquals(demoted.priorityBoost, 0.0, "a former value must not keep jumping the queue")
       assertEquals(fresh.origin, ItemOrigin.StateChange)
       assertEquals(fresh.prompt, "Sarah — works at *now*?")
+      assert(fresh.suspended, "a review-first property must not become schedulable on change")
 
   test("a name or pronoun change outranks every other kind of change"):
     // SPEC §7.2: misnaming someone is the failure the system exists to prevent, so the entrenched
@@ -145,6 +150,24 @@ class LearningEngineSuite extends CatsEffectSuite:
       assertEquals(renamed, 1.0)
       assertEquals(repronouned, 1.0)
       assertEquals(moved, 0.4, "an ordinary supersession is elevated, but not to the top")
+
+  test("an ignored time-varying property does not create a change item"):
+    val policies = ItemPolicyBook(
+      default = ItemPolicy.AutoActivate,
+      byProperty = Map(phone -> ItemPolicy.Ignore)
+    )
+    for
+      engine <- engineOn(policies = policies)
+      changed <- engine.onStateChanged(
+        Fixtures.sarah,
+        phone,
+        None,
+        Some(Node.Lit(Literal.string("555-0100")))
+      )
+      items <- engine.items
+    yield
+      assertEquals(changed, Nil)
+      assertEquals(items, Nil)
 
   // ── Belief overlay (SPEC §4.6) ────────────────────────────────────────────
 

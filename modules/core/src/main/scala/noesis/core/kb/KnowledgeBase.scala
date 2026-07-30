@@ -19,11 +19,14 @@ import noesis.core.verbalize.{Naming, Templates, Verbalizer}
 /** Why a commit was refused. Inconsistent commits are rejected *with a justification* (SPEC §3.4). */
 enum CommitRejected:
   case Inconsistent(problems: List[Inconsistency])
+  case Invalid(problems: List[String])
   case NotCaptured(problems: NonEmptyList[CaptureProblem])
 
   def render: String = this match
     case Inconsistent(problems) =>
       s"commit rejected — inconsistent:\n${problems.map("  " + _.render).mkString("\n")}"
+    case Invalid(problems) =>
+      s"commit rejected — invalid:\n${problems.map("  " + _).mkString("\n")}"
     case NotCaptured(problems) =>
       val lines = problems.toList.map(p => s"  ${p.detail}")
       s"commit rejected — cannot capture:\n${lines.mkString("\n")}"
@@ -46,11 +49,17 @@ final case class KbConfig(
     policies: PolicyBook = PolicyBook.empty,
     templates: Templates = Templates.empty,
     reasoner: ReasonerConfig = ReasonerConfig.default,
-    namingProperties: List[Iri] = Naming.defaultNamingProperties
+    namingProperties: List[Iri] = Naming.defaultNamingProperties,
+    namingSchemes: List[Naming.Scheme] = Nil,
+    validators: List[StateValidator] = Nil
 ):
   def withRules(more: List[Rule]): KbConfig = copy(rules = rules ++ more)
   def withPolicies(more: PolicyBook): KbConfig = copy(policies = policies ++ more)
   def withTemplates(more: Templates): KbConfig = copy(templates = templates ++ more)
+  def withNamingSchemes(more: List[Naming.Scheme]): KbConfig =
+    copy(namingSchemes = namingSchemes ++ more)
+  def withValidators(more: List[StateValidator]): KbConfig =
+    copy(validators = validators ++ more)
 
 object KbConfig:
   val default: KbConfig = KbConfig()
@@ -137,7 +146,11 @@ final class KnowledgeBase[F[_]: {Async, UUIDGen}] private (
   // ── Verbalization (SPEC §5.2) ─────────────────────────────────────────────
 
   def verbalizer: F[Verbalizer] =
-    state.map(s => new Verbalizer(Naming.from(s, config.namingProperties), config.templates))
+    state.map: s =>
+      new Verbalizer(
+        Naming.from(s, config.namingProperties, config.namingSchemes),
+        config.templates
+      )
 
   def verbalize(axiom: Axiom): F[String] = verbalizer.map(_.verbalize(axiom))
 
@@ -182,16 +195,25 @@ final class KnowledgeBase[F[_]: {Async, UUIDGen}] private (
             CommitRejected.Inconsistent(problems).asLeft[CommitResult].pure[F]
 
           case _ =>
-            for
-              beforeClosure <- closure
-              commit <- journal.append(ops)
-              _ <- invalidate
-              emitted = eventsFor(before, ops, beforeClosure, scratchClosure)
-              _ <- events.publish(emitted)
-              warnings = Profile.warnings(ops.toList.collect {
-                case Operation.Assert(_, axiom, _) => axiom
-              })
-            yield CommitResult(commit, emitted, warnings).asRight
+            val validationProblems =
+              config.validators.flatMap(validator =>
+                validator.validate(scratch, scratchClosure).map(problem =>
+                  s"${validator.name}: $problem"
+                )
+              )
+            if validationProblems.nonEmpty then
+              CommitRejected.Invalid(validationProblems).asLeft[CommitResult].pure[F]
+            else
+              for
+                beforeClosure <- closure
+                commit <- journal.append(ops)
+                _ <- invalidate
+                emitted = eventsFor(before, ops, beforeClosure, scratchClosure)
+                _ <- events.publish(emitted)
+                warnings = Profile.warnings(ops.toList.collect {
+                  case Operation.Assert(_, axiom, _) => axiom
+                })
+              yield CommitResult(commit, emitted, warnings).asRight
 
   /** Convenience for the overwhelmingly common single-assertion case. */
   def assert(axiom: Axiom, annotations: AxiomAnnotations = AxiomAnnotations.ownerConfirmed)

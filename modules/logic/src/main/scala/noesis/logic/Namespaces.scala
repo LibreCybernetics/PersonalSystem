@@ -52,6 +52,7 @@ object Namespaces:
   val rdfs = "http://www.w3.org/2000/01/rdf-schema#"
   val xsd = "http://www.w3.org/2001/XMLSchema#"
   val owl = "http://www.w3.org/2002/07/owl#"
+  val foaf = "http://xmlns.com/foaf/0.1/"
 
   /** Noesis's own namespaces. `noesis:` is where minted entity IRIs live; the rest are the module
     * vocabularies of SPEC §5–§8.
@@ -64,6 +65,7 @@ object Namespaces:
       "rdfs" -> rdfs,
       "xsd" -> xsd,
       "owl" -> owl,
+      "foaf" -> foaf,
       "noesis" -> base,
       "core" -> s"${base}ns/core#",
       "crm" -> s"${base}ns/crm#",

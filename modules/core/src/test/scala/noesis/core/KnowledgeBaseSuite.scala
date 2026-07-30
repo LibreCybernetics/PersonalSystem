@@ -106,6 +106,39 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       assert(rejected.isLeft)
       assertEquals(after, before, "the innocent half of the bundle leaked through")
 
+  test("configured validators reject the scratch closure before the journal is appended"):
+    val validator = new StateValidator:
+      val name = "person records"
+
+      def validate(
+          _state: noesis.core.projection.KbState,
+          closure: noesis.reasoner.Closure
+      ): List[String] =
+        Option
+          .when(closure.contains(Axiom.ClassAssertion(alice, Person)))(
+            List(
+              "Alice is not accepted by this test validator",
+              "the rejected bundle remains atomic"
+            )
+          )
+          .toList
+          .flatten
+
+    for
+      base <- kb(KbConfig.default.withValidators(List(validator)))
+      result <- base.assert(Axiom.ClassAssertion(alice, Person))
+      entries <- base.journal.stream.compile.toList
+    yield
+      assertEquals(
+        result.left.map(_.render),
+        Left(
+          "commit rejected — invalid:\n" +
+            "  person records: Alice is not accepted by this test validator\n" +
+            "  person records: the rejected bundle remains atomic"
+        )
+      )
+      assertEquals(entries.size, 0, "domain validation must happen before journal append")
+
   test("committing an intent that names a missing axiom reports the problem"):
     for
       base <- kb()

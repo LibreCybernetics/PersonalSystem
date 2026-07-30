@@ -28,9 +28,11 @@ Dependencies point one way:
   lifecycle hooks.
 - `cli` assembles and exposes the system without becoming a dependency of any other module.
 
-Modules extend the system through three seams: `Rule` for inference, `PolicyBook` /
-`ItemPolicyBook` for annotation and item defaults, and `Templates` for verbalization. A
-module-specific branch inside `core` indicates that the seam is wrong.
+Modules extend the system through declarative seams: `Rule` for inference; `PolicyBook` and
+`ItemPolicyBook` for annotation and item defaults; `Templates` and `Naming.Scheme` for
+verbalization; `StateValidator` for pre-commit record validation; and document importers,
+document exporters and agenda producers for application projections. A module-specific branch
+inside `core` indicates that a generic seam is missing.
 
 Key implementation points:
 
@@ -47,11 +49,15 @@ Key implementation points:
 | Annotation cascade | `modules/core/src/main/scala/noesis/core/policy/Policy.scala` |
 | Disclosure rule | `modules/core/src/main/scala/noesis/core/policy/Disclosure.scala` |
 | Intent → operations | `modules/core/src/main/scala/noesis/core/capture/Capture.scala` |
+| Pre-commit validation | `modules/core/src/main/scala/noesis/core/kb/Validation.scala` |
+| Interchange and agenda seams | `modules/core/src/main/scala/noesis/core/module/Extensions.scala` |
 | Service surface | `modules/core/src/main/scala/noesis/core/kb/KnowledgeBase.scala` |
 | Belief, derived belief | `modules/lms/src/main/scala/noesis/lms/Belief.scala` |
 | Scheduling | `modules/lms/src/main/scala/noesis/lms/Scheduler.scala` |
 | Module contract | `modules/vocab/src/main/scala/noesis/vocab/Module.scala` |
 | Naming convention register | `modules/vocab/NAMING.md` (rules in `modules/conformance/src/test/resources/mdr/naming.json`) |
+| PRM capture and projections | `modules/vocab/src/main/scala/noesis/vocab/PrmCapture.scala`, `Prm.scala` |
+| PRM interchange | `modules/vocab/src/main/scala/noesis/vocab/VCard.scala`, `Foaf.scala` |
 
 ## System principles and invariants
 

@@ -41,8 +41,15 @@ final case class NamingContext(labels: Map[Iri, String]):
     if iri.isOpaque then s"⟨${iri.local.take(8)}⟩" else Naming.humanize(iri.local)
 
 object Naming:
-  /** Properties whose ongoing fluent value is the entity's display name, most preferred first. */
-  val defaultNamingProperties: List[Iri] = List(Iri("crm:hasName"), Vocab.label)
+  /** A reified naming path: entity --link--> name record --value--> display literal.
+    *
+    * Domain modules contribute these as data. The verbalizer can therefore follow structured names
+    * without knowing any module vocabulary (SPEC §5.1, §7.2).
+    */
+  final case class Scheme(link: Iri, value: Iri)
+
+  /** Literal properties used directly as display names, most preferred first. */
+  val defaultNamingProperties: List[Iri] = List(Vocab.label)
 
   /** Builds a naming context from the current state.
     *
@@ -51,25 +58,80 @@ object Naming:
     */
   def from(
       state: KbState,
-      namingProperties: List[Iri] = defaultNamingProperties
+      namingProperties: List[Iri] = defaultNamingProperties,
+      schemes: List[Scheme] = Nil
   ): NamingContext =
     val fromLabels =
       state.activeAxioms.collect:
         case r @ noesis.core.projection.AxiomRecord(_, Axiom.DataAssertion(s, p, v), _, _, _)
             if namingProperties.contains(p) =>
           val priority = namingProperties.indexOf(p)
-          (s, (priority + 100, v.text, r.assertedAt))
+          (s, (priority, v.text, r.assertedAt))
 
     val fromFluents =
-      state.ongoingFluents.collect:
-        case f if namingProperties.contains(f.statedProperty) =>
-          val priority = namingProperties.indexOf(f.statedProperty)
-          (f.statedSubject, (priority, f.statedValue.render, 0L))
+      state.ongoingFluents.flatMap: f =>
+        f.statedValue match
+          case Node.Lit(value) if namingProperties.contains(f.statedProperty) =>
+            val priority = namingProperties.indexOf(f.statedProperty)
+            Some((f.statedSubject, (priority, value.text, 0L)))
+          case _ => None
+
+    val activeObjectLinks = state.activeAxioms.collect:
+      case noesis.core.projection.AxiomRecord(
+            _,
+            Axiom.ObjectAssertion(subject, property, name),
+            _,
+            _,
+            assertedAt
+          ) =>
+        (subject, property, name, assertedAt)
+
+    val fluentObjectLinks = state.ongoingFluents.flatMap: f =>
+      f.statedValue match
+        case Node.Ref(name) =>
+          Some((f.statedSubject, f.statedProperty, name, Long.MaxValue))
+        case Node.Lit(_) => None
+
+    val activeValues = state.activeAxioms.collect:
+      case noesis.core.projection.AxiomRecord(
+            _,
+            Axiom.DataAssertion(name, property, value),
+            _,
+            _,
+            assertedAt
+          ) =>
+        ((name, property), (value.text, assertedAt))
+
+    val fluentValues = state.ongoingFluents.flatMap: f =>
+      f.statedValue match
+        case Node.Lit(value) =>
+          Some(((f.statedSubject, f.statedProperty), (value.text, Long.MaxValue)))
+        case Node.Ref(_) => None
+
+    val values = (activeValues ++ fluentValues)
+      .groupMap(_._1)(_._2)
+      .flatMap: entry =>
+        val (key, candidates) = entry
+        candidates.toList
+          .sortBy((value, assertedAt) => (-assertedAt, value))
+          .headOption
+          .map(key -> _)
+
+    val fromSchemes = schemes.zipWithIndex.flatMap: (scheme, index) =>
+      (activeObjectLinks ++ fluentObjectLinks).collect:
+        case (subject, property, name, linkedAt) if property == scheme.link =>
+          values.get((name, scheme.value)).map: (value, valueAt) =>
+            (subject, (index, value, linkedAt.max(valueAt)))
+      .flatten
 
     // Lower priority number wins; fluent-backed names outrank plain assertions.
     val preference = Ordering.by[(Int, String, Long), (Int, Long, String)]: candidate =>
       (candidate._1, -candidate._3, candidate._2)
-    val best = (fromFluents ++ fromLabels)
+    val reifiedOffset = schemes.length
+    val adjustedLabels = (fromFluents ++ fromLabels).map: entry =>
+      val (subject, (priority, value, at)) = entry
+      (subject, (priority + reifiedOffset, value, at))
+    val best = (fromSchemes ++ adjustedLabels)
       .groupMapReduce(_._1)(_._2)(preference.min)
 
     NamingContext(best.view.mapValues(_._2).toMap)

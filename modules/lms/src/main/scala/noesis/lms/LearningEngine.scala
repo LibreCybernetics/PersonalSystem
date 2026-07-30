@@ -145,16 +145,22 @@ final class LearningEngine[F[_]: {Sync, Clock}](
             val historical = affected.map(_.copy(origin = ItemOrigin.Historical, priorityBoost = 0.0))
             store.putAll(historical).as(historical)
 
-      changeItems <- currentAxiom.toList.traverse: axiom =>
-        val item = Item(
-          id = ItemId.of(ItemKind.AtomicFact, Set(axiom.id)),
-          kind = ItemKind.AtomicFact,
-          axioms = Set(axiom.id),
-          origin = ItemOrigin.StateChange,
-          priorityBoost = changePriority(property),
-          prompt = s"${verbalizer.label(subject)} — ${noesis.core.verbalize.Naming.humanize(property.local)} *now*?"
-        )
-        store.put(item).as(item)
+      changeItems <- currentAxiom.toList.flatTraverse: axiom =>
+        itemPolicies.policyFor(axiom) match
+          case ItemPolicy.Ignore => List.empty[Item].pure[F]
+          case policy =>
+            val item = Item(
+              id = ItemId.of(ItemKind.AtomicFact, Set(axiom.id)),
+              kind = ItemKind.AtomicFact,
+              axioms = Set(axiom.id),
+              origin = ItemOrigin.StateChange,
+              suspended = policy == ItemPolicy.DraftForReview,
+              priorityBoost = changePriority(property),
+              prompt =
+                s"${verbalizer.label(subject)} — " +
+                  s"${noesis.core.verbalize.Naming.humanize(property.local)} *now*?"
+            )
+            store.put(item).as(List(item))
     yield demoted ++ changeItems
 
   /** Name and pronoun changes get the highest priority: the entrenched old answer is exactly what
