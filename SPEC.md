@@ -400,10 +400,24 @@ design, and we do not promise to conform. Conformance is further **scoped** — 
 constructs we implement, never on a whole specification. §3.1 already takes this stance for OWL 2 DL
 ("the expressivity ceiling"), and the reference sections inherit it.
 
-**What "open" means here.** Freely retrievable and royalty-free. This excludes ISO 8601 (RFC 3339 is
-used instead), ISO 15944-4 (which is why §8 cites ValueFlows rather than REA directly), ISO 2108
-(ISBN), and IEEE 9274.1.1 (xAPI). Where an open surrogate exists it is preferred; where none does,
-the gap is recorded rather than papered over.
+**What availability means here.** Retrievability is *recorded*, not required. A reference is cited
+on the strength of what it governs; whether it is free to obtain is a fact about the reader's costs,
+so citations carry an availability marker — ⊘ means a purchase is required, and an unmarked
+reference is freely retrievable — and nothing is excluded for its price alone. This replaces an earlier rule that admitted only freely retrievable documents,
+which had the perverse effect of excluding the most directly applicable standards in the areas this
+project cares most about — naming, definitions, concept systems and terminology — while admitting
+weaker surrogates.
+
+Three consequences are deliberate. A free equivalent is still preferred where one says the same
+thing, which is why RFC 3339 stands in for ISO 8601 and ISO/IEC 21778 is cited beside RFC 8259.
+Where a paywalled document is cited *normatively*, the requirements it imposes are reproduced in
+this repository — the ISO/IEC 11179-5 naming rules are in
+`modules/conformance/src/test/resources/mdr/naming.json` in full — so that conformance can be
+verified by a reader who has not bought the standard, even though the requirement itself cannot be
+read without it. And the testing rule below is untouched: price was never the load-bearing
+constraint, evidence is. Two references remain uncited for reasons that are *not* about price:
+ISO 15944-4 (which is why §8 cites ValueFlows rather than REA directly) and IEEE 9274.1.1 (xAPI),
+where the open vocabulary is the better fit rather than merely the cheaper one.
 
 **Where the references live.** Each module `SPEC.md` carries its own `Normative references` and
 `Informative references` sections, scoped to what that module implements. The cross-cutting ones —
@@ -411,7 +425,8 @@ cited by more than one module — are below; modules cite up to these rather tha
 
 | Reference | Cited by |
 |---|---|
-| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) / [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — JSON, I-JSON | `logic`, `journal` |
+| [ISO/IEC 21778:2017](https://standards.iso.org/ittf/PubliclyAvailableStandards/) / [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) — JSON | `logic`, `journal` |
+| [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — I-JSON | `logic`, `journal` (writing only) |
 | [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JSON Canonicalization Scheme | `logic`, `journal` |
 | [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987) / [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986) — IRI, URI | `logic` |
 | [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) — timestamps | `journal`, `lms` |
@@ -419,6 +434,7 @@ cited by more than one module — are below; modules cite up to these rather tha
 | [XSD 1.1 Part 2](https://www.w3.org/TR/xmlschema11-2/) — datatypes | `logic` |
 | [BCP 47](https://www.rfc-editor.org/info/bcp47) — language tags | `logic`, `ll:` (§6) |
 | [OWL 2](https://www.w3.org/TR/owl2-syntax/) — structure, semantics, profiles | `logic`, `reasoner` |
+| ⊘ ISO/IEC 11179-5:2015, *Metadata registries — Part 5: Naming principles* | `vocab`, `logic` (via `modules/vocab/NAMING.md`) |
 
 **Conformance testing.** `modules/conformance` runs corpora against these, separately from the
 module suites: those ask whether the implementation does what we intended, these ask whether what we
@@ -437,6 +453,47 @@ it already matches; [SHACL](https://www.w3.org/TR/shacl/) for §3.5.4's validati
 [ODRL](https://www.w3.org/TR/odrl-model/) and [DPV](https://w3c.github.io/dpv/) for §3.3's
 disclosure policy and sensitivity levels; and [PROV-O](https://www.w3.org/TR/prov-o/) for §10's
 auditability requirement.
+
+[ISO/IEC 21838-2](https://standards.iso.org/ittf/PubliclyAvailableStandards/) (Basic Formal
+Ontology) belongs on the same list, and is the likeliest of any of them to become normative. It is
+the published answer to §12.6's open question about how much upper ontology belongs in `core:`, and
+the checking is already possible: ISO/IEC 21838-1 §3.23 defines conformance of a domain ontology to
+a top-level ontology as consistent extension, and its Annex D.2 — informative, but mechanical —
+spells that out as two conditions Noesis can decide today, that the merged ontology is consistent
+(the §3.5.4 pre-flight) and that every domain term reaches a TLO term through a chain of `is-a`
+relations (a closure query). What is missing is the alignment itself, not the means to check it.
+[ISO/IEC 19788-1](https://standards.iso.org/ittf/PubliclyAvailableStandards/) (Metadata for Learning
+Resources) is the candidate for §9's reference metadata, and
+[ISO/IEC 2382-36](https://standards.iso.org/ittf/PubliclyAvailableStandards/) for §4's learning
+vocabulary.
+
+**The terminology and metadata-registry standards.** These are cited informatively below and
+purchased rather than free (⊘). They are the settled answers in areas where §5–§7 currently invent
+their own, and they are grouped here because they stand or fall together: each becomes normative
+only when the vocabulary carries the artefact it governs.
+
+| Reference | Governs | What would make it normative |
+|---|---|---|
+| ⊘ ISO/IEC 11179-4:2004, *Metadata registries — Part 4: Formulation of data definitions* | §5's module terms, once they carry definitions | Its §4.1 sets five requirements on a definition: singular, stating what the concept *is*, a descriptive phrase, only common abbreviations, no embedded definitions. Module terms carry no definitions at all today, so the requirements have nothing to bind to. A `definitions` seam on `Module`, then a corpus |
+| ⊘ ISO/IEC 5394:2024, *Criteria for concept systems* | §6's concept graph, and §5's ontology as a concept system | Its requirements are qualitative — comprehensiveness, clarity, extensibility, stability (§5.3) — so it informs rather than binds. Its one hard `shall` (§5.2.4, naming per ISO 704) points at a standard this project does not hold |
+| ⊘ ISO 1087:2019, *Terminology work and terminology science — Vocabulary* | the words §6 and §7.2 use for *concept*, *designation*, *term*, *definition* | A vocabulary standard binds by being used as defined. Normative once the spec's own glossary states the alignment term by term |
+| ⊘ ISO 5127:2017, *Information and documentation — Foundation and vocabulary* | §3.7 and §9's language for documents, references and locators | The same gate, for the reference model rather than the concept model |
+| ⊘ ISO/IEC 29100:2024, *Privacy framework* | §3.3's sensitivity and disclosure model | Its terminology (PII, PII principal, PII controller, third party) is settled where §3.3 names its own concepts, and its privacy principles are the published frame for "fail closed". Normative when the disclosure model is stated in its terms and the mapping is tested. The 2024 revision supersedes 29100:2011; the older edition is free and is *not* what is cited here |
+
+Paywalled references are given by designation, date and title rather than as links, per ISO/IEC
+Directives, Part 2 §10.3 — a catalogue URL is neither stable nor retrievable without a purchase.
+
+**On the vocabulary of this section.** The terms are used in the sense the standards bodies give
+them. [ISO/IEC Directives, Part 2](https://www.iso.org/directives-and-policies.html) §15.1 defines a
+normative reference as one cited such that "some or all of [its] content constitutes requirements of
+the document", and §10.2 puts everything else in the Bibliography — which is what the module
+`Informative references` sections are. ISO/IEC Guide 2 §3.1 defines the "normative document" being
+referenced. The availability rule above is theirs too: §10.2 admits a normatively referenced document
+that is either free or available on fair, reasonable and non-discriminatory commercial terms, which
+is what an ISO standard sold at list price is. One difference is deliberate — the Directives nowhere
+require that conformance be *tested* before a reference is cited normatively. That is this project's
+addition, and with price no longer filtering anything, it is the only thing keeping the table above
+honest.
 
 ## 11. Reference Stack (non-normative)
 

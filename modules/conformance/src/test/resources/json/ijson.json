@@ -1,0 +1,48 @@
+{
+  "provenance": {
+    "specification": "RFC 7493 (The I-JSON Message Format)",
+    "clause": "2.1-2.3",
+    "source": "https://www.rfc-editor.org/rfc/rfc7493#section-2"
+  },
+  "cases": [
+    { "id": "ordinary-object", "text": "{\"a\":1,\"b\":\"text\"}", "conforming": true, "clause": "2" },
+    { "id": "ordinary-array", "text": "[1,2.5,true,false,null,\"x\"]", "conforming": true, "clause": "2" },
+
+    { "id": "raw-non-ascii", "text": "\"café\"", "conforming": true, "clause": "2.1" },
+    { "id": "raw-astral-character", "text": "\"🙂\"", "conforming": true, "clause": "2.1" },
+    { "id": "escaped-surrogate-pair", "text": "\"\\ud83d\\ude00\"", "conforming": true, "clause": "2.1" },
+    { "id": "lone-high-surrogate", "text": "\"\\ud800\"", "conforming": false, "clause": "2.1" },
+    { "id": "lone-low-surrogate", "text": "\"\\udc00\"", "conforming": false, "clause": "2.1" },
+    { "id": "reversed-surrogate-pair", "text": "\"\\ude00\\ud83d\"", "conforming": false, "clause": "2.1" },
+    { "id": "surrogate-in-a-member-name", "text": "{\"\\ud800\":1}", "conforming": false, "clause": "2.1" },
+    { "id": "surrogate-nested-in-an-array", "text": "[[\"ok\"],[\"\\udfff\"]]", "conforming": false, "clause": "2.1" },
+    { "id": "noncharacter-fffe", "text": "\"\\ufffe\"", "conforming": false, "clause": "2.1" },
+    { "id": "noncharacter-ffff", "text": "\"\\uffff\"", "conforming": false, "clause": "2.1" },
+    { "id": "noncharacter-fdd0", "text": "\"\\ufdd0\"", "conforming": false, "clause": "2.1" },
+    { "id": "noncharacter-fdef", "text": "\"\\ufdef\"", "conforming": false, "clause": "2.1" },
+    { "id": "fdf0-is-not-a-noncharacter", "text": "\"\\ufdf0\"", "conforming": true, "clause": "2.1" },
+    { "id": "noncharacter-10fffe", "text": "\"\\udbff\\udffe\"", "conforming": false, "clause": "2.1" },
+    { "id": "escaped-nul-is-not-forbidden-here", "text": "\"\\u0000\"", "conforming": true, "clause": "2.1" },
+
+    { "id": "integer-at-the-exact-bound", "text": "9007199254740991", "conforming": true, "clause": "2.2" },
+    { "id": "integer-past-the-exact-bound", "text": "9007199254740992", "conforming": false, "clause": "2.2" },
+    { "id": "negative-integer-at-the-exact-bound", "text": "-9007199254740991", "conforming": true, "clause": "2.2" },
+    { "id": "negative-integer-past-the-exact-bound", "text": "-9007199254740992", "conforming": false, "clause": "2.2" },
+    { "id": "wide-integer-value-written-with-an-exponent", "text": "1e17", "conforming": false, "clause": "2.2" },
+    { "id": "magnitude-beyond-double", "text": "1e400", "conforming": false, "clause": "2.2" },
+    { "id": "fractional-magnitude-beyond-double", "text": "-1.5e400", "conforming": false, "clause": "2.2" },
+    { "id": "ordinary-fraction", "text": "0.5", "conforming": true, "clause": "2.2" },
+    { "id": "small-magnitude", "text": "1e-300", "conforming": true, "clause": "2.2" },
+    { "id": "wide-integer-in-a-member-value", "text": "{\"seq\":9007199254740993}", "conforming": false, "clause": "2.2" },
+
+    { "id": "distinct-member-names", "text": "{\"a\":1,\"b\":2}", "conforming": true, "clause": "2.3" },
+    { "id": "duplicate-member-names", "text": "{\"a\":1,\"a\":2}", "conforming": false, "clause": "2.3" },
+    { "id": "duplicate-names-with-equal-values", "text": "{\"a\":1,\"a\":1}", "conforming": false, "clause": "2.3" },
+    { "id": "duplicate-names-in-a-nested-object", "text": "{\"o\":{\"a\":1,\"a\":2}}", "conforming": false, "clause": "2.3" },
+    { "id": "duplicate-names-inside-an-array-element", "text": "[{\"ok\":1},{\"a\":1,\"a\":2}]", "conforming": false, "clause": "2.3" },
+    { "id": "the-same-name-in-sibling-objects", "text": "[{\"a\":1},{\"a\":2}]", "conforming": true, "clause": "2.3" },
+    { "id": "escaped-and-raw-spellings-are-one-name", "text": "{\"a\":1,\"\\u0061\":2}", "conforming": false, "clause": "2.3" },
+    { "id": "names-differing-only-in-case-are-distinct", "text": "{\"a\":1,\"A\":2}", "conforming": true, "clause": "2.3" },
+    { "id": "empty-name-duplicated", "text": "{\"\":1,\"\":2}", "conforming": false, "clause": "2.3" }
+  ]
+}

@@ -92,6 +92,36 @@ the OWL 2 RDF mapping.
 **Consequence:** the ternary view is an internal query projection, not a serialization. A real
 OWL 2 mapping to RDF would belong beside `Turtle` in `noesis-journal` if OWL-level export is ever needed.
 
+## D9 — I-JSON is guaranteed on write, not enforced on read
+
+**Clause:** RFC 7493 §2.1–§2.3
+**What we do:** every line Noesis writes is an I-JSON message, and `IjsonConformanceSuite` tests
+that. Reading is circe's `decode`, which accepts a line that is not: duplicate member names (keeping
+the last), surrogate and noncharacter code points, and integers beyond 2⁵³−1. `noesis-journal`
+SPEC §7 scopes its citation to writing for this reason.
+**Why:** circe resolves duplicate names before there is a value left to inspect, so enforcement means
+a second pass over the raw text of every line, on the path that replays the whole journal at every
+cold start. Noesis wrote every line it reads, so the constraint holds by construction for its own
+journals.
+**Consequence:** a hand-edited or foreign line that is not I-JSON replays without complaint, and
+duplicate `seq` keys would silently pick one. Pinned by the `D9` case in `IjsonConformanceSuite`.
+`Ijson.check` in this module is the checker that would close it; the cost is moving it into
+`noesis-journal` and holding it at that module's 100% mutation score.
+
+## D10 — An unpaired surrogate in a literal is transliterated, not refused
+
+**Clause:** RFC 7493 §2.1; RDF 1.1 Concepts §3.3
+**What we do:** `Canonical` escapes only what RFC 8785 §3.2.2.2 requires, so an unpaired surrogate
+reaches `String.getBytes(UTF_8)`, which substitutes `?`. Nothing rejects the literal.
+**Why:** no capture path produces one today — `Literal` takes whatever string it is given, and the
+CLI's input is decoded text.
+**Consequence:** two failures, not one. The literal that replays is not the literal that was
+asserted, and — because `AxiomId` is a digest of the same bytes — two literals differing only in
+which unpaired surrogate they carry are *one axiom*. This is also an RDF 1.1 §3.3 problem: a lexical
+form is a Unicode string, and an unpaired surrogate is not a Unicode scalar value, so the literal is
+not a legal RDF term to begin with. The fix belongs at `Literal` construction in `noesis-logic`,
+not in the serializer. Pinned by the `D10` case in `IjsonConformanceSuite`.
+
 ---
 
 ## Follow-up work

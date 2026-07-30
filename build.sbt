@@ -216,7 +216,7 @@ lazy val cli = project
   * a gated module's own suite would inflate its coverage: broad conformance cases kill mutants
   * incidentally, and a 100% score would stop meaning "the unit suite pins this behavior" — an
   * erosion that is silent and not recoverable once it starts. And the corpus infrastructure here
-  * (manifest loading, the N-Triples reader) is test scaffolding with a large mutation surface and
+  * (manifest loading, the I-JSON checker) is test scaffolding with a large mutation surface and
   * no product contract to justify holding it at 100%.
   *
   * So this module is deliberately absent from the Stryker matrix in `.github/workflows/mutation.yml`
@@ -225,7 +225,9 @@ lazy val cli = project
   */
 lazy val conformance = project
   .in(file("modules/conformance"))
-  .dependsOn(logic, journal, reasoner, core)
+  // `vocab` is here for one reason: ISO/IEC 11179-5 conformance is a claim about the names the
+  // shipped vocabularies actually declare, so the corpus has to reach the modules themselves.
+  .dependsOn(logic, journal, reasoner, core, vocab)
   .settings(commonSettings)
   .settings(
     name := "noesis-conformance",

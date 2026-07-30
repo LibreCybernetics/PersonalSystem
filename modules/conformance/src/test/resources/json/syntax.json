@@ -1,0 +1,79 @@
+{
+  "provenance": {
+    "specification": "ISO/IEC 21778:2017 (The JSON data interchange syntax) / RFC 8259",
+    "clause": "2, 4-9",
+    "source": "https://standards.iso.org/ittf/PubliclyAvailableStandards/c071616_ISO_IEC_21778_2017.zip"
+  },
+  "cases": [
+    { "id": "empty-object", "text": "{}", "conforming": true },
+    { "id": "empty-array", "text": "[]", "conforming": true },
+    { "id": "object-member", "text": "{\"a\":1}", "conforming": true },
+    { "id": "object-members", "text": "{\"a\":1,\"b\":[true,false,null]}", "conforming": true },
+    { "id": "nested-structures", "text": "{\"a\":{\"b\":[1,[2,{\"c\":{}}]]}}", "conforming": true },
+    { "id": "empty-name", "text": "{\"\":1}", "conforming": true },
+    { "id": "duplicate-names-are-conforming-json", "text": "{\"a\":1,\"a\":2}", "conforming": true },
+
+    { "id": "top-level-string", "text": "\"text\"", "conforming": true },
+    { "id": "top-level-number", "text": "42", "conforming": true },
+    { "id": "top-level-true", "text": "true", "conforming": true },
+    { "id": "top-level-false", "text": "false", "conforming": true },
+    { "id": "top-level-null", "text": "null", "conforming": true },
+
+    { "id": "whitespace-space-tab", "text": "{ \"a\" :\t1 }", "conforming": true },
+    { "id": "whitespace-newline-return", "text": "{\r\n  \"a\": 1\r\n}", "conforming": true },
+    { "id": "whitespace-only-around-a-value", "text": "  1  ", "conforming": true },
+
+    { "id": "number-zero", "text": "0", "conforming": true },
+    { "id": "number-negative-zero", "text": "-0", "conforming": true },
+    { "id": "number-negative", "text": "-1", "conforming": true },
+    { "id": "number-fraction", "text": "1.5", "conforming": true },
+    { "id": "number-exponent", "text": "1e2", "conforming": true },
+    { "id": "number-exponent-signed", "text": "1E+2", "conforming": true },
+    { "id": "number-exponent-negative", "text": "1e-2", "conforming": true },
+    { "id": "number-fraction-and-exponent", "text": "-1.5e+10", "conforming": true },
+
+    { "id": "string-two-character-escapes", "text": "\"\\\"\\\\\\/\\b\\f\\n\\r\\t\"", "conforming": true },
+    { "id": "string-unicode-escape", "text": "\"\\u00e9\"", "conforming": true },
+    { "id": "string-surrogate-pair-escape", "text": "\"\\ud83d\\ude00\"", "conforming": true },
+    { "id": "string-lone-surrogate-escape-is-conforming-json", "text": "\"\\ud800\"", "conforming": true },
+    { "id": "string-raw-non-ascii", "text": "\"café\"", "conforming": true },
+    { "id": "string-raw-astral", "text": "\"🙂\"", "conforming": true },
+    { "id": "string-space-is-not-a-control-character", "text": "\"a b\"", "conforming": true },
+
+    { "id": "empty-text", "text": "", "conforming": false },
+    { "id": "whitespace-only-text", "text": "   ", "conforming": false },
+    { "id": "trailing-comma-in-object", "text": "{\"a\":1,}", "conforming": false },
+    { "id": "trailing-comma-in-array", "text": "[1,]", "conforming": false },
+    { "id": "leading-comma-in-array", "text": "[,1]", "conforming": false },
+    { "id": "single-quoted-string", "text": "{'a':1}", "conforming": false },
+    { "id": "unquoted-name", "text": "{a:1}", "conforming": false },
+    { "id": "missing-name-separator", "text": "{\"a\" 1}", "conforming": false },
+    { "id": "unclosed-object", "text": "{\"a\":1", "conforming": false },
+    { "id": "unmatched-closing-brace", "text": "}", "conforming": false },
+    { "id": "trailing-content-after-a-value", "text": "{}{}", "conforming": false },
+    { "id": "two-values-separated-by-whitespace", "text": "1 2", "conforming": false },
+
+    { "id": "number-leading-zero", "text": "01", "conforming": false },
+    { "id": "number-leading-plus", "text": "+1", "conforming": false },
+    { "id": "number-bare-fraction", "text": ".5", "conforming": false },
+    { "id": "number-trailing-point", "text": "5.", "conforming": false },
+    { "id": "number-hexadecimal", "text": "0x10", "conforming": false },
+    { "id": "number-empty-exponent", "text": "1e", "conforming": false },
+    { "id": "number-nan", "text": "NaN", "conforming": false },
+    { "id": "number-infinity", "text": "Infinity", "conforming": false },
+
+    { "id": "literal-capitalized", "text": "True", "conforming": false },
+    { "id": "literal-undefined", "text": "undefined", "conforming": false },
+
+    { "id": "string-unterminated", "text": "\"abc", "conforming": false },
+    { "id": "string-unknown-escape", "text": "\"\\x\"", "conforming": false },
+    { "id": "string-truncated-unicode-escape", "text": "\"\\u12\"", "conforming": false },
+    { "id": "string-non-hex-unicode-escape", "text": "\"\\uZZZZ\"", "conforming": false },
+    { "id": "string-raw-tab", "text": "\"a\tb\"", "conforming": false },
+    { "id": "string-raw-newline", "text": "\"a\nb\"", "conforming": false },
+    { "id": "string-raw-nul", "text": "\"a\u0000b\"", "conforming": false },
+
+    { "id": "comment", "text": "{\"a\":1} // note", "conforming": false },
+    { "id": "byte-order-mark-prefix", "text": "\ufeff{}", "conforming": false }
+  ]
+}
