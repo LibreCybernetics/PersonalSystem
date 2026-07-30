@@ -4,9 +4,10 @@ import java.time.{Instant, LocalDate}
 
 import munit.FunSuite
 import noesis.core.Fixtures.*
-import noesis.core.journal.{JournalEntry, Operation}
-import noesis.core.model.*
+import noesis.journal.{JournalEntry, Operation}
+import noesis.logic.*
 import noesis.core.projection.*
+import noesis.reasoner.Support
 
 /** Projections must be pure functions of the journal (SPEC §3.2). Each test here replays a specific
   * log and pins exactly what the resulting graph should contain.

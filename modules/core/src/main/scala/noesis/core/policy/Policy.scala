@@ -1,6 +1,6 @@
 package noesis.core.policy
 
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.projection.AxiomRecord
 
 /** Annotation defaults attached to a class or property (SPEC §3.3, cascade level 2). */

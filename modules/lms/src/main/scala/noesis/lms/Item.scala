@@ -4,8 +4,8 @@ import java.time.Instant
 import java.util.Locale
 
 import io.circe.derivation.{ConfiguredCodec, ConfiguredEnumCodec}
-import noesis.core.model.*
-import noesis.core.model.given
+import noesis.logic.*
+import noesis.logic.given
 
 opaque type ItemId = String
 

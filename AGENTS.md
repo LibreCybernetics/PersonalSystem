@@ -1,5 +1,18 @@
 # AGENTS.md
 
+## Keep documentation and implementation synchronized
+
+Before finishing any change, check documentation and implementation in both directions. A change to
+documentation that describes current behavior, commands, configuration, architecture or guarantees
+must be reflected in the implementation; a change to implementation must update every affected
+README, operational note, example and other current-state documentation. If the two cannot be made
+consistent within the task's scope, report the discrepancy explicitly rather than leaving silent
+drift.
+
+`SPEC.md` remains the exception described below: it is the authority on intended design and may
+deliberately describe work that is not implemented yet. Do not implement speculative scope merely
+to make the current code match the design document.
+
 Operational notes for LLM agents working in this repository. Read [README.md](README.md) for what the
 project is; this file is about how to change it without breaking it.
 
@@ -12,8 +25,11 @@ their definitions (`Fluent.isOngoing`, `IrreflexiveProperty`); do not "correct" 
 
 ```bash
 nix develop --command sbt -batch <task>     # everything runs inside the flake devshell
-sbt core/compile
-sbt core/testOnly 'noesis.core.*'           # 112 tests
+sbt compile                                 # all seven modules + CLI
+sbt logic/testOnly 'noesis.logic.*'         #   4 tests
+sbt journal/testOnly 'noesis.journal.*'     #   8
+sbt reasoner/testOnly 'noesis.reasoner.*'   #  39
+sbt core/testOnly 'noesis.core.*'           #  65
 sbt lms/testOnly 'noesis.lms.*'             #  36
 sbt vocab/testOnly 'noesis.vocab.*'         #  41
 sbt cli/launcher                            # writes an executable launcher, prints its path
@@ -30,12 +46,19 @@ sbt cli/launcher                            # writes an executable launcher, pri
 ## Architecture
 
 ```
-core  ← lms  ← vocab  ← cli
+logic  ← journal
+  ↑
+reasoner
+
+logic + journal + reasoner  ← core  ← lms  ← vocab  ← cli
 ```
 
 Dependencies point one way and must stay that way:
 
-- `core` knows nothing about learning, modules or the CLI. It must never import from them.
+- `logic` is the persisted semantic language and depends on no Noesis module.
+- `journal` and `reasoner` depend only on `logic`; neither knows about application policy.
+- `core` composes those foundations. It knows nothing about learning, vocabulary modules or the CLI.
+  It must never import from them.
 - `lms` reads the Knowledge Core and reacts to its events; it never writes to the KB.
 - `vocab` declares vocabulary as data. A module is a value implementing `Module`, not a plugin with
   lifecycle hooks.
@@ -47,20 +70,21 @@ Key files:
 
 | Concern | File |
 |---|---|
-| Axiom language | `core/model/Axiom.scala` |
-| Journal operations | `core/journal/Operation.scala`, `Journal.scala` |
-| Journal → state fold | `core/projection/KbState.scala` |
-| Projections | `core/projection/Graph.scala` |
-| Inference rules | `core/reason/Rule.scala` (+ module rules in `vocab/`) |
-| Fixpoint, closure | `core/reason/Reasoner.scala` |
-| Consistency, EL profile | `core/reason/Consistency.scala` |
-| Annotation cascade | `core/policy/Policy.scala` |
-| Disclosure rule | `core/policy/Disclosure.scala` |
-| Intent → operations | `core/capture/Capture.scala` |
-| Service surface | `core/kb/KnowledgeBase.scala` |
-| Belief, derived belief | `lms/Belief.scala` |
-| Scheduling | `lms/Scheduler.scala` |
-| Module contract | `vocab/Module.scala` |
+| Axiom language | `modules/logic/src/main/scala/noesis/logic/Axiom.scala` |
+| Journal operations | `modules/journal/src/main/scala/noesis/journal/Operation.scala`, `Journal.scala` |
+| Journal → state fold | `modules/core/src/main/scala/noesis/core/projection/KbState.scala` |
+| State projections | `modules/core/src/main/scala/noesis/core/projection/Projections.scala` |
+| Reasoner graph | `modules/reasoner/src/main/scala/noesis/reasoner/Graph.scala` |
+| Inference rules | `modules/reasoner/src/main/scala/noesis/reasoner/Rule.scala` (+ module rules in `vocab/`) |
+| Fixpoint, closure | `modules/reasoner/src/main/scala/noesis/reasoner/Reasoner.scala` |
+| Consistency, EL profile | `modules/reasoner/src/main/scala/noesis/reasoner/Consistency.scala` |
+| Annotation cascade | `modules/core/src/main/scala/noesis/core/policy/Policy.scala` |
+| Disclosure rule | `modules/core/src/main/scala/noesis/core/policy/Disclosure.scala` |
+| Intent → operations | `modules/core/src/main/scala/noesis/core/capture/Capture.scala` |
+| Service surface | `modules/core/src/main/scala/noesis/core/kb/KnowledgeBase.scala` |
+| Belief, derived belief | `modules/lms/src/main/scala/noesis/lms/Belief.scala` |
+| Scheduling | `modules/lms/src/main/scala/noesis/lms/Scheduler.scala` |
+| Module contract | `modules/vocab/src/main/scala/noesis/vocab/Module.scala` |
 
 ## Invariants — do not break these
 
@@ -98,7 +122,8 @@ Key files:
   justification because you need *all* its premises; `min` across because you need only *one*". Match
   that density — do not add narration of what the code plainly does, and do not strip the rationale.
 - **Sum types are `enum`.** Journal-serialized types derive `ConfiguredCodec` and rely on the
-  `given Configuration` in `core/model/JsonConfig.scala` (discriminator `type`, defaults honored).
+  `given Configuration` in `modules/logic/src/main/scala/noesis/logic/JsonConfig.scala`
+  (discriminator `type`, defaults honored).
 - **Opaque types** for identifiers (`Iri`, `AxiomId`, `FluentId`, `ItemId`) with explicit circe
   instances in the companion.
 - **Tests are behavioral and named as claims** — `"a conclusion derivable from public facts alone is
@@ -111,7 +136,7 @@ These cost real time. Check here before debugging from scratch.
 
 - **`Option[Option[A]]` does not round-trip.** `Some(None)` encodes to JSON `null`, indistinguishable
   from absent, so "clear this override" became a silent no-op on replay. Use the explicit three-state
-  `Patch` enum in `core/model/Annotations.scala`.
+  `Patch` enum in `modules/logic/src/main/scala/noesis/logic/Annotations.scala`.
 - **fs2 `Files` + `Async` context bounds are ambiguous.** `Files[F]` cannot be summoned when both are
   in scope (fs2 3.12 deprecates the `Async`-derived instance). Either use a named context bound
   (`Files as files`) or pass `Files[F]` as an explicit constructor parameter, as `JsonLinesJournal`
@@ -158,16 +183,18 @@ integration tests to `ModuleSuite` that exercise it against the *unmodified* cor
 declarations in isolation proves nothing. Check `noesis check` still reports the merged TBox
 consistent.
 
-**An inference rule:** implement `Rule`, keep it monotone, combine premise justifications with
+**An inference rule:** implement `Rule` in `reasoner` or a vocabulary module, keep it monotone,
+combine premise justifications with
 `Rule.combine` / `combineAll` (never fabricate `Justification.empty` for a real premise), and add it
 to `RdfsRules.all` for core rules or the module's `rules` for domain rules. Assert on the derived
 fact *and* its justification.
 
-**An axiom case:** `Axiom` has exhaustive matches in `signature`, `individuals`, `manchester` and
+**An axiom case:** change `logic`; `Axiom` has exhaustive matches in `signature`, `individuals`,
+`manchester` and
 `Triples.of`, plus `Profile.elWarning`. The compiler will find most, but `manchester` and the profile
 check are easy to leave wrong rather than missing.
 
-**A journal operation:** add the case to `Operation`, handle it in `KbState.step` *and*
+**A journal operation:** change `journal`, then handle the case in `KbState.step` *and*
 `Events.forOperation` (the CLI rebuilds learning state by replaying events, so an operation the event
 derivation ignores becomes invisible after a restart), and add a round-trip case to `JournalSuite`.
 

@@ -2,7 +2,7 @@ package noesis.cli
 
 import java.util.Locale
 
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.policy.DisclosureDecision
 import noesis.core.projection.KbState
 import noesis.core.verbalize.Verbalizer

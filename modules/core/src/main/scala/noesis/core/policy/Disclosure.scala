@@ -2,9 +2,9 @@ package noesis.core.policy
 
 import java.util.Locale
 
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.projection.KbState
-import noesis.core.reason.Closure
+import noesis.reasoner.{Closure, Justification, Support}
 
 /** What an external party is allowed to see (SPEC §3.3.1, §9).
   *

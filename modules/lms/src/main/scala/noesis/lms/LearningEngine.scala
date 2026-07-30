@@ -6,7 +6,7 @@ import cats.effect.{Clock, Ref, Sync}
 import cats.syntax.all.*
 import noesis.core.event.Event
 import noesis.core.kb.KnowledgeBase
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.policy.{PolicyBook, PolicyCascade}
 import noesis.core.projection.AxiomRecord
 

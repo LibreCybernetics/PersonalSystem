@@ -40,6 +40,9 @@ jobs:
           nix develop --command sbt -batch
           "clean;
           compile;
+          logic/testOnly noesis.logic.*;
+          journal/testOnly noesis.journal.*;
+          reasoner/testOnly noesis.reasoner.*;
           core/testOnly noesis.core.*;
           lms/testOnly noesis.lms.*;
           vocab/testOnly noesis.vocab.*"

@@ -1,7 +1,7 @@
 package noesis.lms
 
-import noesis.core.model.*
-import noesis.core.reason.ClosureView
+import noesis.logic.*
+import noesis.reasoner.ClosureView
 import noesis.core.verbalize.{Naming, Verbalizer}
 
 /** Question generation (SPEC §4.1).

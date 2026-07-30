@@ -1,9 +1,9 @@
 package noesis.vocab
 
 import noesis.core.kb.KbConfig
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.policy.PolicyBook
-import noesis.core.reason.Rule
+import noesis.reasoner.Rule
 import noesis.core.verbalize.Templates
 import noesis.lms.ItemPolicyBook
 

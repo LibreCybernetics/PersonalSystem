@@ -1,8 +1,8 @@
 package noesis.vocab
 
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.policy.{ModuleDefaults, PolicyBook, TermPolicy}
-import noesis.core.reason.{ClosureView, ReasonerConfig, Rule}
+import noesis.reasoner.{ClosureView, ReasonerConfig, Rule}
 import noesis.core.verbalize.Templates
 import noesis.lms.{ItemPolicy, ItemPolicyBook}
 

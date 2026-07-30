@@ -66,11 +66,11 @@ noesis export                                 # Turtle
 
 | Spec area | Status |
 |---|---|
-| §3.2 Journal & projections | JSON Lines append-only journal; state, current-graph, point-in-time and time-travel projections, all rebuilt from it |
-| §3.1 Representation | RDFS core plus the OWL role constructs the modules need — symmetry, transitivity, inverses, chains, disjointness, irreflexivity; content-derived stable axiom ids; partial dates |
+| §3.2 Journal & projections | Dedicated [`journal`](modules/journal/) module with a JSON Lines append-only journal; state, current-graph, point-in-time and time-travel projections, all rebuilt from it |
+| §3.1 Representation | Dedicated [`logic`](modules/logic/) module with the RDFS core plus the OWL role constructs the vocabularies need — symmetry, transitivity, inverses, chains, disjointness, irreflexivity; content-derived stable axiom ids; partial dates |
 | §3.3 Annotations & cascade | One cascade for sensitivity, utility, confidence and scope: owner override → term policy → module default → behavioral and temporal signals, with decay |
 | §3.3.1 Sensitivity | Four levels, per-scope `internal` grants, and the derived-fact rule `min over justifications (max over axioms)` |
-| §3.4 Reasoning | Forward-chaining closure with **justification tracking**, minimal explanations, consistency checking that rejects a commit *with its justification*, EL profile warnings, conjunctive graph-pattern queries |
+| §3.4 Reasoning | Dedicated [`reasoner`](modules/reasoner/) module with forward-chaining closure, **justification tracking**, minimal explanations, consistency checking that rejects a commit *with its justification*, EL profile warnings, and conjunctive graph-pattern queries |
 | §3.5 Capture | Intent → operations → validated atomic commit; nothing reaches the journal before the reasoner accepts it |
 | §3.6 Fluents | Open, close and supersede; the plain-assertion sugar; current-graph materialization; `state.changed` carrying both old and new value |
 | §4 Learning engine | Items drafted from events by policy; belief with α-update and exponential decay by stability; retention and elucidation queues; belief in derived facts; change items at elevated priority; durable review log |
@@ -91,43 +91,54 @@ noesis export                                 # Turtle
   and tested; what is missing is transport, OAuth and rate limiting.
 - **No references module** (§3.7), and therefore no remediation (§4.5).
 - **No production reasoner.** §11 names ELK and HermiT; this is a naive fixpoint over a rule set and
-  does not meet §10's "500 ms at 10⁶ axioms". Everything downstream consumes `Closure`, so
-  substituting a real reasoner is one implementation swap rather than a redesign.
+  does not meet §10's "500 ms at 10⁶ axioms". The implementation and its compatibility contract are
+  isolated in `noesis-reasoner`; an external engine must preserve journal-backed justifications as
+  well as entailment results.
 - **No agenda service** (§5.2), no sync, no end-to-end encryption.
 
 ## Layout
 
 ```
-modules/core    Knowledge Core — journal, projections, reasoner, query, policy, verbalizer
+modules/logic   Persisted semantic language — axioms, literals, annotations, fluents, triples
+modules/journal Append-only operation protocol and JSON Lines/in-memory implementations
+modules/reasoner Inference, justification tracking, consistency, profile checks and queries
+modules/core    Knowledge Core — projections, capture, policy, events, service orchestration
 modules/lms     Learning Engine — items, belief, scheduling, question generation
 modules/vocab   Vocabulary modules — core upper ontology, crm:, ll:, vf:
 modules/cli     Command-line interface
 ```
 
-Dependencies point one way only: `core` knows nothing about learning or modules, `lms` knows nothing
-about the domain vocabularies. Everything is on the typelevel stack — cats-effect, fs2, circe,
-decline, munit.
+Dependencies point one way only: `logic` is the semantic foundation; `journal` and `reasoner` depend
+only on it; `core` composes all three and knows nothing about learning or vocabularies; `lms` knows
+nothing about domain vocabularies. Everything is on the typelevel stack — cats-effect, fs2, circe,
+decline, munit. Each foundational module has its own README and implementation specification.
 
 ## Development
 
 ```bash
-sbt core/testOnly 'noesis.core.*'   # 112
-sbt lms/testOnly 'noesis.lms.*'     #  36
-sbt vocab/testOnly 'noesis.vocab.*' #  41
+sbt logic/testOnly 'noesis.logic.*'       #  4
+sbt journal/testOnly 'noesis.journal.*'   #  8
+sbt reasoner/testOnly 'noesis.reasoner.*' # 39
+sbt core/testOnly 'noesis.core.*'         # 65
+sbt lms/testOnly 'noesis.lms.*'           # 36
+sbt vocab/testOnly 'noesis.vocab.*'       # 41
 
+sbt logic/stryker
+sbt journal/stryker
+sbt reasoner/stryker
 sbt core/stryker                     # mutation-test one module
 sbt lms/stryker
 sbt vocab/stryker
 ```
 
 Note that plain `sbt test` is incremental in sbt 2 and reports `Total 0` for modules whose inputs
-have not changed. Use the explicit `testOnly` forms above when you want to see all 189 tests run.
+have not changed. Use the explicit `testOnly` forms above when you want to see all 193 tests run.
 
 The build treats warnings as errors and enables unused, discarded-value, non-`Unit` statement and
 safe-initialization diagnostics. Scapegoat and a curated WartRemover safety profile run as compiler
 plugins for both production and test compilation. Stryker4s tests the test suites themselves by
 injecting mutations; its HTML report is written below the selected module's `target` directory. The
-Mutation testing workflow runs all three test-bearing modules on every branch push and on manual
+Mutation testing workflow runs all six test-bearing modules on every branch push and on manual
 dispatch, and retains their HTML and JSON reports as workflow artifacts. CI enforces the current
 cross-module baseline of 40%; raise that floor as surviving and uncovered mutants are addressed.
 

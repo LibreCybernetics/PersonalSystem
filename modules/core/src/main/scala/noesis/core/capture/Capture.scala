@@ -3,8 +3,8 @@ package noesis.core.capture
 import cats.data.NonEmptyList
 import cats.effect.std.UUIDGen
 import cats.syntax.all.*
-import noesis.core.journal.Operation
-import noesis.core.model.*
+import noesis.journal.Operation
+import noesis.logic.*
 import noesis.core.projection.KbState
 
 /** What the owner intends, before it is turned into journal operations.
@@ -200,5 +200,5 @@ object Capture:
   private def applyProvisionally(state: KbState, operation: Operation): KbState =
     KbState.step(
       state,
-      noesis.core.journal.JournalEntry(state.seq, java.time.Instant.EPOCH, operation)
+      noesis.journal.JournalEntry(state.seq, java.time.Instant.EPOCH, operation)
     )

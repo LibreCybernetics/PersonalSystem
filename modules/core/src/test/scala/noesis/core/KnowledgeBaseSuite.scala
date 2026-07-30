@@ -7,8 +7,8 @@ import noesis.core.Fixtures.*
 import noesis.core.capture.Intent
 import noesis.core.event.Event
 import noesis.core.kb.*
-import noesis.core.model.*
-import noesis.core.query.Query
+import noesis.logic.*
+import noesis.reasoner.query.Query
 import noesis.core.verbalize.{Naming, Templates}
 
 /** End-to-end tests of the Knowledge Core service (SPEC §3.5, §3.6, §3.8).
@@ -383,7 +383,7 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
     import noesis.core.policy.{ModuleDefaults, PolicyBook, TermPolicy}
     val book = PolicyBook.empty
       .withProperty(birthday, TermPolicy.utility(0.9))
-      .withModule(ModuleDefaults("crm", noesis.core.model.Sensitivity.Personal))
+      .withModule(ModuleDefaults("crm", noesis.logic.Sensitivity.Personal))
     val axiom = Axiom.DataAssertion(lia, birthday, Literal.Date(PartialDate.monthDay(5, 12)))
 
     for
@@ -392,7 +392,7 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       effective <- base.effectiveAnnotations(axiom.id)
     yield
       assertEquals(effective.map(_.recallUtility), Some(0.9))
-      assertEquals(effective.map(_.sensitivity), Some(noesis.core.model.Sensitivity.Personal))
+      assertEquals(effective.map(_.sensitivity), Some(noesis.logic.Sensitivity.Personal))
       assertEquals(effective.map(_.truthConfidence), Some(1.0))
 
   test("policyViolations reports an internal axiom with no knowledge scope"):

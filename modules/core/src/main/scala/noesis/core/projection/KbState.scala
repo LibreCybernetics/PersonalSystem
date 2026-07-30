@@ -2,8 +2,8 @@ package noesis.core.projection
 
 import java.time.LocalDate
 
-import noesis.core.journal.{JournalEntry, Operation}
-import noesis.core.model.*
+import noesis.journal.{JournalEntry, Operation}
+import noesis.logic.*
 
 /** An asserted axiom together with its annotations and lifecycle status. */
 final case class AxiomRecord(

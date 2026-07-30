@@ -4,7 +4,7 @@ import cats.effect.Concurrent
 import cats.syntax.all.*
 import fs2.Stream
 import fs2.concurrent.Topic
-import noesis.core.model.*
+import noesis.logic.*
 
 /** The event vocabulary from SPEC §2.
   *

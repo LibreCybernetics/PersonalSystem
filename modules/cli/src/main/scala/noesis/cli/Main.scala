@@ -10,10 +10,10 @@ import com.monovore.decline.{Argument, Opts}
 import fs2.io.file.Path
 import noesis.core.capture.Intent
 import noesis.core.kb.CommitResult
-import noesis.core.model.*
+import noesis.logic.*
 import noesis.core.policy.DisclosurePolicy
-import noesis.core.query.Query
-import noesis.core.reason.Profile
+import noesis.reasoner.query.Query
+import noesis.reasoner.{Profile, Support}
 import noesis.lms.{ItemId, QueueMode}
 import noesis.vocab.{CoreModule, Ledger}
 
@@ -460,7 +460,7 @@ object Main
           _ <- IO.println(s"committed ${commit.commit.entries.length} operation(s):")
           _ <- commit.commit.entries.traverse_ : entry =>
             entry.operation match
-              case noesis.core.journal.Operation.Assert(_, axiom, _) =>
+              case noesis.journal.Operation.Assert(_, axiom, _) =>
                 IO.println(Render.confirmable(verbalizer, axiom))
               case other => IO.println(s"  ${other.getClass.getSimpleName}")
           _ <- commit.profileWarnings.traverse_((axiom, why) =>
