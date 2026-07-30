@@ -1,15 +1,11 @@
 package noesis.journal
 
-import java.nio.charset.StandardCharsets
-
 import cats.data.NonEmptyList
 import cats.effect.std.Mutex
 import cats.effect.{Async, Clock, Concurrent, Ref}
 import cats.syntax.all.*
-import fs2.io.file.{Files, Flags, Path}
-import fs2.{Chunk, Stream, text}
-import io.circe.parser.decode
-import io.circe.syntax.*
+import fs2.Stream
+import fs2.io.file.{Files, Path}
 
 /** The append-only log of operations — the system's only source of truth (SPEC §4, §3.2).
   *
@@ -59,18 +55,13 @@ final class JsonLinesJournal[F[_]: {Clock, Concurrent}] private (
         start <- seqRef.get
         entries = operations.toList.zipWithIndex.map: (op, i) =>
           JournalEntry(start + 1 + i, now, op)
-        payload = entries.map(_.asJson.deepDropNullValues.noSpaces).mkString("", "\n", "\n")
-        _ <- Stream
-          .chunk(Chunk.array(payload.getBytes(StandardCharsets.UTF_8)))
-          .through(files.writeAll(path, Flags.Append))
-          .compile
-          .drain
+        _ <- JsonLines.write(files, path, entries)
         _ <- seqRef.set(start + entries.length)
       yield Commit(entries)
 
   def stream: Stream[F, JournalEntry] =
     Stream.eval(files.exists(path)).flatMap: present =>
-      if present then JsonLinesJournal.decodeLines(files, path) else Stream.empty
+      if present then JsonLines.decodeLines[F, JournalEntry](files, path) else Stream.empty
 
   def lastSeq: F[Long] = seqRef.get
 
@@ -86,23 +77,8 @@ object JsonLinesJournal:
       lock <- Mutex[F]
     yield new JsonLinesJournal[F](path, files, ref, lock)
 
-  private def decodeLines[F[_]: Concurrent](
-      files: Files[F],
-      path: Path
-  ): Stream[F, JournalEntry] =
-    files
-      .readAll(path)
-      .through(text.utf8.decode)
-      .through(text.lines)
-      .zipWithIndex
-      .filter((line, _) => line.trim.nonEmpty)
-      .evalMap: (line, idx) =>
-        decode[JournalEntry](line) match
-          case Right(entry) => entry.pure[F]
-          case Left(err)    => CorruptJournal(idx + 1, err.getMessage).raiseError[F, JournalEntry]
-
   private def highestSeq[F[_]: Async](files: Files[F], path: Path): F[Long] =
-    decodeLines(files, path).map(_.seq).fold(0L)(_.max(_)).compile.lastOrError
+    JsonLines.decodeLines[F, JournalEntry](files, path).map(_.seq).fold(0L)(_.max(_)).compile.lastOrError
 
 /** An in-memory journal, for tests and for dry-run capture sessions. */
 final class InMemoryJournal[F[_]: {Clock, Concurrent}] private (

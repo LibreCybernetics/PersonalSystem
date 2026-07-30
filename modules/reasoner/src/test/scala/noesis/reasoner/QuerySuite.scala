@@ -25,12 +25,12 @@ class QuerySuite extends FunSuite:
       Axiom.ObjectAssertion(marco, worksAt, acme),
       Axiom.ObjectAssertion(sarah, worksAt, molina),
       Axiom.ObjectAssertion(sarah, spouseOf, marco),
-      Axiom.DataAssertion(lia, birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+      Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
     ))*
   )
 
   private def solve(text: String): List[Solution] =
-    Query.solve(world, Query.parse(text).fold(err => fail(err), identity))
+    Query.solve(world, PatternSyntax.parse(text).fold(err => fail(err), identity))
 
   test("a single pattern binds one variable"):
     val results = solve("?who crm:worksAt noesis:e/acme")
@@ -86,16 +86,16 @@ class QuerySuite extends FunSuite:
 
   test("parse rejects a malformed pattern instead of guessing"):
     assertEquals(
-      Query.parse("?onlytwo crm:worksAt"),
+      PatternSyntax.parse("?onlytwo crm:worksAt"),
       Left("expected 'subject property object', got: ?onlytwo crm:worksAt")
     )
-    assert(Query.parse("").exists(_.patterns.isEmpty))
+    assert(PatternSyntax.parse("").exists(_.patterns.isEmpty))
 
   test("parse handles multiple dot-separated patterns and quoted literals"):
-    val parsed = Query.parse("""?p rdf:type crm:Person . ?p crm:birthday "--05-12"""").fold(fail(_), identity)
+    val parsed = PatternSyntax.parse("""?p rdf:type crm:Person . ?p crm:birthday "--05-12"""").fold(fail(_), identity)
     assertEquals(parsed.patterns.length, 2)
     assertEquals(parsed.variables, Set("p"))
-    assertEquals(parsed.patterns(1).obj, Term.Lit(Literal.Date(PartialDate.monthDay(5, 12))))
+    assertEquals(parsed.patterns(1).obj, Term.Lit(Literal.date(PartialDate.monthDay(5, 12))))
 
   test("query values render variables, patterns, and missing bindings without ambiguity"):
     val pattern = Pattern(Term.Var("who"), Term.Ref(worksAt), Term.Ref(acme))
@@ -110,12 +110,12 @@ class QuerySuite extends FunSuite:
     )
 
   test("quoted query terms require both quotes and preserve embedded spaces and at signs"):
-    assertEquals(Term.parse("\"\""), Term.Lit(Literal.string("")))
-    assertEquals(Term.parse("\"hello world\""), Term.Lit(Literal.string("hello world")))
-    assertEquals(Term.parse("\"hello@work@en\""), Term.Lit(Literal.tagged("hello@work", "en")))
-    assertEquals(Term.parse("\"unterminated"), Term.Ref(Iri("\"unterminated")))
-    assertEquals(Term.parse("unterminated\""), Term.Ref(Iri("unterminated\"")))
-    val parsed = Query.parse("""?s rdfs:label "hello world"""").fold(fail(_), identity)
+    assertEquals(PatternSyntax.term("\"\""), Term.Lit(Literal.string("")))
+    assertEquals(PatternSyntax.term("\"hello world\""), Term.Lit(Literal.string("hello world")))
+    assertEquals(PatternSyntax.term("\"hello@work@en\""), Term.Lit(Literal.tagged("hello@work", "en")))
+    assertEquals(PatternSyntax.term("\"unterminated"), Term.Ref(Iri("\"unterminated")))
+    assertEquals(PatternSyntax.term("unterminated\""), Term.Ref(Iri("unterminated\"")))
+    val parsed = PatternSyntax.parse("""?s rdfs:label "hello world"""").fold(fail(_), identity)
     assertEquals(parsed.patterns.map(_.obj), List(Term.Lit(Literal.string("hello world"))))
 
   extension [A, B](pair: (Option[A], Option[B]))

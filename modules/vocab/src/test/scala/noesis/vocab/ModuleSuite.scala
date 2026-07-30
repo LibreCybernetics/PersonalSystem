@@ -11,7 +11,7 @@ import noesis.core.kb.{KbConfig, KnowledgeBase}
 import noesis.logic.*
 import noesis.core.policy.{DisclosurePolicy, PolicyCascade}
 import noesis.core.projection.AxiomRecord
-import noesis.reasoner.query.Query
+import noesis.reasoner.query.PatternSyntax
 import noesis.lms.{ItemOrigin, ItemPolicy, LearningEngine, QueueMode}
 
 /** Module tests (SPEC §5–§8).
@@ -255,7 +255,7 @@ class ModuleSuite extends CatsEffectSuite:
 
   test("birthdays are auto-activated as learning items and verbalize readably"):
     val axiom =
-      Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+      Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
     assertEquals(Modules.itemPolicies(modules).policyFor(axiom), ItemPolicy.AutoActivate)
 
     for
@@ -286,7 +286,7 @@ class ModuleSuite extends CatsEffectSuite:
             Axiom.DataAssertion(
               lia,
               RelationshipsModule.birthday,
-              Literal.Date(PartialDate.monthDay(5, 12))
+              Literal.date(PartialDate.monthDay(5, 12))
             )
           )
         )
@@ -421,7 +421,7 @@ class ModuleSuite extends CatsEffectSuite:
       frChien = Iri("noesis:e/lex-chien")
       // One assertion...
       _ <- base.assert(Axiom.ObjectAssertion(frChien, LanguageModule.lexicalizes, dogConcept))
-      bgp = Query
+      bgp = PatternSyntax
         .parse(s"${frChien.value} ${LanguageModule.translationOf.value} ?other")
         .fold(fail(_), identity)
       // ...and it translates to all three others.
@@ -631,7 +631,7 @@ class ModuleSuite extends CatsEffectSuite:
         Intent.Assert(Axiom.ClassAssertion(Iri(id), ResourcesModule.EconomicEvent)),
         Intent.Assert(Axiom.DataAssertion(Iri(id), ResourcesModule.action, Literal.string(action))),
         Intent.Assert(
-          Axiom.DataAssertion(Iri(id), ResourcesModule.quantity, Literal.Num(BigDecimal(amount)))
+          Axiom.DataAssertion(Iri(id), ResourcesModule.quantity, Literal.decimal(BigDecimal(amount)))
         ),
         Intent.Assert(Axiom.ObjectAssertion(Iri(id), ResourcesModule.resourceInventoriedAs, account))
       )
@@ -651,7 +651,7 @@ class ModuleSuite extends CatsEffectSuite:
 
   test("monetary quantities are sensitive, so a balance never crosses the boundary"):
     val axiom =
-      Axiom.DataAssertion(Iri("noesis:e/ev-1"), ResourcesModule.quantity, Literal.Num(BigDecimal(100)))
+      Axiom.DataAssertion(Iri("noesis:e/ev-1"), ResourcesModule.quantity, Literal.decimal(BigDecimal(100)))
     val record = AxiomRecord(axiom.id, axiom, AxiomAnnotations.empty, AxiomStatus.Active, 1L)
 
     assertEquals(PolicyCascade.sensitivity(record, config.policies), Sensitivity.Sensitive)
@@ -693,7 +693,7 @@ class ModuleSuite extends CatsEffectSuite:
             Axiom.DataAssertion(
               lia,
               RelationshipsModule.birthday,
-              Literal.Date(PartialDate.monthDay(5, 12))
+              Literal.date(PartialDate.monthDay(5, 12))
             )
           ),
           Intent.Assert(
@@ -719,7 +719,7 @@ class ModuleSuite extends CatsEffectSuite:
       base <- installed
       engine <- engineFor(base)
       commit <- base.assert(
-        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
       )
       result = commit.fold(r => fail(r.render), identity)
       items <- engine.handle(result.events)
@@ -739,7 +739,7 @@ class ModuleSuite extends CatsEffectSuite:
       engine <- engineFor(base)
       _ <- base.assert(Axiom.DataAssertion(lia, Vocab.label, Literal.string("Lía")))
       commit <- base.assert(
-        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
       )
       result = commit.fold(r => fail(r.render), identity)
       items <- engine.handle(result.events)
@@ -773,7 +773,7 @@ class ModuleSuite extends CatsEffectSuite:
 
   test("retracting an axiom retires its learning items"):
     val axiom =
-      Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+      Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
     for
       base <- installed
       engine <- engineFor(base)

@@ -1,6 +1,5 @@
 package noesis.logic
 
-import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 import cats.Order
@@ -18,11 +17,14 @@ import io.circe.{Decoder, Encoder}
 opaque type AxiomId = String
 
 object AxiomId:
+  /** SHA-256 over the axiom's RFC 8785 canonical form, truncated to twelve bytes.
+    *
+    * Canonicalization lives in [[Canonical]] rather than here precisely so that this identifier
+    * does not depend on how circe happens to order fields — see that object for why SPEC §6.2
+    * would otherwise be unenforceable.
+    */
   def of(axiom: Axiom): AxiomId =
-    val canonical = axiom.asJson.dropNullValues.noSpaces
-    val digest = MessageDigest
-      .getInstance("SHA-256")
-      .digest(canonical.getBytes(StandardCharsets.UTF_8))
+    val digest = MessageDigest.getInstance("SHA-256").digest(Canonical.bytes(axiom.asJson))
     "ax_" + digest.take(12).map("%02x".format(_)).mkString
 
   def unsafe(value: String): AxiomId = value

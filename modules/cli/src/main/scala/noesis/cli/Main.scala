@@ -12,8 +12,8 @@ import noesis.core.capture.Intent
 import noesis.core.kb.CommitResult
 import noesis.logic.*
 import noesis.core.policy.DisclosurePolicy
-import noesis.reasoner.query.Query
-import noesis.reasoner.{Profile, Support}
+import noesis.reasoner.query.PatternSyntax
+import noesis.reasoner.Support
 import noesis.lms.{ItemId, QueueMode}
 import noesis.vocab.{CoreModule, Ledger}
 
@@ -232,7 +232,7 @@ object Main
         yield ExitCode.Success
 
       case Command.QueryCmd(pattern) =>
-        Query.parse(pattern) match
+        PatternSyntax.parse(pattern) match
           case Left(err) => IO.println(s"bad pattern: $err").as(ExitCode.Error)
           case Right(bgp) =>
             for

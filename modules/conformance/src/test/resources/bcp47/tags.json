@@ -1,0 +1,41 @@
+{
+  "provenance": {
+    "specification": "BCP 47 / RFC 5646 (Tags for Identifying Languages)",
+    "clause": "2.1",
+    "source": "https://www.rfc-editor.org/rfc/rfc5646#section-2.1"
+  },
+  "cases": [
+    { "id": "two-letter-language", "tag": "en", "wellFormed": true, "canonical": "en" },
+    { "id": "three-letter-language", "tag": "yue", "wellFormed": true, "canonical": "yue" },
+    { "id": "language-region", "tag": "es-MX", "wellFormed": true, "canonical": "es-MX" },
+    { "id": "language-region-lowercased-input", "tag": "es-mx", "wellFormed": true, "canonical": "es-MX" },
+    { "id": "language-uppercased-input", "tag": "EN", "wellFormed": true, "canonical": "en" },
+    { "id": "language-script-region", "tag": "zh-Hant-TW", "wellFormed": true, "canonical": "zh-Hant-TW" },
+    { "id": "script-casing-is-normalized", "tag": "zh-hant-tw", "wellFormed": true, "canonical": "zh-Hant-TW" },
+    { "id": "numeric-region", "tag": "es-419", "wellFormed": true, "canonical": "es-419" },
+    { "id": "variant", "tag": "sl-rozaj", "wellFormed": true, "canonical": "sl-rozaj" },
+    { "id": "digit-initial-variant", "tag": "de-CH-1901", "wellFormed": true, "canonical": "de-CH-1901" },
+    { "id": "multiple-variants", "tag": "sl-rozaj-biske", "wellFormed": true, "canonical": "sl-rozaj-biske" },
+    { "id": "extension", "tag": "en-US-u-islamcal", "wellFormed": true, "canonical": "en-US-u-islamcal" },
+    { "id": "extension-and-private-use", "tag": "en-a-bbb-x-a-ccc", "wellFormed": true, "canonical": "en-a-bbb-x-a-ccc" },
+    { "id": "private-use-suffix", "tag": "en-x-custom", "wellFormed": true, "canonical": "en-x-custom" },
+    { "id": "private-use-only", "tag": "x-private", "wellFormed": true },
+    { "id": "extlang", "tag": "zh-cmn-Hans-CN", "wellFormed": true, "canonical": "zh-cmn-Hans-CN" },
+    { "id": "four-letter-language", "tag": "qaaa", "wellFormed": true, "canonical": "qaaa" },
+    { "id": "eight-letter-language", "tag": "abcdefgh", "wellFormed": true, "canonical": "abcdefgh" },
+
+    { "id": "empty", "tag": "", "wellFormed": false },
+    { "id": "single-letter-language", "tag": "e", "wellFormed": false },
+    { "id": "nine-letter-language", "tag": "abcdefghi", "wellFormed": false },
+    { "id": "trailing-separator", "tag": "en-", "wellFormed": false },
+    { "id": "leading-separator", "tag": "-en", "wellFormed": false },
+    { "id": "double-separator", "tag": "en--US", "wellFormed": false },
+    { "id": "underscore-is-not-a-separator", "tag": "en_US", "wellFormed": false },
+    { "id": "digits-in-language", "tag": "e1", "wellFormed": false },
+    { "id": "one-letter-variant", "tag": "en-a", "wellFormed": false },
+    { "id": "empty-private-use", "tag": "x-", "wellFormed": false },
+    { "id": "singleton-without-a-subtag", "tag": "en-u", "wellFormed": false },
+    { "id": "whitespace", "tag": "en US", "wellFormed": false },
+    { "id": "irregular-grandfathered-tag-is-a-recorded-deviation", "tag": "i-klingon", "wellFormed": false }
+  ]
+}

@@ -2,7 +2,7 @@ package noesis.vocab
 
 import noesis.logic.*
 import noesis.core.policy.{ModuleDefaults, PolicyBook, TermPolicy}
-import noesis.core.projection.KbState
+import noesis.core.projection.{AxiomRecord, KbState}
 import noesis.core.verbalize.Templates
 import noesis.lms.{ItemPolicy, ItemPolicyBook}
 
@@ -136,11 +136,21 @@ object Ledger:
         (s, p) -> v
       }.toMap
 
+    /** Economic events in journal order.
+      *
+      * Custody and balances are folds over event *history* (SPEC §8), so the order events are
+      * folded in decides the answer: a return event must land after the lend event it closes.
+      * `assertedAt` is that history — journal SPEC §2 makes the sequence number the ordering
+      * authority. Sorting is not incidental tidiness here. Without it the fold runs in
+      * `Map`-iteration order over axiom identifiers, which is a content hash: stable, but with no
+      * relationship to when anything happened.
+      */
     val events: List[Iri] =
-      state.activeAxioms.toList.map(_.axiom).collect {
-        case Axiom.ClassAssertion(individual, cls) if cls == ResourcesModule.EconomicEvent =>
-          individual
-      }.distinct
+      state.activeAxioms.toList.collect {
+        case AxiomRecord(_, Axiom.ClassAssertion(individual, cls), _, _, at)
+            if cls == ResourcesModule.EconomicEvent =>
+          at -> individual
+      }.sortBy(_._1).map(_._2).distinct
 
     /** Resources with a recorded accountable party, and who that is. */
     val accountable: List[(Iri, Iri)] =
@@ -154,7 +164,7 @@ object Ledger:
     def text(subject: Iri, property: Iri): Option[String] = data.get((subject, property)).map(_.text)
 
     def number(subject: Iri, property: Iri): Option[BigDecimal] =
-      data.get((subject, property)).collect { case Literal.Num(value) => value }
+      data.get((subject, property)).flatMap(_.asDecimal)
 
   /** Reads the economic events out of a state. */
   def transfers(state: KbState): List[Transfer] =

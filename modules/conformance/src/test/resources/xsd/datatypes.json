@@ -1,0 +1,64 @@
+{
+  "provenance": {
+    "specification": "XSD 1.1 Part 2: Datatypes",
+    "clause": "3.3",
+    "source": "https://www.w3.org/TR/xmlschema11-2/#built-in-datatypes"
+  },
+  "cases": [
+    { "id": "boolean-true", "datatype": "xsd:boolean", "lexical": "true", "valid": true, "canonical": "true" },
+    { "id": "boolean-false", "datatype": "xsd:boolean", "lexical": "false", "valid": true, "canonical": "false" },
+    { "id": "boolean-one", "datatype": "xsd:boolean", "lexical": "1", "valid": true, "canonical": "true" },
+    { "id": "boolean-zero", "datatype": "xsd:boolean", "lexical": "0", "valid": true, "canonical": "false" },
+    { "id": "boolean-word", "datatype": "xsd:boolean", "lexical": "yes", "valid": false },
+    { "id": "boolean-cased", "datatype": "xsd:boolean", "lexical": "True", "valid": false },
+
+    { "id": "integer-plain", "datatype": "xsd:integer", "lexical": "42", "valid": true, "canonical": "42" },
+    { "id": "integer-signed", "datatype": "xsd:integer", "lexical": "+42", "valid": true, "canonical": "42" },
+    { "id": "integer-negative", "datatype": "xsd:integer", "lexical": "-42", "valid": true, "canonical": "-42" },
+    { "id": "integer-leading-zeroes", "datatype": "xsd:integer", "lexical": "0042", "valid": true, "canonical": "42" },
+    { "id": "integer-zero-is-unsigned", "datatype": "xsd:integer", "lexical": "-0", "valid": true, "canonical": "0" },
+    { "id": "integer-with-point", "datatype": "xsd:integer", "lexical": "4.2", "valid": false },
+    { "id": "integer-empty", "datatype": "xsd:integer", "lexical": "", "valid": false },
+
+    { "id": "decimal-point-required-both-sides", "datatype": "xsd:decimal", "lexical": "42", "valid": true, "canonical": "42.0" },
+    { "id": "decimal-trailing-zeroes", "datatype": "xsd:decimal", "lexical": "1.250", "valid": true, "canonical": "1.25" },
+    { "id": "decimal-leading-point", "datatype": "xsd:decimal", "lexical": ".5", "valid": true, "canonical": "0.5" },
+    { "id": "decimal-trailing-point", "datatype": "xsd:decimal", "lexical": "5.", "valid": true, "canonical": "5.0" },
+    { "id": "decimal-signed", "datatype": "xsd:decimal", "lexical": "+1.5", "valid": true, "canonical": "1.5" },
+    { "id": "decimal-negative-zero", "datatype": "xsd:decimal", "lexical": "-0.00", "valid": true, "canonical": "0.0" },
+    { "id": "decimal-negative", "datatype": "xsd:decimal", "lexical": "-1.50", "valid": true, "canonical": "-1.5" },
+    { "id": "decimal-exponent-is-double-not-decimal", "datatype": "xsd:decimal", "lexical": "1e3", "valid": false },
+
+    { "id": "date-plain", "datatype": "xsd:date", "lexical": "2026-05-12", "valid": true, "canonical": "2026-05-12" },
+    { "id": "date-utc", "datatype": "xsd:date", "lexical": "2026-05-12Z", "valid": true, "canonical": "2026-05-12Z" },
+    { "id": "date-offset", "datatype": "xsd:date", "lexical": "2026-05-12-06:00", "valid": true, "canonical": "2026-05-12-06:00" },
+    { "id": "date-max-offset", "datatype": "xsd:date", "lexical": "2026-05-12+14:00", "valid": true, "canonical": "2026-05-12+14:00" },
+    { "id": "date-offset-out-of-range", "datatype": "xsd:date", "lexical": "2026-05-12+15:00", "valid": false },
+    { "id": "date-month-out-of-range", "datatype": "xsd:date", "lexical": "2026-13-12", "valid": false },
+    { "id": "date-day-out-of-range", "datatype": "xsd:date", "lexical": "2026-05-32", "valid": false },
+    { "id": "date-two-digit-year", "datatype": "xsd:date", "lexical": "26-05-12", "valid": false },
+    { "id": "date-unpadded-month", "datatype": "xsd:date", "lexical": "2026-5-12", "valid": false },
+
+    { "id": "gyear", "datatype": "xsd:gYear", "lexical": "2026", "valid": true, "canonical": "2026" },
+    { "id": "gyear-padded", "datatype": "xsd:gYear", "lexical": "0026", "valid": true, "canonical": "0026" },
+    { "id": "gyear-too-short", "datatype": "xsd:gYear", "lexical": "26", "valid": false },
+    { "id": "gyearmonth", "datatype": "xsd:gYearMonth", "lexical": "2026-05", "valid": true, "canonical": "2026-05" },
+    { "id": "gmonthday", "datatype": "xsd:gMonthDay", "lexical": "--05-12", "valid": true, "canonical": "--05-12" },
+    { "id": "gmonthday-missing-prefix", "datatype": "xsd:gMonthDay", "lexical": "05-12", "valid": false },
+    { "id": "gmonth", "datatype": "xsd:gMonth", "lexical": "--05", "valid": true, "canonical": "--05" },
+    { "id": "gday", "datatype": "xsd:gDay", "lexical": "---12", "valid": true, "canonical": "---12" },
+    { "id": "gday-missing-prefix", "datatype": "xsd:gDay", "lexical": "--12", "valid": false },
+
+    { "id": "datetime-utc", "datatype": "xsd:dateTime", "lexical": "2026-07-30T12:00:00Z", "valid": true, "canonical": "2026-07-30T12:00:00Z" },
+    { "id": "datetime-zero-fraction-is-dropped", "datatype": "xsd:dateTime", "lexical": "2026-07-30T12:00:00.000Z", "valid": true, "canonical": "2026-07-30T12:00:00Z" },
+    { "id": "datetime-fraction-is-trimmed", "datatype": "xsd:dateTime", "lexical": "2026-07-30T12:00:00.500Z", "valid": true, "canonical": "2026-07-30T12:00:00.5Z" },
+    { "id": "datetime-leap-second-hour", "datatype": "xsd:dateTime", "lexical": "2026-07-30T23:59:59Z", "valid": true, "canonical": "2026-07-30T23:59:59Z" },
+    { "id": "datetime-hour-out-of-range", "datatype": "xsd:dateTime", "lexical": "2026-07-30T24:00:00Z", "valid": false },
+    { "id": "datetime-space-separator", "datatype": "xsd:dateTime", "lexical": "2026-07-30 12:00:00", "valid": false },
+    { "id": "datetime-without-time", "datatype": "xsd:dateTime", "lexical": "2026-07-30", "valid": false },
+
+    { "id": "string-admits-anything", "datatype": "xsd:string", "lexical": "\u0020whatever\u0020", "valid": true, "canonical": "\u0020whatever\u0020" },
+    { "id": "unknown-datatype-admits-anything", "datatype": "ex:invented", "lexical": "whatever", "valid": true, "canonical": "whatever" },
+    { "id": "partial-date-admits-the-shapes-xsd-has-no-type-for", "datatype": "core:partialDate", "lexical": "2026---12", "valid": true, "canonical": "2026---12" }
+  ]
+}

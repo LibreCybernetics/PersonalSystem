@@ -20,7 +20,11 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios |
+| `conformance` | `JcsConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
+
+The `conformance` module answers a different question from the rest and is gated differently. See
+[Conformance testing](#conformance-testing) below before adding to it.
 
 The CLI currently has no dedicated test suite. It is compiled by the full check, while its domain
 behavior is exercised through core and vocabulary integration tests. Exercise command parsing,
@@ -41,10 +45,11 @@ nix develop --command sbt -batch "reasoner/testOnly noesis.reasoner.*"
 nix develop --command sbt -batch "core/testOnly noesis.core.*"
 nix develop --command sbt -batch "lms/testOnly noesis.lms.*"
 nix develop --command sbt -batch "vocab/testOnly noesis.vocab.*"
+nix develop --command sbt -batch "conformance/testOnly noesis.conformance.*"
 ```
 
 When already inside `nix develop`, omit `nix develop --command`. To reproduce the ordinary CI gate,
-start clean, compile all seven modules, and explicitly execute every test-bearing module:
+start clean, compile all eight modules, and explicitly execute every test-bearing module:
 
 ```bash
 nix develop --command sbt -batch \
@@ -55,7 +60,8 @@ nix develop --command sbt -batch \
   reasoner/testOnly noesis.reasoner.*;
   core/testOnly noesis.core.*;
   lms/testOnly noesis.lms.*;
-  vocab/testOnly noesis.vocab.*"
+  vocab/testOnly noesis.vocab.*;
+  conformance/testOnly noesis.conformance.*"
 ```
 
 Do not use a plain `sbt test` result as evidence that every suite ran. sbt 2 executes tests
@@ -123,6 +129,36 @@ contract crosses module seams.
   decay/update boundaries, scheduling consequences, and derived-premise handling as applicable.
 - **CLI behavior:** exercise the launcher with a disposable workspace and cover parsing, rendered
   output, and persistence/reopen behavior affected by the change.
+- **Anything a normative reference governs:** add the vector to the matching corpus under
+  `modules/conformance/src/test/resources`, not to a module suite. A new axiom case must also
+  declare its `Profile.elWarning` result and, where it introduces a datatype or identifier form, its
+  lexical space and canonical mapping.
+- **A new normative citation:** it may only be added to a module `SPEC.md` once a corpus covers it.
+  An untested normative citation is a false claim.
+
+## Conformance testing
+
+`modules/conformance` asks whether what we intended matches the specification; every other module
+asks whether the implementation does what we intended. The two fail differently, so they are gated
+differently.
+
+Corpora live under `src/test/resources`, one directory per specification, each case carrying the
+clause it is derived from. Adding coverage means adding a vector, not writing a test. Vectors are
+derived from the clauses their `provenance` blocks cite — they are not the specifications' own
+published test data; vendoring the upstream corpora is recorded as follow-up F1 in
+`modules/conformance/DEVIATIONS.md`.
+
+**A failing conformance case is never skipped.** It is either a bug to fix or a deviation to record
+in `DEVIATIONS.md`, with the clause it departs from and what Noesis does instead. A case that fails
+and is not recorded there is a bug.
+
+**This module is deliberately outside the Stryker matrix,** for two reasons that point the same way.
+Putting external corpora inside a gated module would inflate its coverage: broad conformance cases
+kill mutants incidentally, so a 100% score would stop meaning "the unit suite pins this behavior" —
+you could delete a precise boundary assertion and CI would stay green, and that erosion is silent
+and unrecoverable. And the infrastructure here, manifest loading and the N-Triples reader, is test
+scaffolding with a large mutation surface and no product contract to justify holding it at 100%.
+`DEVIATIONS.md` is the gate instead.
 
 ## Static analysis
 
@@ -160,10 +196,11 @@ nix develop --command sbt -batch \
 ```
 
 Replace `core` with `logic`, `journal`, `reasoner`, `lms`, or `vocab` as needed. Reports are written
-under `modules/<module>/target/stryker4s-report`. CI runs all six modules independently and retains
+under `modules/<module>/target/stryker4s-report`. CI runs those six modules independently and retains
 the HTML and JSON reports as artifacts.
 
-**All six modules score 100%, and a change that drops any of them below that fails CI.**
+**All six modules score 100%, and a change that drops any of them below that fails CI.** The
+`conformance` module is deliberately not among them — see [Conformance testing](#conformance-testing).
 `--thresholds.break 99` is the strictest value Stryker4s accepts — it requires `break` to be
 strictly below `low` — so the workflow additionally reads the JSON report and fails on any mutant
 left `Survived` or `NoCoverage`. That check, not the threshold, is the real gate.
@@ -197,7 +234,7 @@ suspend threshold. Those cases decide real behavior and belong in the suite rega
 
 ## Continuous integration and reporting
 
-The ordinary `CI` workflow runs the clean compile and all six explicit suite tasks on every branch
+The ordinary `CI` workflow runs the clean compile and all seven explicit suite tasks on every branch
 push. The `Mutation testing` workflow also runs on every branch push and can be started manually;
 its module matrix does not fail fast.
 

@@ -1,0 +1,167 @@
+{
+  "provenance": {
+    "specification": "RFC 8785 (JSON Canonicalization Scheme)",
+    "clause": "3.2.2-3.2.3",
+    "source": "https://www.rfc-editor.org/rfc/rfc8785#section-3.2"
+  },
+  "cases": [
+    {
+      "id": "member-order-utf16-code-units",
+      "input": {
+        "\u20ac": "euro",
+        "\r": "cr",
+        "\ufb33": "dalet",
+        "1": "one",
+        "\ud83d\ude00": "grin",
+        "\u0080": "control",
+        "\u00f6": "o-diaeresis"
+      },
+      "expected": "{\"\\r\":\"cr\",\"1\":\"one\",\"\u0080\":\"control\",\"\u00f6\":\"o-diaeresis\",\"\u20ac\":\"euro\",\"\ud83d\ude00\":\"grin\",\"\ufb33\":\"dalet\"}"
+    },
+    {
+      "id": "supplementary-plane-sorts-by-surrogate-not-code-point",
+      "input": { "\ufb33": "bmp", "\ud83d\ude00": "astral" },
+      "expected": "{\"\ud83d\ude00\":\"astral\",\"\ufb33\":\"bmp\"}"
+    },
+    {
+      "id": "ascii-case-precedes-lowercase",
+      "input": { "b": 1, "A": 2, "a": 3 },
+      "expected": "{\"A\":2,\"a\":3,\"b\":1}"
+    },
+    {
+      "id": "escape-quote",
+      "input": "\"",
+      "expected": "\"\\\"\""
+    },
+    {
+      "id": "escape-reverse-solidus",
+      "input": "\\",
+      "expected": "\"\\\\\""
+    },
+    {
+      "id": "escape-backspace",
+      "input": "\b",
+      "expected": "\"\\b\""
+    },
+    {
+      "id": "escape-form-feed",
+      "input": "\f",
+      "expected": "\"\\f\""
+    },
+    {
+      "id": "escape-line-feed",
+      "input": "\n",
+      "expected": "\"\\n\""
+    },
+    {
+      "id": "escape-carriage-return",
+      "input": "\r",
+      "expected": "\"\\r\""
+    },
+    {
+      "id": "escape-tab",
+      "input": "\t",
+      "expected": "\"\\t\""
+    },
+    {
+      "id": "escape-other-control-lowercase-hex",
+      "input": "\u001f",
+      "expected": "\"\\u001f\""
+    },
+    {
+      "id": "solidus-is-not-escaped",
+      "input": "a/b",
+      "expected": "\"a/b\""
+    },
+    {
+      "id": "delete-is-not-a-json-control-character",
+      "input": "\u007f",
+      "expected": "\"\u007f\""
+    },
+    {
+      "id": "non-ascii-stays-literal",
+      "input": "\u0410\u043b\u0438\u0441\u0430",
+      "expected": "\"\u0410\u043b\u0438\u0441\u0430\""
+    },
+    {
+      "id": "empty-string",
+      "input": "",
+      "expected": "\"\""
+    },
+    {
+      "id": "arrays-keep-their-order",
+      "input": [3, 1, 2],
+      "expected": "[3,1,2]"
+    },
+    {
+      "id": "nested-objects-sort-independently",
+      "input": { "z": { "b": 1, "a": 2 }, "a": [{ "d": 1, "c": 2 }] },
+      "expected": "{\"a\":[{\"c\":2,\"d\":1}],\"z\":{\"a\":2,\"b\":1}}"
+    },
+    {
+      "id": "literals",
+      "input": { "t": true, "f": false, "n": null },
+      "expected": "{\"f\":false,\"n\":null,\"t\":true}"
+    },
+    {
+      "id": "number-zero",
+      "input": 0,
+      "expected": "0"
+    },
+    {
+      "id": "number-negative-zero-loses-its-sign",
+      "input": -0.0,
+      "expected": "0"
+    },
+    {
+      "id": "number-integral-double-prints-without-a-point",
+      "input": 1.0,
+      "expected": "1"
+    },
+    {
+      "id": "number-trailing-zeroes-are-dropped",
+      "input": 100.0,
+      "expected": "100"
+    },
+    {
+      "id": "number-negative-fraction",
+      "input": -1.5,
+      "expected": "-1.5"
+    },
+    {
+      "id": "number-leading-zero-is-written",
+      "input": 0.5,
+      "expected": "0.5"
+    },
+    {
+      "id": "number-smallest-fixed-notation",
+      "input": 1e-6,
+      "expected": "0.000001"
+    },
+    {
+      "id": "number-just-below-fixed-notation-uses-an-exponent",
+      "input": 1e-7,
+      "expected": "1e-7"
+    },
+    {
+      "id": "number-largest-fixed-notation",
+      "input": 1e20,
+      "expected": "100000000000000000000"
+    },
+    {
+      "id": "number-just-above-fixed-notation-uses-an-exponent",
+      "input": 1e21,
+      "expected": "1e+21"
+    },
+    {
+      "id": "number-exponential-mantissa-keeps-its-point",
+      "input": 1.5e22,
+      "expected": "1.5e+22"
+    },
+    {
+      "id": "number-shortest-round-tripping-digits",
+      "input": 0.1,
+      "expected": "0.1"
+    }
+  ]
+}

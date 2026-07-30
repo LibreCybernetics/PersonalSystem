@@ -1,0 +1,36 @@
+{
+  "provenance": {
+    "specification": "RFC 3987 (IRI) and RFC 3986 (URI)",
+    "clause": "2.2",
+    "source": "https://www.rfc-editor.org/rfc/rfc3987#section-2.2"
+  },
+  "cases": [
+    { "id": "http-absolute", "value": "http://example.org/a", "valid": true },
+    { "id": "https-with-fragment", "value": "https://example.org/a#b", "valid": true },
+    { "id": "urn", "value": "urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6", "valid": true },
+    { "id": "mailto", "value": "mailto:someone@example.org", "valid": true },
+    { "id": "scheme-with-plus", "value": "svn+ssh://example.org/repo", "valid": true },
+    { "id": "scheme-with-dot-and-dash", "value": "x-y.z:local", "valid": true },
+    { "id": "non-ascii-is-an-iri-not-a-uri", "value": "https://example.org/über", "valid": true },
+    { "id": "percent-encoded", "value": "https://example.org/a%20b", "valid": true },
+    { "id": "compact-vocabulary-term", "value": "crm:worksAt", "valid": true },
+    { "id": "compact-minted-entity", "value": "noesis:e/f81d4fae-7dec-11d0-a765-00a0c91e6bf6", "valid": true },
+
+    { "id": "empty", "value": "", "valid": false },
+    { "id": "no-scheme", "value": "example.org/a", "valid": false },
+    { "id": "leading-colon", "value": ":relative", "valid": false },
+    { "id": "no-local-part", "value": "crm:", "valid": false },
+    { "id": "scheme-starts-with-a-digit", "value": "1http://example.org", "valid": false },
+    { "id": "scheme-with-underscore", "value": "bad_scheme:x", "valid": false },
+    { "id": "space-in-path", "value": "https://example.org/a b", "valid": false },
+    { "id": "tab-in-path", "value": "https://example.org/a\tb", "valid": false },
+    { "id": "control-character", "value": "https://example.org/a\u0001b", "valid": false },
+    { "id": "angle-bracket", "value": "https://example.org/a<b", "valid": false },
+    { "id": "double-quote", "value": "https://example.org/a\"b", "valid": false },
+    { "id": "brace", "value": "https://example.org/a{b", "valid": false },
+    { "id": "pipe", "value": "https://example.org/a|b", "valid": false },
+    { "id": "caret", "value": "https://example.org/a^b", "valid": false },
+    { "id": "backtick", "value": "https://example.org/a`b", "valid": false },
+    { "id": "backslash", "value": "https://example.org/a\\b", "valid": false }
+  ]
+}

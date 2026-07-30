@@ -391,6 +391,53 @@ External LLM agents (desktop assistants, tutors, reading/research agents) are, b
 | LLM independence | All LLM touchpoints behind one gateway; local-model fallback; every LLM output owner-confirmable or overridable |
 | Auditability | Every axiom → source; every belief change → review or decay; every agent call → journal |
 
+## 10.1 Standards Conformance
+
+**What "normative" means here.** A reference is cited normatively only where Noesis both conforms to
+it *and* tests that it does. An untested normative citation is a false claim, so the list is short
+by construction and grows as coverage does. Everything else is *informative*: it influenced the
+design, and we do not promise to conform. Conformance is further **scoped** — we conform on the
+constructs we implement, never on a whole specification. §3.1 already takes this stance for OWL 2 DL
+("the expressivity ceiling"), and the reference sections inherit it.
+
+**What "open" means here.** Freely retrievable and royalty-free. This excludes ISO 8601 (RFC 3339 is
+used instead), ISO 15944-4 (which is why §8 cites ValueFlows rather than REA directly), ISO 2108
+(ISBN), and IEEE 9274.1.1 (xAPI). Where an open surrogate exists it is preferred; where none does,
+the gap is recorded rather than papered over.
+
+**Where the references live.** Each module `SPEC.md` carries its own `Normative references` and
+`Informative references` sections, scoped to what that module implements. The cross-cutting ones —
+cited by more than one module — are below; modules cite up to these rather than repeating them.
+
+| Reference | Cited by |
+|---|---|
+| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) / [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — JSON, I-JSON | `logic`, `journal` |
+| [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JSON Canonicalization Scheme | `logic`, `journal` |
+| [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987) / [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986) — IRI, URI | `logic` |
+| [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) — timestamps | `journal`, `lms` |
+| [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) | `logic` |
+| [XSD 1.1 Part 2](https://www.w3.org/TR/xmlschema11-2/) — datatypes | `logic` |
+| [BCP 47](https://www.rfc-editor.org/info/bcp47) — language tags | `logic`, `ll:` (§6) |
+| [OWL 2](https://www.w3.org/TR/owl2-syntax/) — structure, semantics, profiles | `logic`, `reasoner` |
+
+**Conformance testing.** `modules/conformance` runs corpora against these, separately from the
+module suites: those ask whether the implementation does what we intended, these ask whether what we
+intended matches the specification. Known departures are recorded in
+`modules/conformance/DEVIATIONS.md` with the clause each departs from — a conformance failure that
+is not a recorded deviation is a bug, and must never become a skipped test.
+
+**Not yet cited.** The following are informative today and are the obvious candidates as the
+matching subsystems are built out: [SKOS](https://www.w3.org/TR/skos-reference/) and
+[SKOS-XL](https://www.w3.org/TR/skos-reference/skos-xl.html) for §7.1's extensible relationship
+vocabulary and §7.2's Name objects; [OWL-Time](https://www.w3.org/TR/owl-time/) for the fluent
+boundaries of §3.6; [Web Annotation](https://www.w3.org/TR/annotation-model/) plus
+[Media Fragments](https://www.w3.org/TR/media-frags/) for the locators of §3.7, which §3.7 already
+gestures at; [OntoLex-Lemon](https://www.w3.org/2016/05/ontolex/) for §6, whose hub-and-spoke design
+it already matches; [SHACL](https://www.w3.org/TR/shacl/) for §3.5.4's validation step;
+[ODRL](https://www.w3.org/TR/odrl-model/) and [DPV](https://w3c.github.io/dpv/) for §3.3's
+disclosure policy and sensitivity levels; and [PROV-O](https://www.w3.org/TR/prov-o/) for §10's
+auditability requirement.
+
 ## 11. Reference Stack (non-normative)
 
 RDF quad store with RDF-star (Jena TDB2 / Oxigraph); ELK (EL) with HermiT/Openllet escalation; OWL API for explanations. Services in Kotlin/JVM or Python (owlready2 + rdflib); PostgreSQL for operational state; pgvector/Qdrant; in-process event bus. LLM via provider-agnostic gateway (Anthropic API + Ollama local); MCP official SDK. ValueFlows RDF vocabulary imported as-is. Local-first client (web/PWA, optional Tauri shell); Cytoscape.js graph view.
