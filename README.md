@@ -122,6 +122,105 @@ have not changed. Use the explicit `testOnly` forms above when you want to see a
 The build is strict: `-Wunused:all` and `-Wvalue-discard` are on. Warnings are not errors, but the
 tree is kept warning-free.
 
+## Isolated coding agents
+
+The flake can run either `nixpkgs#codex` or `nixpkgs#claude-code` in a rootless Bubblewrap sandbox.
+Each agent gets a private synthetic Git repository and worktree containing only one committed
+revision of Noesis. It does not see this checkout, its Git history, uncommitted files, the host home
+directory, `~/.noesis`, SSH/GPG sockets, environment credentials, the Docker socket, or the Nix
+daemon.
+
+Create a session from `HEAD`, then start either agent:
+
+```bash
+nix run .#agent-session -- create issue-42
+nix run .#codex-agent -- issue-42
+# or:
+nix run .#claude-agent -- issue-42
+```
+
+To inspect the exact boundary or run a command without an agent, use the same sandbox through
+`nix run .#agent-shell -- issue-42`, optionally followed by a command and its arguments.
+
+The optional second argument to `create` is any local commit or ref:
+
+```bash
+nix run .#agent-session -- create review-pr origin/main
+```
+
+Only the committed tree at that ref is copied. This is deliberate: commit or otherwise preserve
+local source changes that the agent needs before creating its session. The copy is given a new root
+commit, so the agent cannot inspect the source repository's history or remotes.
+
+Agent login state is also separate for each provider within each session; host credentials are never
+copied or inherited. Authenticate inside the sandbox on first use:
+
+```bash
+nix run .#codex-agent -- issue-42 login --device-auth
+nix run .#claude-agent -- issue-42 auth login
+```
+
+Use a dedicated, revocable account or token with the narrowest practical billing and access limits.
+Code run by an agent can read the credentials that the agent itself needs inside that session; this
+design protects unrelated host credentials, not a credential deliberately entrusted to the
+sandbox. Destroying the session removes its worktree, caches, and agent login state.
+
+Inspect and transfer the result explicitly:
+
+```bash
+nix run .#agent-session -- status issue-42
+nix run .#agent-session -- diff issue-42
+nix run .#agent-session -- export issue-42 > /tmp/issue-42.patch
+git apply --check /tmp/issue-42.patch
+git apply /tmp/issue-42.patch
+NOESIS_AGENT_FORCE=1 nix run .#agent-session -- destroy issue-42
+```
+
+`export` is a binary Git diff from the session's synthetic base. New files must be staged or
+committed in the session to appear in it; always check `status` before destroying a session. By
+default sessions live under `$XDG_STATE_HOME/noesis-agents`, falling back to
+`~/.local/state/noesis-agents`. Set `NOESIS_AGENT_STATE_DIR` to put them elsewhere.
+
+### Sandbox boundary
+
+The wrapper starts an empty mount namespace and exposes only the session repository/worktree, its
+private state, `/proc`, a minimal `/dev`, and the exact Nix store closure of the pinned tool
+environment. The environment contains JDK 21, sbt 2.0.4, the Scala tools, Git, Codex, Claude Code,
+and basic POSIX utilities. `/tmp` is an in-memory private filesystem. Linux capabilities, nested user
+namespaces, IPC, PID, UTS, cgroup, and network namespaces are separated.
+
+The network namespace has no normal network interface. HTTPS is relayed through a host-side CONNECT
+proxy which accepts port 443 only, resolves names outside the sandbox, rejects IP literals and
+non-public addresses, and permits only the model providers and Scala/Maven repositories by default.
+This limits accidental network access and straightforward exfiltration, but an allowed provider
+host remains an exfiltration channel and receives repository content as part of normal agent use.
+Add required package hosts deliberately:
+
+```bash
+NOESIS_AGENT_EXTRA_DOMAINS=repo.example.org,downloads.example.org \
+  nix run .#codex-agent -- issue-42
+```
+
+Set `NOESIS_AGENT_NO_DEFAULT_DOMAINS=1` together with
+`NOESIS_AGENT_EXTRA_DOMAINS=...` to replace the defaults. The proxy logs allowed and denied hostnames
+but cannot see TLS payloads.
+
+When a user systemd manager is available, the wrapper also creates a transient scope with
+`MemoryHigh=6G`, `MemoryMax=8G`, `TasksMax=1024`, and `CPUQuota=400%`. Override these with
+`NOESIS_AGENT_MEMORY_HIGH`, `NOESIS_AGENT_MEMORY_MAX`, `NOESIS_AGENT_TASKS_MAX`, and
+`NOESIS_AGENT_CPU_QUOTA`, or set `NOESIS_AGENT_SYSTEMD_SCOPE=0` to skip the scope.
+
+This is strong process isolation, not a virtual machine. It shares the host kernel and maps back to
+the invoking user, so a kernel/user-namespace escape would regain that user's authority. For
+actively hostile native code, run the flake under a dedicated OS account with no private files, or
+inside a disposable VM. Same-UID kernel facilities such as the user's kernel keyring are likewise
+not a credential boundary. The host must be Linux with unprivileged user namespaces enabled; on
+NixOS, leave `security.unprivilegedUsernsClone` enabled.
+
+Codex is intentionally run with `danger-full-access` and Claude with `acceptEdits` *inside* the
+outer sandbox. Those settings let the agents use the isolated worktree without layering a weaker or
+fail-open inner sandbox over Bubblewrap; they do not grant access outside the outer namespace.
+
 ## Design notes
 
 **The journal is the only thing written.** The state fold, the reasoner closure, learning items and
