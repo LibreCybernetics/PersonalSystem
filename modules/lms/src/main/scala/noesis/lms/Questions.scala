@@ -121,8 +121,13 @@ object Questions:
 
     (siblings ++ sameProperty).distinct.take(limit)
 
-  /** Turns a verbalization into a cloze by blanking its last significant word. */
-  private def cloze(text: String): String =
+  /** Turns a verbalization into a cloze by blanking its last significant word.
+    *
+    * Visible to the module so its short-text guard can be tested directly: every axiom form the
+    * verbalizer renders today is at least three words long, so the fallback is unreachable through
+    * [[forAtomicFact]] — and unreachable defensive code is exactly the kind that rots.
+    */
+  private[lms] def cloze(text: String): String =
     val words = text.split(' ').toList
     if words.length < 3 then s"$text — fill in the blank"
     else (words.dropRight(1) :+ "___").mkString(" ")

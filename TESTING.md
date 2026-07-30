@@ -18,7 +18,7 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `journal` | `JournalSuite`: operation codecs, append ordering, atomic bundles, concurrent appends, JSON Lines persistence, reopening, and corrupt-input failure |
 | `reasoner` | `ReasonerSuite`, `QuerySuite`: inference, fixpoint behavior, journal-backed justifications, consistency, EL warnings, and graph-pattern queries |
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
-| `lms` | `BeliefSuite`, `SchedulerSuite`: belief updates and decay, derived belief, review logging, retention/elucidation scheduling, and exploration |
+| `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
@@ -154,15 +154,46 @@ nix develop --command sbt -batch \
   --reporters console
   --reporters html
   --reporters json
-  --thresholds.high 60
-  --thresholds.low 41
-  --thresholds.break 40"
+  --thresholds.high 100
+  --thresholds.low 100
+  --thresholds.break 99"
 ```
 
 Replace `core` with `logic`, `journal`, `reasoner`, `lms`, or `vocab` as needed. Reports are written
-under `modules/<module>/target/stryker4s-report`. CI runs all six modules independently, retains the
-HTML and JSON reports as artifacts, and fails any module whose mutation score is below 40%. Increase
-the floor as surviving and uncovered mutants are addressed.
+under `modules/<module>/target/stryker4s-report`. CI runs all six modules independently and retains
+the HTML and JSON reports as artifacts.
+
+**All six modules score 100%, and a change that drops any of them below that fails CI.**
+`--thresholds.break 99` is the strictest value Stryker4s accepts — it requires `break` to be
+strictly below `low` — so the workflow additionally reads the JSON report and fails on any mutant
+left `Survived` or `NoCoverage`. That check, not the threshold, is the real gate.
+
+`Ignored` mutants do not count against the score. They are Stryker4s's `static` category: values
+computed once during object initialization, such as the vocabulary modules' axiom lists, which the
+harness cannot re-evaluate per mutant. `CompileError` mutants do not count either.
+
+### Killing a mutant that no test can distinguish
+
+Some mutants are *equivalent*: they change the source without changing behavior for any reachable
+input, so no honest assertion can detect them. Do not contort a test to chase one, and do not weaken
+an assertion around it. Fix the code instead — an equivalent mutant is almost always a redundant
+branch or an unreachable guard:
+
+- A branch whose two sides compute the same answer is dead. `if xs.isEmpty then None else …` in front
+  of a fold that already yields `None` for the empty case is one branch, not two.
+- A guard that a later clamp, truncation or `take` already enforces is redundant. Prefer
+  `elapsed.max(0.0)` over an `if elapsed <= 0` special case, and let `take(0)` stand in for an
+  `if slots == 0` early return.
+- A threshold you cannot land on exactly is untestable. Give it a name (`Scheduler.minEntropy`) so a
+  test can construct a value that sits exactly on the boundary, and pin both sides — the boundary is
+  usually the behavior worth pinning anyway.
+- Genuinely unreachable defensive code should be reachable from the module's own tests. Widening a
+  helper to `private[module]` and testing it directly is preferable to deleting a guard that a future
+  caller will need, or to leaving it uncovered.
+
+When a strict/non-strict comparison survives, the missing test is nearly always the exact-equality
+case: a grade of exactly 0.6, a belief exactly at its retention target, a utility exactly at the
+suspend threshold. Those cases decide real behavior and belong in the suite regardless.
 
 ## Continuous integration and reporting
 

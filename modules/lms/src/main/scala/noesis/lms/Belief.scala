@@ -32,11 +32,12 @@ object Belief:
     */
   def at(item: Item, now: Instant): Double =
     item.lastReviewed match
-      case None => item.belief
+      case None => clamp(item.belief)
       case Some(last) =>
-        val days = Duration.between(last, now).toSeconds.toDouble / 86400.0
-        if days <= 0 then item.belief
-        else clamp(item.belief * math.exp(-days / item.stability.max(0.01)))
+        // Elapsed time floors at zero instead of being special-cased: reading a review as of a
+        // moment before it happened must not *raise* belief, and e⁰ = 1 leaves it untouched.
+        val days = Duration.between(last, now).toSeconds.toDouble.max(0.0) / 86400.0
+        clamp(item.belief * math.exp(-days / item.stability.max(0.01)))
 
   /** Applies a review outcome (SPEC §4.2).
     *
@@ -127,24 +128,23 @@ object DerivedBelief:
       beliefOf: AxiomId => Option[Double],
       config: Config = Config.default
   ): Option[Double] =
-    val justifications = closure.justificationsFor(axiom)
-    if justifications.isEmpty then None
-    else
-      val perPath = justifications.toList.flatMap: justification =>
-        val premiseBeliefs = justification.premises.toList.collect:
-          case Support.Asserted(id) => beliefOf(id)
-        val known = premiseBeliefs.flatten
-        // Nothing in this path is tracked: it tells us nothing about the owner's memory.
-        Option.when(known.nonEmpty):
-          val combined = config.tnorm match
-            case Tnorm.Product => known.product
-            case Tnorm.Min     => known.minOption.getOrElse(1.0)
-          val discount = 1.0 - config.inferenceDifficulty * (justification.size - 1).max(0)
-          Belief.clamp(combined * discount.max(0.0))
+    // An unentailed axiom has no justifications at all, so it needs no branch of its own: the
+    // empty-path case below already answers "this says nothing about the owner's memory".
+    val perPath = closure.justificationsFor(axiom).toList.flatMap: justification =>
+      val premiseBeliefs = justification.premises.toList.collect:
+        case Support.Asserted(id) => beliefOf(id)
+      val known = premiseBeliefs.flatten
+      // Nothing in this path is tracked: it tells us nothing about the owner's memory.
+      Option.when(known.nonEmpty):
+        val combined = config.tnorm match
+          case Tnorm.Product => known.product
+          case Tnorm.Min     => known.minOption.getOrElse(1.0)
+        val discount = 1.0 - config.inferenceDifficulty * (justification.size - 1).max(0)
+        Belief.clamp(combined * discount.max(0.0))
 
-      if perPath.isEmpty then None
-      else if config.noisyOr then Some(Belief.clamp(1.0 - perPath.map(1.0 - _).product))
-      else perPath.maxOption
+    if perPath.isEmpty then None
+    else if config.noisyOr then Some(Belief.clamp(1.0 - perPath.map(1.0 - _).product))
+    else perPath.maxOption
 
   /** Attenuated credit to propagate back to premise items after reviewing a derived fact (§4.4). */
   def backPropagatedCredit(grade: Double, justificationSize: Int): Double =

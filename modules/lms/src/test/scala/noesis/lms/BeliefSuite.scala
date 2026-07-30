@@ -58,6 +58,24 @@ class BeliefSuite extends FunSuite:
 
     assert(Belief.at(durable, days(30)) > Belief.at(fragile, days(30)))
 
+  test("reading belief before its own review neither decays nor inflates it"):
+    // Elapsed time floors at zero, so a backwards clock — or a point-in-time read — returns the
+    // recorded belief instead of running the decay curve in reverse.
+    val reviewed = item(belief = 0.5, stability = 10.0, reviewed = Some(days(10)))
+
+    assertEquals(Belief.at(reviewed, days(10)), 0.5, "no time elapsed, no decay")
+    assertEquals(Belief.at(reviewed, t0), 0.5, "ten days early is still no decay, not growth")
+
+  test("a stored belief outside [0,1] is clamped on read"):
+    // `belief` is decoded from a durable review log (SPEC §12.3), so a corrupt or refitted entry can
+    // carry a value the update path would never produce. Reads must still be probabilities.
+    val overconfident = item(belief = 1.5, stability = 10.0, reviewed = Some(t0))
+    val negative = item(belief = -0.5, stability = 10.0, reviewed = Some(t0))
+
+    assertEquals(Belief.at(overconfident, t0), 1.0)
+    assertEquals(Belief.at(negative, t0), 0.0)
+    assertEquals(Belief.at(item(belief = 1.5), t0), 1.0, "and on the never-reviewed path too")
+
   // ── Update (SPEC §4.2) ────────────────────────────────────────────────────
 
   test("a correct answer raises belief and grows stability"):
@@ -76,6 +94,31 @@ class BeliefSuite extends FunSuite:
     assert(after.belief < 0.8)
     assert(after.stability < 30.0)
     assertEquals(after.lapseCount, 1)
+
+  test("a grade exactly on the pass mark counts as a success"):
+    // 0.6 is the boundary between growing and shrinking stability; which side it falls on decides
+    // whether a borderline answer schedules the item sooner or later.
+    val before = item(belief = 0.4, stability = 10.0, reviewed = Some(t0))
+    val (after, _) = Belief.update(before, grade = 0.6, latencyMs = 2000, 1.0, days(1))
+
+    assert(after.stability > before.stability, s"${after.stability} should exceed ${before.stability}")
+    assertEquals(after.lapseCount, 0)
+
+  test("stability never falls below half its initial value, however often the item is failed"):
+    val fresh = item(belief = 0.5, stability = Belief.initialStability, reviewed = Some(t0))
+    val (after, _) = Belief.update(fresh, grade = 0.0, latencyMs = 2000, 1.0, days(1))
+
+    assertEqualsDouble(after.stability, Belief.initialStability * 0.5, 1e-9)
+    assert(after.stability > fresh.stability * 0.45, "the floor, not the shrink factor, applies here")
+
+  test("a non-positive latency is treated as instant rather than as impossibly strong evidence"):
+    val before = item(belief = 0.4)
+    val instant = Belief.update(before, 1.0, latencyMs = 0, 1.0, t0)._1
+    val impossible = Belief.update(before, 1.0, latencyMs = -1, 1.0, t0)._1
+
+    // α is exactly the base rate: b ← 0.4 + 0.35·(1 − 0.4).
+    assertEqualsDouble(instant.belief, 0.61, 1e-9)
+    assertEquals(impossible.belief, instant.belief, "a negative clock reading cannot beat instant")
 
   test("the update starts from decayed belief, not the stored value"):
     // Reviewing after a long gap should move belief less far than reviewing immediately, because
@@ -129,6 +172,12 @@ class BeliefSuite extends FunSuite:
     assert(Belief.entropy(0.5) > Belief.entropy(0.8))
     assert(Belief.entropy(0.5) > Belief.entropy(0.2))
     assertEqualsDouble(Belief.entropy(0.3), Belief.entropy(0.7), 0.0001, "entropy is symmetric")
+
+  test("a belief outside [0,1] has no entropy rather than an undefined one"):
+    // Guarding both ends keeps log₂ off negative arguments, so a corrupt stored belief degrades to
+    // "nothing to learn here" instead of poisoning the elucidation queue with NaN weights.
+    assertEquals(Belief.entropy(-0.2), 0.0)
+    assertEquals(Belief.entropy(1.5), 0.0)
 
   // ── Derived belief (SPEC §4.4) ─────────────────────────────────────────────
 
@@ -191,6 +240,12 @@ class BeliefSuite extends FunSuite:
 
     assert(combined > 0.5, s"two independent paths should reinforce each other, got $combined")
     assert(combined <= 1.0)
+
+    // The configured alternative takes the strongest path instead of compounding them, for an owner
+    // who does not accept that two derivations are independent evidence.
+    val strongest = DerivedBelief.of(derived, closure, beliefs.get, config.copy(noisyOr = false))
+    assertEquals(strongest, Some(0.5))
+    assert(combined > strongest.getOrElse(1.0), "noisy-OR must exceed the max it replaces")
 
   test("the inference-difficulty discount lowers belief in longer derivations"):
     val subclass = Axiom.SubClassOf(Person, Agent)
