@@ -1,0 +1,64 @@
+name: Mutation testing
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stryker:
+    name: Stryker4s (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - core
+          - lms
+          - vocab
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Cache sbt dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt
+          key: ${{ runner.os }}-sbt-${{ hashFiles('build.sbt', 'project/build.properties', 'project/plugins.sbt') }}
+          restore-keys: |
+            ${{ runner.os }}-sbt-
+
+      - name: Run mutation tests
+        run: >-
+          nix develop --command sbt -batch
+          "${{ matrix.module }}/stryker
+          --reporters console
+          --reporters html
+          --reporters json
+          --thresholds.high 60
+          --thresholds.low 41
+          --thresholds.break 40"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stryker4s-${{ matrix.module }}
+          path: modules/${{ matrix.module }}/target/stryker4s-report
+          if-no-files-found: warn

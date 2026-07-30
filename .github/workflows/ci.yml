@@ -31,7 +31,7 @@ jobs:
           path: |
             ~/.cache/coursier
             ~/.sbt
-          key: ${{ runner.os }}-sbt-${{ hashFiles('build.sbt', 'project/build.properties') }}
+          key: ${{ runner.os }}-sbt-${{ hashFiles('build.sbt', 'project/build.properties', 'project/plugins.sbt') }}
           restore-keys: |
             ${{ runner.os }}-sbt-
 
