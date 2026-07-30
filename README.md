@@ -114,6 +114,10 @@ decline, munit.
 sbt core/testOnly 'noesis.core.*'   # 112
 sbt lms/testOnly 'noesis.lms.*'     #  36
 sbt vocab/testOnly 'noesis.vocab.*' #  41
+
+sbt core/stryker                     # mutation-test one module
+sbt lms/stryker
+sbt vocab/stryker
 ```
 
 Note that plain `sbt test` is incremental in sbt 2 and reports `Total 0` for modules whose inputs
@@ -121,7 +125,11 @@ have not changed. Use the explicit `testOnly` forms above when you want to see a
 
 The build treats warnings as errors and enables unused, discarded-value, non-`Unit` statement and
 safe-initialization diagnostics. Scapegoat and a curated WartRemover safety profile run as compiler
-plugins for both production and test compilation.
+plugins for both production and test compilation. Stryker4s tests the test suites themselves by
+injecting mutations; its HTML report is written below the selected module's `target` directory. The
+Mutation testing workflow runs all three test-bearing modules on every branch push and on manual
+dispatch, and retains their HTML and JSON reports as workflow artifacts. CI enforces the current
+cross-module baseline of 40%; raise that floor as surviving and uncovered mutants are addressed.
 
 ## Isolated coding agents
 

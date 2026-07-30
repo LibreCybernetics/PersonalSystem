@@ -198,8 +198,7 @@ object Ledger:
   def borrowed(state: KbState, owner: Iri): List[(Iri, Iri)] =
     val holders = custody(state)
     new Facts(state).accountable.collect:
-      case (resource, accountable)
-          if accountable != owner && holders.get(resource).contains(owner) =>
+      case (resource, accountable) if accountable != owner && holders.get(resource).contains(owner) =>
         resource -> accountable
 
   /** A resource's quantity as a fold over its raise, lower, produce and consume events (SPEC §8).
