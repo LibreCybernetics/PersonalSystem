@@ -167,7 +167,8 @@ object Literal:
   def boolean(value: Boolean): Literal = Literal(value.toString, Xsd.boolean)
 
   def decimal(value: BigDecimal): Literal =
-    Literal(Datatypes.canonical(Xsd.decimal, value.toString).getOrElse(value.toString), Xsd.decimal)
+    val raw = value.bigDecimal.toPlainString
+    Literal(Datatypes.canonical(Xsd.decimal, raw).getOrElse(raw), Xsd.decimal)
 
   def integer(value: BigInt): Literal = Literal(value.toString, Xsd.integer)
 
