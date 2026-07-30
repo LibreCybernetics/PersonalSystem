@@ -145,6 +145,14 @@ class DisclosureSuite extends FunSuite:
     assert(stale < fresh, "the boost should decay")
     assert(stale >= 0.5, "decay must not eat into the policy base")
 
+  test("an active goal contributes its independent temporal boost"):
+    assertEquals(PolicyCascade.temporalBoost(Signals.none), 0.0)
+    assertEquals(PolicyCascade.temporalBoost(Signals(activeGoal = true)), 0.10)
+    assertEquals(
+      PolicyCascade.temporalBoost(Signals(upcomingOccasion = true, activeGoal = true)),
+      0.25
+    )
+
   test("internal without a knowledge scope is flagged as invalid"):
     val axiom = Axiom.ObjectAssertion(alice, worksAt, acme)
     val bad = record(axiom, at(Sensitivity.Internal))
@@ -152,6 +160,25 @@ class DisclosureSuite extends FunSuite:
 
     assert(PolicyCascade.validate(bad, PolicyBook.empty).nonEmpty)
     assertEquals(PolicyCascade.validate(good, PolicyBook.empty), Nil)
+
+  test("truth confidence validation accepts both endpoints and reports either outside boundary"):
+    val axiom = Axiom.ObjectAssertion(alice, knows, marco)
+    def violations(confidence: Double) =
+      PolicyCascade.validate(
+        record(axiom, AxiomAnnotations(truthConfidence = Some(confidence))),
+        PolicyBook.empty
+      )
+
+    assertEquals(violations(0.0), Nil)
+    assertEquals(violations(1.0), Nil)
+    assertEquals(
+      violations(-0.01),
+      List(s"${axiom.id.value} has truthConfidence outside [0,1]")
+    )
+    assertEquals(
+      violations(1.01),
+      List(s"${axiom.id.value} has truthConfidence outside [0,1]")
+    )
 
   // ── Per-fact disclosure ───────────────────────────────────────────────────
 
@@ -175,6 +202,12 @@ class DisclosureSuite extends FunSuite:
     assert(policy.permits(Sensitivity.Public, Set.empty))
     assert(!policy.permits(Sensitivity.Personal, Set.empty))
     assert(!policy.permits(Sensitivity.Internal, Set(orgAcme)))
+
+  test("a broader maximum level includes every lower level and scoped internal knowledge"):
+    val policy = DisclosurePolicy("agent", Sensitivity.Personal, Set(orgAcme))
+    assert(policy.permits(Sensitivity.Public, Set.empty))
+    assert(policy.permits(Sensitivity.Internal, Set(orgAcme)))
+    assert(policy.permits(Sensitivity.Personal, Set.empty))
 
   // ── The derived-fact rule (SPEC §3.3.1) ───────────────────────────────────
 
@@ -228,7 +261,9 @@ class DisclosureSuite extends FunSuite:
 
     val derived = Axiom.ObjectAssertion(alice, knows, marco)
     Disclosure.decide(derived, closure, resolver, DisclosurePolicy.personal("agent")) match
-      case DisclosureDecision.Redact(reason) => assert(reason.contains("sensitive"), reason)
+      case decision @ DisclosureDecision.Redact(reason) =>
+        assertEquals(reason, "requires sensitive")
+        assertEquals(decision.marker, "[redacted]")
       case other                             => fail(s"expected redaction, got $other")
 
   test("internal scopes union within the chosen justification"):
@@ -262,6 +297,15 @@ class DisclosureSuite extends FunSuite:
         .decide(derived, closure, resolver, DisclosurePolicy.internal("a", Set(orgAcme, otherOrg)))
         .isDisclosed
     )
+    Disclosure.decide(
+      derived,
+      closure,
+      resolver,
+      DisclosurePolicy.internal("a", Set(orgAcme))
+    ) match
+      case DisclosureDecision.Redact(reason) =>
+        assertEquals(reason, "requires internal(org:acme, org:beta)")
+      case other => fail(s"expected a scoped redaction, got $other")
 
   test("a fact that is not entailed at all is redacted rather than reported as permitted"):
     val state = stateOf(Axiom.ClassAssertion(alice, Person) -> at(Sensitivity.Public))
@@ -275,6 +319,8 @@ class DisclosureSuite extends FunSuite:
       DisclosurePolicy.localOwner("ui")
     )
     assert(!decision.isDisclosed)
+    assertEquals(decision, DisclosureDecision.Redact("not entailed"))
+    assertEquals(decision.marker, "[redacted]")
 
   test("partition reports both what is disclosed and what was withheld"):
     val publicFact = Axiom.ClassAssertion(alice, Person)
@@ -292,6 +338,9 @@ class DisclosureSuite extends FunSuite:
 
     assertEquals(disclosed.map(_._1), List(publicFact))
     assertEquals(redacted.map(_._1), List(secretFact))
+    val disclosedDecision =
+      Disclosure.decide(publicFact, closure, resolver, DisclosurePolicy.publicOnly("agent"))
+    assertEquals(disclosedDecision.marker, "")
 
   test("an unresolvable premise fails closed, not open"):
     val resolver = new SupportResolver(KbState.empty, PolicyBook.empty)

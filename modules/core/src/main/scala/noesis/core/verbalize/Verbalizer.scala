@@ -67,8 +67,10 @@ object Naming:
           (f.statedSubject, (priority, f.statedValue.render, 0L))
 
     // Lower priority number wins; fluent-backed names outrank plain assertions.
+    val preference = Ordering.by[(Int, String, Long), (Int, Long, String)]: candidate =>
+      (candidate._1, -candidate._3, candidate._2)
     val best = (fromFluents ++ fromLabels)
-      .groupMapReduce(_._1)(_._2)((a, b) => if a._1 <= b._1 then a else b)
+      .groupMapReduce(_._1)(_._2)(preference.min)
 
     NamingContext(best.view.mapValues(_._2).toMap)
 
