@@ -51,6 +51,7 @@ Key implementation points:
 | Belief, derived belief | `modules/lms/src/main/scala/noesis/lms/Belief.scala` |
 | Scheduling | `modules/lms/src/main/scala/noesis/lms/Scheduler.scala` |
 | Module contract | `modules/vocab/src/main/scala/noesis/vocab/Module.scala` |
+| Naming convention register | `modules/vocab/NAMING.md` (rules in `modules/conformance/src/test/resources/mdr/naming.json`) |
 
 ## System principles and invariants
 

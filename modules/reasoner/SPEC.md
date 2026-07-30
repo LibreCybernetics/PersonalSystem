@@ -65,7 +65,7 @@ than an oversight: the two candidates each fail the bar that a normative citatio
 conform to *and* test.
 
 - **[SPARQL 1.1 Query Language](https://www.w3.org/TR/sparql11-query/) §5, §18** — `Query` implements
-  the conjunctive core and nothing else (deviation D9). Conformance would need the W3C suite, whose
+  the conjunctive core and nothing else (deviation D7). Conformance would need the W3C suite, whose
   manifests are Turtle, and a SPARQL parser to read them. Recorded as follow-up F2.
 - **[OWL 2 Direct Semantics](https://www.w3.org/TR/owl2-direct-semantics/)** — governs what §4's
   consistency check *means*, and is cited normatively by `noesis-logic` for the axiom cases. This

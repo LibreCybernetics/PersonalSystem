@@ -21,7 +21,7 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios |
-| `conformance` | `JcsConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
+| `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
 The `conformance` module answers a different question from the rest and is gated differently, as
@@ -96,7 +96,10 @@ instead of weakening the assertion.
   against the unmodified core. The merged ontology, rules, policies, item policies, and templates
   are covered as applicable; declarations tested only in isolation are insufficient. Domain and
   range declarations are included where CLI value typing depends on the ontology. When CLI behavior
-  is in scope, `noesis check` also confirms that the merged TBox remains consistent.
+  is in scope, `noesis check` also confirms that the merged TBox remains consistent. Every term the
+  module declares is checked against the naming convention register by `NamingConformanceSuite`; a
+  term that would need a new rule needs `modules/vocab/NAMING.md` and its corpus updated first,
+  since ISO/IEC 11179-5 conformance is a claim about the namespace, not about the term.
 - **Inference rule:** Evidence includes the derived fact, its exact premise justification, and a
   negative or boundary case that protects monotonicity or termination where applicable.
 - **Axiom case:** Evidence covers `signature`, `individuals`, Manchester rendering, triple

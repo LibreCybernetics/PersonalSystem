@@ -58,6 +58,48 @@ final case class XsdCase(
     canonical: Option[String] = None
 ) derives Decoder
 
+/** One ISO/IEC 21778 / RFC 8259 vector: is `text` a conforming JSON text? */
+final case class JsonSyntaxCase(id: String, text: String, conforming: Boolean) derives Decoder
+
+/** One RFC 7493 vector. Every `text` here is already a conforming JSON text — the question is
+  * whether it is also an I-JSON message — so each case names the clause that decides it.
+  */
+final case class IjsonCase(id: String, text: String, conforming: Boolean, clause: String) derives Decoder
+
+/** One namespace's naming convention, in the form ISO/IEC 11179-5 §2.2.2 requires a conforming
+  * system to document it: the six rule kinds of §9.2–§9.7, plus the machine-checkable part of the
+  * syntactic and lexical rules as a pattern per role.
+  *
+  * The prose and the patterns are one artefact rather than two so they cannot drift.
+  * `modules/vocab/NAMING.md` explains the choices; this is what the suite enforces.
+  */
+final case class NamingConvention(
+    prefix: String,
+    kind: String,
+    scope: String,
+    authority: String,
+    semantic: String,
+    syntactic: String,
+    lexical: String,
+    uniqueness: String,
+    classPattern: Option[String] = None,
+    propertyPattern: Option[String] = None,
+    individualPattern: Option[String] = None,
+    datatypePattern: Option[String] = None
+) derives Decoder:
+
+  /** The documented rules, by the clause that requires each. A conforming system documents all six;
+    * a *strictly* conforming one is the same list with `shall` in place of `should` (§2.2.1–2.2.2).
+    */
+  def documented: List[(String, String)] = List(
+    "9.2 scope" -> scope,
+    "9.3 authority" -> authority,
+    "9.4 semantic" -> semantic,
+    "9.5 syntactic" -> syntactic,
+    "9.6 lexical" -> lexical,
+    "9.7 uniqueness" -> uniqueness
+  )
+
 /** One RFC 3987 / compact-name syntax vector. */
 final case class IriCase(id: String, value: String, valid: Boolean) derives Decoder
 

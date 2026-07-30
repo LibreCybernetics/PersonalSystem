@@ -90,14 +90,16 @@ a completeness claim.
 | Reference | Governs | Scope |
 |---|---|---|
 | [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JSON Canonicalization Scheme | `Canonical`, and therefore `AxiomId` and every journal line | Full, except numbers outside the IEEE-754 double range (D3) |
-| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) / [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — JSON, I-JSON | the serialized form JCS is applied to | Full |
+| [ISO/IEC 21778:2017](https://standards.iso.org/ittf/PubliclyAvailableStandards/) / [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) — JSON | the serialized form JCS is applied to | Full. One syntactic language stated twice; the ISO text is the freely retrievable one |
+| [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — I-JSON | what `Canonical` emits | What Noesis writes, not what it accepts (D9). An unpaired surrogate is transliterated rather than refused (D10) |
 | [FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) — SHA-256 | the digest in `AxiomId` | Full |
 | [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987) / [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986) — IRI, URI | `Iri.parse`, and the form every stored identifier takes | Scheme syntax and excluded characters |
 | [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562) — UUID | `Iri.fresh`, `FluentId.fresh` | Version 4 only. Obsoletes RFC 4122 |
-| [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) §3.3 | the shape of `Literal` | Literals, language-tagged strings, and IRIs as terms. No blank nodes (D6) |
+| [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) §3.3 | the shape of `Literal` | Literals, language-tagged strings, and IRIs as terms. No blank nodes (D6). A lexical form is not checked for being a sequence of Unicode scalar values (D10) |
 | [XSD 1.1 Part 2](https://www.w3.org/TR/xmlschema11-2/) §3.3 | `Datatypes` lexical spaces and canonical mappings | The datatypes Noesis mints (D1, D2) |
 | [BCP 47](https://www.rfc-editor.org/info/bcp47) — RFC 5646 §2.1 | `LanguageTag` | Well-formedness of `langtag` and `privateuse` (D4, D5) |
 | [OWL 2 Profiles](https://www.w3.org/TR/owl2-profiles/) §4 | `Profile` | EL membership of the implemented axiom cases |
+| ISO/IEC 11179-5:2015 §2.2.2, §7, §9.2–§9.7 — naming principles (purchased) | the names `Vocab`, `CoreDatatype` and `Namespaces` declare, and the shape `Iri.fresh` mints | The documented convention per namespace; the rules themselves are in `modules/vocab/NAMING.md` and its corpus |
 | [OWL 2 Structural Specification](https://www.w3.org/TR/owl2-syntax/) and [Direct Semantics](https://www.w3.org/TR/owl2-direct-semantics/) | what each implemented axiom case *means* | The implemented subset (D8) |
 
 ## 8. Informative references
@@ -105,4 +107,6 @@ a completeness claim.
 - [OWL 2 Manchester Syntax](https://www.w3.org/TR/owl2-manchester-syntax/) — the shape `Axiom.manchester` renders towards. A W3C Note, and the rendering is approximate; not conformance-tested.
 - [OWL 2 Mapping to RDF Graphs](https://www.w3.org/TR/owl2-mapping-to-rdf/) — what `Triples` would have to implement to be a serialization rather than a query view (D8).
 - [RDF 1.2 Concepts](https://www.w3.org/TR/rdf12-concepts/) — Candidate Recommendation as of April 2026. Where triple terms land, and therefore the eventual standard footing for the RDF-star axiom identity of root SPEC §3.1. Tracked, not adopted.
+- [ISO/IEC 24707:2018](https://standards.iso.org/ittf/PubliclyAvailableStandards/) — Common Logic. The ISO framework for a family of logic-based languages, and the standards-body alternative to the path §1 takes. Not adopted: Noesis's axiom language is an OWL 2 subset with a decidable profile as its ceiling, while CL is first-order and undecidable, so a CL dialect would describe the language we deliberately did not build. Relevant again only if interchange with a CL-based system is ever wanted.
+- [ISO/IEC 11404:2007](https://standards.iso.org/ittf/PubliclyAvailableStandards/) — General-Purpose Datatypes. The ISO datatype vocabulary, not used: RDF literals are typed by XSD 1.1 Part 2, and a second datatype system would have to be mapped onto the first at every boundary.
 - [UAX #15](https://www.unicode.org/reports/tr15/) — Unicode normalization. Not applied: `AxiomId` hashes the lexical form as given, so two normalizations of one name yield two identifiers. A candidate deviation once names are captured from more than one source.

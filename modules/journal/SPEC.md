@@ -108,9 +108,10 @@ Cited normatively only where Noesis conforms *and* the conformance is tested; de
 
 | Reference | Governs |
 |---|---|
-| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) / [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — JSON, I-JSON | §4.1. I-JSON matters specifically: it forbids duplicate keys, lone surrogates and integers beyond 2^53, each of which would break replay determinism |
+| [ISO/IEC 21778:2017](https://standards.iso.org/ittf/PubliclyAvailableStandards/) / [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) — JSON | §4.1. The two are intended to define one syntactic language; the ISO text is cited because it is the freely retrievable one. Scope: what the reader accepts, tested against the reader that replays the journal |
+| [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — I-JSON | §4.1. I-JSON matters specifically: it forbids duplicate keys, lone surrogates and integers beyond 2^53, each of which would break replay determinism. Scope: **writing** — every line Noesis emits is an I-JSON message. Reading is not restricted to I-JSON (D9), and an unpaired surrogate is substituted rather than refused (D10) |
 | [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JCS | §4.2, via `noesis.logic.Canonical` |
-| [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) | `JournalEntry.at`. The open stand-in for ISO 8601, which is paywalled |
+| [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) | `JournalEntry.at`. RFC 3339 is a profile of ISO 8601-1 and is what is implemented; the wider standard is not held, so it is not cited |
 | [RDF 1.1 N-Triples](https://www.w3.org/TR/n-triples/) | `NTriples`, reading and writing. No blank nodes (D6) |
 | [RDF 1.1 Turtle](https://www.w3.org/TR/turtle/) §6 | `Turtle`, writing only. Prefixed names, IRIREFs, literal syntax and the `@prefix` directive |
 
