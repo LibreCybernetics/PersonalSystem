@@ -1,0 +1,24 @@
+# N-Triples lines that must be rejected. One per line; each is parsed on its own.
+# Derived from the grammar in https://www.w3.org/TR/n-triples/#n-triples-grammar
+# A malformed line must fail loudly — silently skipping one would build a graph from part of a
+# document, which is the same failure mode the journal forbids.
+
+<https://example.org/s> <https://example.org/p> <https://example.org/o>
+<https://example.org/s> <https://example.org/p> .
+<https://example.org/s> <https://example.org/p> <https://example.org/o> <https://example.org/g> .
+https://example.org/s <https://example.org/p> <https://example.org/o> .
+<https://example.org/s <https://example.org/p> <https://example.org/o> .
+<https://example.org/s> "literal predicates are not allowed" <https://example.org/o> .
+<https://example.org/s> <https://example.org/p> "unterminated .
+<https://example.org/s> <https://example.org/p> "bad escape \q" .
+<https://example.org/s> <https://example.org/p> "truncated \u12" .
+<https://example.org/s> <https://example.org/p> "not hex \uZZZZ" .
+<https://example.org/s> <https://example.org/p> "dangling escape \" .
+<https://example.org/s> <https://example.org/p> "tagged"@ .
+<https://example.org/s> <https://example.org/p> "tagged"@en_US .
+<https://example.org/s> <https://example.org/p> "tagged"@toolongalanguage .
+<https://example.org/s> <https://example.org/p> "typed"^^ .
+<https://example.org/s> <https://example.org/p> "typed"^^notaniri .
+<https://example.org/s> <https://example.org/p> "spaces in an iri"^^<http://example.org/a b> .
+_:blank <https://example.org/p> <https://example.org/o> .
+<https://example.org/s> <https://example.org/p> _:blank .

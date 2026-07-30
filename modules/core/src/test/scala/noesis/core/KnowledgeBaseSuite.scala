@@ -9,7 +9,7 @@ import noesis.core.event.Event
 import noesis.core.kb.*
 import noesis.logic.*
 import noesis.reasoner.{Inconsistency, InconsistencyKind, Justification, Support}
-import noesis.reasoner.query.Query
+import noesis.reasoner.query.PatternSyntax
 import noesis.core.verbalize.{Naming, Templates}
 
 /** End-to-end tests of the Knowledge Core service (SPEC §3.5, §3.6, §3.8).
@@ -293,7 +293,7 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       base <- schemaLoaded
       _ <- base.assert(Axiom.ObjectAssertion(alice, worksAt, acme))
       _ <- base.assert(Axiom.ObjectAssertion(marco, worksAt, acme))
-      bgp = Query.parse("noesis:e/alice crm:colleagueOf ?whom").fold(fail(_), identity)
+      bgp = PatternSyntax.parse("noesis:e/alice crm:colleagueOf ?whom").fold(fail(_), identity)
       solutions <- base.query(bgp)
     yield assertEquals(solutions.flatMap(_.get("whom")), List(Node.Ref(marco)))
 
@@ -337,7 +337,7 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       base <- kb(KbConfig.default.withTemplates(templates))
       _ <- base.assert(Axiom.DataAssertion(lia, Vocab.label, Literal.string("Lía")))
       text <- base.verbalize(
-        Axiom.DataAssertion(lia, birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+        Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
       )
     yield assertEquals(text, "Lía's birthday is --05-12")
 
@@ -385,7 +385,7 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
     val book = PolicyBook.empty
       .withProperty(birthday, TermPolicy.utility(0.9))
       .withModule(ModuleDefaults("crm", noesis.logic.Sensitivity.Personal))
-    val axiom = Axiom.DataAssertion(lia, birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+    val axiom = Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
 
     for
       base <- kb(KbConfig.default.withPolicies(book))

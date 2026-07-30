@@ -45,4 +45,5 @@ jobs:
           reasoner/testOnly noesis.reasoner.*;
           core/testOnly noesis.core.*;
           lms/testOnly noesis.lms.*;
-          vocab/testOnly noesis.vocab.*"
+          vocab/testOnly noesis.vocab.*;
+          conformance/testOnly noesis.conformance.*"

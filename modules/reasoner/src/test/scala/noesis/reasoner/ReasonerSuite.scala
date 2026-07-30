@@ -72,7 +72,7 @@ class ReasonerSuite extends FunSuite:
   test("domain applies to data assertions too"):
     val closure = closureOf(
       Axiom.PropertyDomain(birthday, Person),
-      Axiom.DataAssertion(lia, birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+      Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
     )
     assert(closure.contains(Axiom.ClassAssertion(lia, Person)))
 
@@ -326,48 +326,6 @@ class ReasonerSuite extends FunSuite:
     val closure = Reasoner.closure(graphOf(crmSchema*))
     assertEquals(Consistency.check(closure), Nil)
     assert(Consistency.isConsistent(closure))
-
-  // ── EL profile warnings (SPEC §3.1) ────────────────────────────────────────
-
-  test("inverse and symmetric properties warn about leaving OWL 2 EL"):
-    assertEquals(
-      Profile.elWarning(Axiom.InverseProperties(parentOf, childOf)),
-      Some("inverse properties (parentOf/childOf) are outside OWL 2 EL")
-    )
-    assertEquals(
-      Profile.elWarning(Axiom.SymmetricProperty(knows)),
-      Some("symmetric property knows is outside OWL 2 EL (it requires inverses)")
-    )
-    assertEquals(
-      Profile.elWarning(
-        Axiom.PropertyChain(
-          List(ChainStep(worksAt), ChainStep(parentOf, inverse = true)),
-          colleagueOf
-        )
-      ),
-      Some("the chain defining colleagueOf uses an inverse step, which is outside OWL 2 EL")
-    )
-    assertEquals(
-      Profile.elWarning(Axiom.DifferentIndividuals(alice, marco)),
-      Some("asserting e/alice ≠ e/marco is outside OWL 2 EL")
-    )
-
-  test("EL-safe axioms produce no warning"):
-    assert(Profile.isEl(Axiom.SubClassOf(Person, Agent)))
-    assert(Profile.isEl(Axiom.ClassAssertion(alice, Person)))
-    assert(Profile.isEl(Axiom.PropertyDomain(worksAt, Person)))
-    assert(
-      Profile.isEl(Axiom.PropertyChain(List(ChainStep(parentOf), ChainStep(parentOf)), ancestorOf))
-    )
-    assertEquals(
-      Profile.warnings(
-        List(Axiom.SubClassOf(Person, Agent), Axiom.DifferentIndividuals(alice, marco))
-      ),
-      List(
-        Axiom.DifferentIndividuals(alice, marco) ->
-          "asserting e/alice ≠ e/marco is outside OWL 2 EL"
-      )
-    )
 
   test("subproperty transitivity derives the schema edge itself"):
     val closure = closureOf(

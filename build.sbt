@@ -210,9 +210,37 @@ lazy val cli = project
     }
   )
 
+/** Conformance to the normative references, as opposed to conformance to our own intentions.
+  *
+  * A separate module for two reasons, both about the mutation gate. Dropping external corpora into
+  * a gated module's own suite would inflate its coverage: broad conformance cases kill mutants
+  * incidentally, and a 100% score would stop meaning "the unit suite pins this behavior" — an
+  * erosion that is silent and not recoverable once it starts. And the corpus infrastructure here
+  * (manifest loading, the N-Triples reader) is test scaffolding with a large mutation surface and
+  * no product contract to justify holding it at 100%.
+  *
+  * So this module is deliberately absent from the Stryker matrix in `.github/workflows/mutation.yml`
+  * and is gated on `modules/conformance/DEVIATIONS.md` instead: every case that does not pass must
+  * be a recorded, justified deviation rather than a quietly skipped test.
+  */
+lazy val conformance = project
+  .in(file("modules/conformance"))
+  .dependsOn(logic, journal, reasoner, core)
+  .settings(commonSettings)
+  .settings(
+    name := "noesis-conformance",
+    publish / skip := true,
+    libraryDependencies ++= Seq(
+      "org.typelevel" %% "cats-core" % "2.13.0",
+      "io.circe" %% "circe-core" % circeV,
+      "io.circe" %% "circe-parser" % circeV,
+      "io.circe" %% "circe-generic" % circeV
+    )
+  )
+
 lazy val root = project
   .in(file("."))
-  .aggregate(logic, journal, reasoner, core, lms, vocab, cli)
+  .aggregate(logic, journal, reasoner, core, lms, vocab, cli, conformance)
   .settings(
     name := "noesis",
     publish / skip := true

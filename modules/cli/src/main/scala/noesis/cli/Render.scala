@@ -100,12 +100,20 @@ object Render:
     if iri.value.startsWith("noesis:e/") then s"<${iri.value}>" else iri.value
 
   private def node(n: Node): String = n match
-    case Node.Ref(iri) => term(iri)
-    case Node.Lit(Literal.Str(v, None))       => s"\"${escape(v)}\""
-    case Node.Lit(Literal.Str(v, Some(lang))) => s"\"${escape(v)}\"@$lang"
-    case Node.Lit(Literal.Num(v))             => v.toString
-    case Node.Lit(Literal.Bool(v))            => v.toString
-    case Node.Lit(Literal.Date(v))            => s"\"${v.render}\"^^<http://www.w3.org/2001/XMLSchema#date>"
-    case Node.Lit(Literal.Time(v))            => s"\"$v\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+    case Node.Ref(iri)     => term(iri)
+    case Node.Lit(literal) => this.literal(literal)
+
+  /** Turtle/N-Triples literal syntax. Now that a literal carries its own datatype, this is a direct
+    * transcription rather than a per-case table: a language tag suppresses the datatype, and
+    * `xsd:string` is the implicit datatype that Turtle omits.
+    */
+  private def literal(l: Literal): String =
+    val quoted = s"\"${escape(l.lexical)}\""
+    l.language match
+      case Some(tag)                        => s"$quoted@$tag"
+      case None if l.datatype == Xsd.string => quoted
+      case None =>
+        val absolute = Namespaces.default.expand(l.datatype).getOrElse(l.datatype)
+        s"$quoted^^<${absolute.value}>"
 
   private def escape(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"")

@@ -25,9 +25,24 @@ operation must be handled by core state replay and event reconstruction before i
 
 ## 4. JSON Lines format
 
-The file backend stores one `JournalEntry` JSON object per non-empty line using UTF-8. Semantic
-payload codecs come from `noesis-logic`; their discriminator and default-value behavior are part of
-the compatibility contract.
+The file backend stores one `JournalEntry` per non-empty line. The profile is:
+
+1. each record is one JSON object conforming to RFC 8259 and restricted to I-JSON (RFC 7493);
+2. serialized in the canonical form of `noesis.logic.Canonical` — RFC 8785 applied after absent
+   optionals are dropped deeply;
+3. written on a single line, terminated by LF, encoded as UTF-8;
+4. with no byte-order mark and no whitespace outside string values.
+
+There is no standards-body specification for JSON Lines, so the above *is* the specification. The
+IETF alternative, RFC 7464, frames records with a leading RS (0x1E) byte; it is deliberately not
+used, because a control byte per record defeats the properties the format was chosen for — a line
+that is greppable, diffable in git, and recoverable by hand.
+
+Framing has one implementation, `JsonLines`, shared by the journal and the plainer logs beside it.
+The journal adds sequencing and locking on top; it does not have its own idea of what a line is.
+
+Semantic payload codecs come from `noesis-logic`; their discriminator and default-value behavior are
+part of the compatibility contract.
 
 Malformed non-empty lines are fatal. Silently skipping a line is forbidden because it would build a
 projection from only part of the source of truth.
@@ -53,3 +68,27 @@ them.
 Readers must replay existing valid journals exactly. A wire-format change requires golden fixtures,
 a version discriminator or unambiguous decoder, and a migration that preserves sequence order,
 operation meaning, and axiom identities.
+
+The typed-literal change is the worked example. Literals moved from a circe sum with a `type`
+discriminator to a lexical/datatype pair; the decoder tells the two apart by which key is present
+rather than by a version field, so existing journals replay unchanged. Axiom identities did *not*
+survive that release: adopting RFC 8785 reordered canonical members, which changes every `AxiomId`.
+That was accepted deliberately at `0.1.0-SNAPSHOT`, before any journal existed to migrate, and is
+the last such break the identifier is permitted.
+
+## 7. Normative references
+
+Cited normatively only where Noesis conforms *and* the conformance is tested; departures are in
+`modules/conformance/DEVIATIONS.md`.
+
+| Reference | Governs |
+|---|---|
+| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) / [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — JSON, I-JSON | §4.1. I-JSON matters specifically: it forbids duplicate keys, lone surrogates and integers beyond 2^53, each of which would break replay determinism |
+| [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JCS | §4.2, via `noesis.logic.Canonical` |
+| [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) | `JournalEntry.at`. The open stand-in for ISO 8601, which is paywalled |
+
+## 8. Informative references
+
+- [RFC 7464](https://www.rfc-editor.org/rfc/rfc7464) — JSON Text Sequences. The framing alternative considered and rejected in §4.
+- [W3C PROV-O](https://www.w3.org/TR/prov-o/) — maps onto journal entries and the capture provenance of root SPEC §3.5.6; would give root SPEC §10's "every axiom → source" an interchange format.
+- [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162) — Certificate Transparency, as a design template for the tamper-evidence and recovery guarantees §5 explicitly does not yet make.

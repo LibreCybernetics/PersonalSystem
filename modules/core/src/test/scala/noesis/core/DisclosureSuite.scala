@@ -38,14 +38,14 @@ class DisclosureSuite extends FunSuite:
     val book = PolicyBook.empty
       .withProperty(birthday, TermPolicy(sensitivity = Some(Sensitivity.Public)))
       .withModule(ModuleDefaults("crm", Sensitivity.Personal))
-    val axiom = Axiom.DataAssertion(lia, birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+    val axiom = Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
 
     val overridden = record(axiom, at(Sensitivity.Sensitive))
     assertEquals(PolicyCascade.sensitivity(overridden, book), Sensitivity.Sensitive)
 
   test("a property policy applies when the owner set nothing"):
     val book = PolicyBook.empty.withProperty(salary, TermPolicy(sensitivity = Some(Sensitivity.Sensitive)))
-    val axiom = Axiom.DataAssertion(alice, salary, Literal.Num(BigDecimal(90000)))
+    val axiom = Axiom.DataAssertion(alice, salary, Literal.decimal(BigDecimal(90000)))
 
     assertEquals(
       PolicyCascade.sensitivity(record(axiom, AxiomAnnotations.empty), book),
@@ -54,7 +54,7 @@ class DisclosureSuite extends FunSuite:
 
   test("a module default applies when no term policy matches"):
     val book = PolicyBook.empty.withModule(ModuleDefaults("vf", Sensitivity.Sensitive))
-    val axiom = Axiom.DataAssertion(alice, Iri("vf:balance"), Literal.Num(BigDecimal(120)))
+    val axiom = Axiom.DataAssertion(alice, Iri("vf:balance"), Literal.decimal(BigDecimal(120)))
 
     assertEquals(
       PolicyCascade.sensitivity(record(axiom, AxiomAnnotations.empty), book),
@@ -94,8 +94,8 @@ class DisclosureSuite extends FunSuite:
       .withProperty(birthday, TermPolicy.utility(0.9))
       .withModule(ModuleDefaults("vf", utilityWeight = 0.2))
 
-    val birthdayAxiom = Axiom.DataAssertion(lia, birthday, Literal.Date(PartialDate.monthDay(5, 12)))
-    val ledgerAxiom = Axiom.DataAssertion(alice, Iri("vf:quantity"), Literal.Num(BigDecimal(1)))
+    val birthdayAxiom = Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
+    val ledgerAxiom = Axiom.DataAssertion(alice, Iri("vf:quantity"), Literal.decimal(BigDecimal(1)))
 
     assertEquals(PolicyCascade.recallUtility(record(birthdayAxiom, AxiomAnnotations.empty), book), 0.9)
     assertEquals(PolicyCascade.recallUtility(record(ledgerAxiom, AxiomAnnotations.empty), book), 0.2)
@@ -128,7 +128,7 @@ class DisclosureSuite extends FunSuite:
     )
 
   test("an upcoming occasion boosts utility, and the boost decays without reinforcement"):
-    val axiom = Axiom.DataAssertion(lia, birthday, Literal.Date(PartialDate.monthDay(5, 12)))
+    val axiom = Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
     val rec = record(axiom, AxiomAnnotations.empty)
 
     val fresh = PolicyCascade.recallUtility(
@@ -324,7 +324,7 @@ class DisclosureSuite extends FunSuite:
 
   test("partition reports both what is disclosed and what was withheld"):
     val publicFact = Axiom.ClassAssertion(alice, Person)
-    val secretFact = Axiom.DataAssertion(alice, salary, Literal.Num(BigDecimal(90000)))
+    val secretFact = Axiom.DataAssertion(alice, salary, Literal.decimal(BigDecimal(90000)))
     val state = stateOf(publicFact -> at(Sensitivity.Public), secretFact -> at(Sensitivity.Sensitive))
     val closure = Reasoner.closure(Projections.current(state))
     val resolver = new SupportResolver(state, PolicyBook.empty)
