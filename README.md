@@ -110,37 +110,14 @@ modules/cli     Command-line interface
 
 Dependencies point one way only: `logic` is the semantic foundation; `journal` and `reasoner` depend
 only on it; `core` composes all three and knows nothing about learning or vocabularies; `lms` knows
-nothing about domain vocabularies. Everything is on the typelevel stack — cats-effect, fs2, circe,
-decline, munit. Each foundational module has its own README and implementation specification.
+nothing about domain vocabularies. The runtime uses cats-effect, fs2, circe, and decline. Each
+foundational module has its own README and implementation specification.
 
 ## Development
 
-```bash
-sbt logic/testOnly 'noesis.logic.*'       #  4
-sbt journal/testOnly 'noesis.journal.*'   #  8
-sbt reasoner/testOnly 'noesis.reasoner.*' # 39
-sbt core/testOnly 'noesis.core.*'         # 65
-sbt lms/testOnly 'noesis.lms.*'           # 36
-sbt vocab/testOnly 'noesis.vocab.*'       # 41
-
-sbt logic/stryker
-sbt journal/stryker
-sbt reasoner/stryker
-sbt core/stryker                     # mutation-test one module
-sbt lms/stryker
-sbt vocab/stryker
-```
-
-Note that plain `sbt test` is incremental in sbt 2 and reports `Total 0` for modules whose inputs
-have not changed. Use the explicit `testOnly` forms above when you want to see all 193 tests run.
-
-The build treats warnings as errors and enables unused, discarded-value, non-`Unit` statement and
-safe-initialization diagnostics. Scapegoat and a curated WartRemover safety profile run as compiler
-plugins for both production and test compilation. Stryker4s tests the test suites themselves by
-injecting mutations; its HTML report is written below the selected module's `target` directory. The
-Mutation testing workflow runs all six test-bearing modules on every branch push and on manual
-dispatch, and retains their HTML and JSON reports as workflow artifacts. CI enforces the current
-cross-module baseline of 40%; raise that floor as surviving and uncovered mutants are addressed.
+The development toolchain comes from `flake.nix`; dependencies and compiler configuration live in
+`build.sbt`. See [TESTING.md](TESTING.md) for the test suites, exact full-run command, static-analysis
+and mutation-testing gates, CI behavior, and the evidence required for each kind of change.
 
 ## Isolated coding agents
 
