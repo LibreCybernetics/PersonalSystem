@@ -85,7 +85,10 @@ class QuerySuite extends FunSuite:
     assert(supers.contains(Node.Ref(Agent)))
 
   test("parse rejects a malformed pattern instead of guessing"):
-    assert(Query.parse("?onlytwo crm:worksAt").isLeft)
+    assertEquals(
+      Query.parse("?onlytwo crm:worksAt"),
+      Left("expected 'subject property object', got: ?onlytwo crm:worksAt")
+    )
     assert(Query.parse("").exists(_.patterns.isEmpty))
 
   test("parse handles multiple dot-separated patterns and quoted literals"):
@@ -93,6 +96,27 @@ class QuerySuite extends FunSuite:
     assertEquals(parsed.patterns.length, 2)
     assertEquals(parsed.variables, Set("p"))
     assertEquals(parsed.patterns(1).obj, Term.Lit(Literal.Date(PartialDate.monthDay(5, 12))))
+
+  test("query values render variables, patterns, and missing bindings without ambiguity"):
+    val pattern = Pattern(Term.Var("who"), Term.Ref(worksAt), Term.Ref(acme))
+    assertEquals(Term.Var("who").render, "?who")
+    assertEquals(Term.Ref(worksAt).render, "crm:worksAt")
+    assertEquals(Term.Lit(Literal.string("Acme")).render, "Acme")
+    assertEquals(pattern.render, "?who crm:worksAt noesis:e/acme")
+    assertEquals(pattern.variables, Set("who"))
+    assertEquals(
+      Solution(Map("who" -> Node.Ref(alice))).render(List("who", "where")),
+      "who=noesis:e/alice where=-"
+    )
+
+  test("quoted query terms require both quotes and preserve embedded spaces and at signs"):
+    assertEquals(Term.parse("\"\""), Term.Lit(Literal.string("")))
+    assertEquals(Term.parse("\"hello world\""), Term.Lit(Literal.string("hello world")))
+    assertEquals(Term.parse("\"hello@work@en\""), Term.Lit(Literal.tagged("hello@work", "en")))
+    assertEquals(Term.parse("\"unterminated"), Term.Ref(Iri("\"unterminated")))
+    assertEquals(Term.parse("unterminated\""), Term.Ref(Iri("unterminated\"")))
+    val parsed = Query.parse("""?s rdfs:label "hello world"""").fold(fail(_), identity)
+    assertEquals(parsed.patterns.map(_.obj), List(Term.Lit(Literal.string("hello world"))))
 
   extension [A, B](pair: (Option[A], Option[B]))
     private def tupled: Option[(A, B)] = pair._1.flatMap(a => pair._2.map(b => (a, b)))

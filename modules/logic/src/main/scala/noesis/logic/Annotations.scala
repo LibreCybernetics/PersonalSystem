@@ -31,10 +31,10 @@ object Sensitivity:
   given Ordering[Sensitivity] = Order[Sensitivity].toOrdering
 
   /** The most restrictive of the two — how sensitivity combines *within* one justification. */
-  def max(a: Sensitivity, b: Sensitivity): Sensitivity = if a.rank >= b.rank then a else b
+  def max(a: Sensitivity, b: Sensitivity): Sensitivity = Order[Sensitivity].max(a, b)
 
   /** The least restrictive of the two — how sensitivity combines *across* justifications. */
-  def min(a: Sensitivity, b: Sensitivity): Sensitivity = if a.rank <= b.rank then a else b
+  def min(a: Sensitivity, b: Sensitivity): Sensitivity = Order[Sensitivity].min(a, b)
 
   def parse(s: String): Either[String, Sensitivity] =
     values.find(_.toString.equalsIgnoreCase(s)).toRight(s"unknown sensitivity: $s")

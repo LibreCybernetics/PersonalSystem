@@ -447,6 +447,40 @@ class ModuleSuite extends CatsEffectSuite:
       assert(PolicyCascade.recallUtility(record, config.policies) >= 0.9, "false friends are high-value")
       assertEquals(LanguageModule.priorFor(axiom), Some(0.15), "false friends should start low")
 
+  test("false-friend concepts derive only the other lexeme as confusable"):
+    val misleading = Iri("noesis:e/lex-misleading")
+    val actual = Iri("noesis:e/concept-actual")
+    val sibling = Iri("noesis:e/lex-sibling")
+    val unrelated = Iri("noesis:e/lex-unrelated")
+    for
+      base <- installed
+      _ <- base.commit(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.ObjectAssertion(ruMagazin, LanguageModule.falseFriendOf, misleading)),
+          Intent.Assert(Axiom.ObjectAssertion(misleading, LanguageModule.lexicalizes, actual)),
+          Intent.Assert(Axiom.ObjectAssertion(sibling, LanguageModule.lexicalizes, actual)),
+          Intent.Assert(Axiom.ObjectAssertion(ruMagazin, LanguageModule.lexicalizes, actual)),
+          Intent.Assert(Axiom.ObjectAssertion(unrelated, LanguageModule.lexicalizes, dogConcept))
+        )
+      )
+      siblingIsConfusable <- base.entails(
+        Axiom.ObjectAssertion(ruMagazin, LanguageModule.confusableWith, sibling)
+      )
+      selfIsConfusable <- base.entails(
+        Axiom.ObjectAssertion(ruMagazin, LanguageModule.confusableWith, ruMagazin)
+      )
+      falseFriendIsConfusable <- base.entails(
+        Axiom.ObjectAssertion(ruMagazin, LanguageModule.confusableWith, misleading)
+      )
+      unrelatedIsConfusable <- base.entails(
+        Axiom.ObjectAssertion(ruMagazin, LanguageModule.confusableWith, unrelated)
+      )
+    yield
+      assert(siblingIsConfusable)
+      assert(!selfIsConfusable)
+      assert(!falseFriendIsConfusable)
+      assert(!unrelatedIsConfusable)
+
   test("cognates start with a high belief prior, since they are nearly free"):
     val axiom = Axiom.ObjectAssertion(
       Iri("noesis:e/lex-constitucion"),
@@ -454,6 +488,16 @@ class ModuleSuite extends CatsEffectSuite:
       Iri("noesis:e/lex-konstituciya")
     )
     assertEquals(LanguageModule.priorFor(axiom), Some(0.8))
+    assertEquals(
+      LanguageModule.priorFor(
+        Axiom.ObjectAssertion(esPerro, LanguageModule.confusableWith, enDog)
+      ),
+      Some(0.2)
+    )
+    assertEquals(
+      LanguageModule.priorFor(Axiom.ObjectAssertion(esPerro, LanguageModule.lexicalizes, dogConcept)),
+      None
+    )
 
   test("the belief tensor key distinguishes direction and skill"):
     val es = Iri("ll:es")
@@ -464,6 +508,7 @@ class ModuleSuite extends CatsEffectSuite:
 
     assertNotEquals(esToRu, ruToEs, "producing from Spanish is not producing from Russian")
     assertNotEquals(esToRu, recognition, "production is not recognition")
+    assertEquals(esToRu.render, "e/c-dog:es→ru:Production")
 
   test("ll defaults sensitivity to public, since vocabulary is not personal"):
     val axiom = Axiom.ObjectAssertion(esPerro, LanguageModule.lexicalizes, dogConcept)
@@ -557,6 +602,27 @@ class ModuleSuite extends CatsEffectSuite:
     yield
       assertEquals(Ledger.borrowed(state, me), List(book -> sarah))
       assertEquals(Ledger.outOnLoan(state, me), Nil)
+
+  test("missing transfer actions and one-sided borrowing predicates do not move custody"):
+    val owned = Iri("noesis:e/owned")
+    val other = Iri("noesis:e/other")
+    val event = Iri("noesis:e/ev-no-action")
+    for
+      base <- installed
+      _ <- base.commit(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.ClassAssertion(event, ResourcesModule.EconomicEvent)),
+          Intent.Assert(Axiom.ObjectAssertion(event, ResourcesModule.receiver, me)),
+          Intent.Assert(Axiom.ObjectAssertion(event, ResourcesModule.resourceInventoriedAs, other)),
+          Intent.Assert(Axiom.ObjectAssertion(owned, ResourcesModule.primaryAccountable, me)),
+          Intent.Assert(Axiom.ObjectAssertion(other, ResourcesModule.primaryAccountable, sarah))
+        )
+      )
+      state <- base.state
+    yield
+      assertEquals(Ledger.transfers(state).map(_.action), List(""))
+      assertEquals(Ledger.custody(state), Map.empty)
+      assertEquals(Ledger.borrowed(state, me), Nil)
 
   test("a balance is a fold over raise and lower events, never stored state"):
     val account = Iri("noesis:e/account")

@@ -69,7 +69,9 @@ object Reasoner:
         axiom -> supports.map(s => Justification(Set(s)))
 
     def iterate(facts: Map[Axiom, Set[Justification]], round: Int): Closure =
-      if round >= cfg.maxIterations then Closure(facts, round, saturated = false)
+      // Recursion advances exactly one round at a time from zero, so equality is the cap boundary.
+      // Expressing the unreachable `round > maxIterations` case created equivalent mutations.
+      if round == cfg.maxIterations then Closure(facts, round, saturated = false)
       else
         val view = new ClosureView(facts)
         val derived = rules.iterator.flatMap(_.derive(view))

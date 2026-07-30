@@ -55,6 +55,14 @@ class JournalSuite extends CatsEffectSuite:
         assertEquals(third.entries.map(_.seq), List(3L))
         assertEquals(all.map(_.seq), List(1L, 2L, 3L))
 
+  test("a file-backed journal streams nothing if its file disappears after opening"):
+    withTempJournal: path =>
+      for
+        journal <- JsonLinesJournal.open[IO](path)
+        _ <- Files[IO].delete(path)
+        entries <- journal.stream.compile.toList
+      yield assertEquals(entries, Nil)
+
   test("the file holds exactly one JSON object per operation"):
     withTempJournal: path =>
       for
@@ -157,6 +165,35 @@ class JournalSuite extends CatsEffectSuite:
         case List(JournalEntry(_, _, Operation.Assert(a, _, _)), JournalEntry(_, _, Operation.Retract(b, _))) =>
           assertEquals(a, b, "an atomic bundle was split by a concurrent append")
         case other => fail(s"unexpected pairing: $other")
+
+  test("the shared JSON Lines helper distinguishes empty, missing, and populated files"):
+    Files[IO].tempDirectory.use: dir =>
+      val path = dir / "reviews.jsonl"
+      for
+        _ <- JsonLines.append[IO, String](Files[IO], path, Nil)
+        absentAfterEmpty <- Files[IO].exists(path)
+        missing <- JsonLines.read[IO, String](Files[IO], path)
+        _ <- JsonLines.append[IO, String](Files[IO], path, List("first", "second"))
+        content <- Files[IO].readUtf8(path).compile.string
+        values <- JsonLines.read[IO, String](Files[IO], path)
+      yield
+        assert(!absentAfterEmpty, "an empty append must not create a file")
+        assertEquals(missing, Nil)
+        assertEquals(content, "\"first\"\n\"second\"\n")
+        assertEquals(values, List("first", "second"))
+
+  test("the shared JSON Lines helper ignores blanks but reports the physical corrupt line"):
+    Files[IO].tempDirectory.use: dir =>
+      val path = dir / "reviews.jsonl"
+      val content = "\n\"valid\"\n\n{broken}\n"
+      for
+        _ <- Files[IO].writeUtf8(path)(fs2.Stream.emit(content)).compile.drain
+        result <- JsonLines.read[IO, String](Files[IO], path).attempt
+      yield result match
+        case Left(CorruptJournal(line, detail)) =>
+          assertEquals(line, 4L)
+          assert(detail.nonEmpty)
+        case other => fail(s"expected corruption on physical line four, got $other")
 
   private def ax(i: Int): Axiom = Axiom.ClassAssertion(Iri(s"noesis:e/p$i"), Person)
 

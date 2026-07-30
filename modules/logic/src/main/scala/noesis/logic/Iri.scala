@@ -32,8 +32,9 @@ object Iri:
         if p == "noesis" then None else Some(p)
 
     def local: String =
-      val i = iri.lastIndexOf(':')
-      if i < 0 then iri else iri.substring(i + 1)
+      // `lastIndexOf` returns -1 when no separator exists, so adding one also gives the correct
+      // substring origin for an unqualified name without a semantically redundant branch.
+      iri.substring(iri.lastIndexOf(':') + 1)
 
     /** True for minted entity IRIs, false for vocabulary terms. */
     def isOpaque: Boolean = iri.startsWith("noesis:e/")

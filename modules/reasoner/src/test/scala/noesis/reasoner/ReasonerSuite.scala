@@ -194,6 +194,14 @@ class ReasonerSuite extends FunSuite:
     )
     assertEquals(capped.size, 2)
 
+  test("justification size is inclusive at the configured boundary"):
+    given ReasonerConfig = ReasonerConfig(maxJustificationSize = 1)
+    val support = Support.Asserted(Axiom.ClassAssertion(alice, Person).id)
+    val one = Set(Justification.of(support))
+    val other = Set(Justification.of(Support.Asserted(Axiom.ClassAssertion(marco, Person).id)))
+    assertEquals(Rule.combine(one, one), one)
+    assertEquals(Rule.combine(one, other), Set.empty)
+
   test("minimal() discards justifications that are supersets of smaller ones"):
     val a = Support.Asserted(Axiom.ClassAssertion(alice, Person).id)
     val b = Support.Asserted(Axiom.ClassAssertion(marco, Person).id)
@@ -201,6 +209,48 @@ class ReasonerSuite extends FunSuite:
     val large = Justification(Set(a, b))
 
     assertEquals(Justification.minimal(Set(small, large)), Set(small))
+
+  test("support and explanation helpers distinguish empty, asserted, fluent, and mixed provenance"):
+    val assertion = Axiom.ClassAssertion(alice, Person)
+    val asserted = Justification.asserted(assertion.id)
+    val fluent = Justification.of(Support.FromFluent(FluentId.unsafe("fl_1")))
+    val mixed = Explanation(assertion, Set(asserted, fluent))
+
+    assertEquals(Support.Asserted(assertion.id).render, assertion.id.value)
+    assertEquals(Support.FromFluent(FluentId.unsafe("fl_1")).render, "fl_1")
+    assert(Justification.empty.isEmpty)
+    assert(!asserted.isEmpty)
+    assertEquals(asserted.axiomIds, Set(assertion.id))
+    assertEquals(fluent.axiomIds, Set.empty)
+    assert(mixed.isAsserted)
+    assert(!mixed.isDerived)
+    assert(Explanation(assertion, Set(fluent)).isDerived)
+
+  test("graph and closure views partition assertions from schema and preserve support"):
+    val assertion = Axiom.ClassAssertion(alice, Person)
+    val schema = Axiom.SubClassOf(Person, Agent)
+    val assertedSupport = Support.Asserted(assertion.id)
+    val schemaSupport = Support.Asserted(schema.id)
+    val first = Graph.of(assertion -> Set(assertedSupport))
+    val graph = first ++ Graph.of(schema -> Set(schemaSupport), assertion -> Set(schemaSupport))
+    val closure = Reasoner.closure(graph)
+
+    assertEquals(graph.assertions, Set(assertion))
+    assertEquals(graph.schema, Set(schema))
+    assertEquals(graph.supportFor(assertion), Set(assertedSupport, schemaSupport))
+    assertEquals(graph.filter(_.isAssertional).axioms, Set(assertion))
+    assertEquals(
+      closure.assertions,
+      Set(assertion, Axiom.ClassAssertion(alice, Agent))
+    )
+    assertEquals(closure.asGraph.supportFor(assertion), Set(assertedSupport, schemaSupport))
+
+  test("the iteration cap reports an explicitly unsaturated closure at its boundary"):
+    val graph = graphOf(Axiom.SubClassOf(Person, Agent), Axiom.ClassAssertion(alice, Person))
+    val capped = Reasoner.closure(graph, cfg = ReasonerConfig(maxIterations = 0))
+    assertEquals(capped.iterations, 0)
+    assert(!capped.saturated)
+    assert(!capped.contains(Axiom.ClassAssertion(alice, Agent)))
 
   test("entailed() reports derived facts and excludes asserted ones"):
     val assertion = Axiom.ClassAssertion(alice, Person)
@@ -226,6 +276,17 @@ class ReasonerSuite extends FunSuite:
       problems.forall(_.justification.premises.nonEmpty),
       "a rejection needs a justification"
     )
+    assert(!Consistency.isConsistent(closure))
+    assertEquals(
+      problems.map(_.detail),
+      List("noesis:e/alice is both Person and Organization, which are disjoint")
+    )
+    val rendered = problems.map(_.render)
+    assert(rendered.exists(_.startsWith("[disjoint-classes] noesis:e/alice is both")))
+    problems.zip(rendered).foreach: entry =>
+      val (problem, text) = entry
+      val premises = problem.justification.premises.toList.sorted.map(_.render).mkString(", ")
+      assert(text.endsWith(s"(from: $premises)"), text)
 
   test("disjointness is detected through inference, not only on asserted classes"):
     // alice is only asserted to be a Person; Organization membership is derived via range.
@@ -242,27 +303,53 @@ class ReasonerSuite extends FunSuite:
       Axiom.SameIndividual(alice, marco),
       Axiom.DifferentIndividuals(alice, marco)
     )
-    assertEquals(Consistency.check(closure).map(_.kind), List(InconsistencyKind.SameAndDifferent))
+    val problems = Consistency.check(closure)
+    assertEquals(problems.map(_.kind), List(InconsistencyKind.SameAndDifferent))
+    assertEquals(
+      problems.map(_.detail),
+      List("noesis:e/alice is asserted both the same as and different from noesis:e/marco")
+    )
 
   test("a self-loop on an irreflexive property is inconsistent"):
     val closure = closureOf(
       Axiom.IrreflexiveProperty(colleagueOf),
       Axiom.ObjectAssertion(alice, colleagueOf, alice)
     )
-    assertEquals(Consistency.check(closure).map(_.kind), List(InconsistencyKind.IrreflexiveSelfLoop))
+    val problems = Consistency.check(closure)
+    assertEquals(problems.map(_.kind), List(InconsistencyKind.IrreflexiveSelfLoop))
+    assertEquals(
+      problems.map(_.detail),
+      List("noesis:e/alice colleagueOf itself, but colleagueOf is irreflexive")
+    )
 
   test("the crm schema on its own is consistent"):
-    assertEquals(Consistency.check(Reasoner.closure(graphOf(crmSchema*))), Nil)
+    val closure = Reasoner.closure(graphOf(crmSchema*))
+    assertEquals(Consistency.check(closure), Nil)
+    assert(Consistency.isConsistent(closure))
 
   // ── EL profile warnings (SPEC §3.1) ────────────────────────────────────────
 
   test("inverse and symmetric properties warn about leaving OWL 2 EL"):
-    assert(Profile.elWarning(Axiom.InverseProperties(parentOf, childOf)).isDefined)
-    assert(Profile.elWarning(Axiom.SymmetricProperty(knows)).isDefined)
-    assert(
-      Profile
-        .elWarning(Axiom.PropertyChain(List(ChainStep(worksAt, inverse = true)), colleagueOf))
-        .isDefined
+    assertEquals(
+      Profile.elWarning(Axiom.InverseProperties(parentOf, childOf)),
+      Some("inverse properties (parentOf/childOf) are outside OWL 2 EL")
+    )
+    assertEquals(
+      Profile.elWarning(Axiom.SymmetricProperty(knows)),
+      Some("symmetric property knows is outside OWL 2 EL (it requires inverses)")
+    )
+    assertEquals(
+      Profile.elWarning(
+        Axiom.PropertyChain(
+          List(ChainStep(worksAt), ChainStep(parentOf, inverse = true)),
+          colleagueOf
+        )
+      ),
+      Some("the chain defining colleagueOf uses an inverse step, which is outside OWL 2 EL")
+    )
+    assertEquals(
+      Profile.elWarning(Axiom.DifferentIndividuals(alice, marco)),
+      Some("asserting e/alice ≠ e/marco is outside OWL 2 EL")
     )
 
   test("EL-safe axioms produce no warning"):
@@ -272,3 +359,19 @@ class ReasonerSuite extends FunSuite:
     assert(
       Profile.isEl(Axiom.PropertyChain(List(ChainStep(parentOf), ChainStep(parentOf)), ancestorOf))
     )
+    assertEquals(
+      Profile.warnings(
+        List(Axiom.SubClassOf(Person, Agent), Axiom.DifferentIndividuals(alice, marco))
+      ),
+      List(
+        Axiom.DifferentIndividuals(alice, marco) ->
+          "asserting e/alice ≠ e/marco is outside OWL 2 EL"
+      )
+    )
+
+  test("subproperty transitivity derives the schema edge itself"):
+    val closure = closureOf(
+      Axiom.SubPropertyOf(spouseOf, partnerOf),
+      Axiom.SubPropertyOf(partnerOf, knows)
+    )
+    assert(closure.contains(Axiom.SubPropertyOf(spouseOf, knows)))
