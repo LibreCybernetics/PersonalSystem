@@ -63,12 +63,20 @@ jobs:
       # alive or uncovered fails the build.
       - name: Require a 100% mutation score
         run: >-
-          nix shell nixpkgs#jq --command jq -e -r
-          '[.files[].mutants[] | select(.status == "Survived" or .status == "NoCoverage")] as $alive
-           | if ($alive | length) == 0 then "all mutants killed"
-             else ($alive | map("\(.mutatorName) -> \(.replacement)") | join("\n")), halt_error(1)
-             end'
-          "$(ls -1dt modules/${{ matrix.module }}/target/stryker4s-report/*/report.json | head -1)"
+          report="$(ls -1dt modules/${{ matrix.module }}/target/stryker4s-report/*/report.json | head -1)";
+          alive="$(nix shell nixpkgs#jq --command jq -r
+          '[.files[].mutants[] | select(.status == "Survived" or .status == "NoCoverage")] | length'
+          "$report")";
+          if [ "$alive" -eq 0 ]; then
+            echo "all mutants killed";
+          else
+            nix shell nixpkgs#jq --command jq -r
+            '.files[].mutants[]
+             | select(.status == "Survived" or .status == "NoCoverage")
+             | "\(.mutatorName) -> \(.replacement)"'
+            "$report";
+            exit 1;
+          fi
 
       - name: Upload mutation report
         if: always()
