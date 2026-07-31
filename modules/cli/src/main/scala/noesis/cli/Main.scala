@@ -1,5 +1,6 @@
 package noesis.cli
 
+import java.time.ZoneId
 import java.util.Locale
 
 import cats.data.{NonEmptyList, Validated}
@@ -66,7 +67,7 @@ enum ContactCommand:
       kind: String,
       id: Option[String],
       description: Option[String],
-      anniversary: Option[PartialDate]
+      anniversary: Option[Literal]
   )
   case NoteAdd(
       contact: String,
@@ -90,7 +91,7 @@ enum ContactCommand:
   )
   case ReminderAdd(
       contact: String,
-      due: PartialDate,
+      due: Literal,
       occasion: String,
       id: Option[String],
       recurrence: Option[String]
@@ -162,13 +163,27 @@ object Main
   private given Argument[Sensitivity] = Argument.from("public|internal|personal|sensitive"): raw =>
     Sensitivity.parse(raw).fold(err => Validated.invalidNel(err), Validated.valid)
 
-  private given Argument[PartialDate] = Argument.from("date"): raw =>
+  // `yyyy[-mm[-dd]]` rather than `date`: a boundary is a located date, and the metavar is where the
+  // owner finds that out. An undated boundary is the flag's absence, not a word for "unknown".
+  private given Argument[PartialDate] = Argument.from("yyyy[-mm[-dd]]"): raw =>
     PartialDate.parse(raw).fold(err => Validated.invalidNel(err), Validated.valid)
 
   private given Argument[QueueMode] = Argument.from("retention|elucidation|mixed"): raw =>
     QueueMode.values
       .find(_.toString.equalsIgnoreCase(raw))
       .fold(Validated.invalidNel(s"unknown queue mode: $raw"))(Validated.valid)
+
+  /** An IANA zone name, resolved against the JVM's bundled tzdata.
+    *
+    * The same string can be valid on one machine and not another, because tzdata ships with the
+    * runtime and changes independently of any release — the shape of deviation D5, where language
+    * subtag *validity* was left to a registry for the same reason. Nothing is stored, so an
+    * unresolvable name costs a message rather than a bad journal line.
+    */
+  private given Argument[ZoneId] = Argument.from("area/location"): raw =>
+    Either
+      .catchNonFatal(ZoneId.of(raw))
+      .fold(_ => Validated.invalidNel(s"unknown time zone: $raw"), Validated.valid)
 
   private given Argument[java.time.LocalDate] = Argument.from("yyyy-mm-dd"): raw =>
     Either
@@ -184,6 +199,38 @@ object Main
     .option[String]("root", "workspace directory (default ~/.noesis)")
     .map(Path(_))
     .withDefault(Workspace.defaultRoot)
+
+  /** When a reminder falls due: a located date, or a recurring day for a yearly one.
+    *
+    * Both are ordinary answers — "call the bank on 2026-09-01" and "their anniversary is 05-12" —
+    * and since the two are different types, the option accepts either and stores whichever was
+    * meant rather than making the owner pick a spelling.
+    */
+  private val dueOpt: Opts[Literal] = calendarOpt("due", "due date (yyyy-mm-dd) or recurring day (mm-dd)")
+
+  /** A relationship anniversary, which is a recurring day far more often than a dated one. */
+  private val anniversaryOpt: Opts[Literal] =
+    calendarOpt("anniversary", "relationship anniversary (yyyy-mm-dd or mm-dd)")
+
+  private def calendarOpt(name: String, help: String): Opts[Literal] =
+    Opts
+      .option[String](name, help)
+      .mapValidated: raw =>
+        Literal
+          .dateOrAnniversary(raw)
+          .fold(Validated.invalidNel(s"not a date or a recurring day: $raw"))(Validated.valid)
+
+  /** The zone timestamps are *shown* in (SPEC §3.2).
+    *
+    * Storage stays UTC: `seq` orders the journal and belief decay measures elapsed time, so neither
+    * has a zone to be wrong about. A displayed instant does — an entry captured last night reads as
+    * today under UTC for anyone west of it — and that is the whole of the problem here, so the zone
+    * is a presentation setting rather than journal data. Per-entry zones wait for §7.4's agenda,
+    * where *which local day* starts to decide behaviour.
+    */
+  private val zoneOpt: Opts[ZoneId] = Opts
+    .option[ZoneId]("zone", "time zone for displayed timestamps (default: the system zone)")
+    .withDefault(ZoneId.systemDefault())
 
   // ── Subcommands ───────────────────────────────────────────────────────────
 
@@ -368,7 +415,7 @@ object Main
         Opts.option[String]("kind", "relationship kind"),
         Opts.option[String]("id", "relationship record handle").orNone,
         Opts.option[String]("description", "self-described relationship text").orNone,
-        Opts.option[PartialDate]("anniversary", "relationship anniversary").orNone
+        anniversaryOpt.orNone
       ).mapN(ContactCommand.RelationshipAdd.apply)
 
   private val contactNoteAdd = Opts.subcommand("note-add", "add a contact note"):
@@ -400,7 +447,7 @@ object Main
   private val contactReminderAdd = Opts.subcommand("reminder-add", "add a one-time reminder"):
     (
       Opts.argument[String]("contact"),
-      Opts.option[PartialDate]("due", "due date"),
+      dueOpt,
       Opts.option[String]("occasion", "occasion or prompt"),
       Opts.option[String]("id", "reminder record handle").orNone,
       Opts.option[String]("recurrence", "recurrence description").orNone
@@ -467,6 +514,7 @@ object Main
   def main: Opts[IO[ExitCode]] =
     (
       rootOpt,
+      zoneOpt,
       init orElse assertCmd orElse retract orElse closeState orElse supersede orElse
         show orElse query orElse entails orElse explain orElse check orElse journal orElse
         queue orElse answer orElse items orElse disclose orElse loans orElse exportCmd orElse asOf
@@ -475,10 +523,10 @@ object Main
 
   // ── Execution ─────────────────────────────────────────────────────────────
 
-  private def run(root: Path, command: Command): IO[ExitCode] =
+  private def run(root: Path, zone: ZoneId, command: Command): IO[ExitCode] =
     command match
       case Command.Archive(archiveCommand) => runArchive(root, archiveCommand)
-      case _ => Workspace.open(root).flatMap(execute(_, command))
+      case _ => Workspace.open(root).flatMap(execute(_, zone, command))
 
   private def runArchive(root: Path, command: ArchiveCommand): IO[ExitCode] =
     val (action, result) = command match
@@ -496,7 +544,7 @@ object Main
       )
       .as(ExitCode.Success)
 
-  private def execute(workspace: Workspace, command: Command): IO[ExitCode] =
+  private def execute(workspace: Workspace, zone: ZoneId, command: Command): IO[ExitCode] =
     val kb = workspace.kb
     val engine = workspace.engine
 
@@ -676,7 +724,9 @@ object Main
           entries <- kb.journal.stream.compile.toList
           shown = limit.fold(entries)(n => entries.takeRight(n))
           _ <- shown.traverse_ : entry =>
-            IO.println(f"${entry.seq}%5d  ${entry.at}  ${entry.operation.getClass.getSimpleName}")
+            IO.println(
+              f"${entry.seq}%5d  ${Timestamps.show(entry.at, zone)}  ${entry.operation.getClass.getSimpleName}"
+            )
         yield ExitCode.Success
 
       case Command.Queue(mode, limit) =>
@@ -984,7 +1034,7 @@ object Main
         val owner = Workspace.iri(contact)
         val record = id
           .map(Workspace.iri)
-          .getOrElse(PrmIds.child(owner, "reminder", s"${due.render}\u0000$occasion"))
+          .getOrElse(PrmIds.child(owner, "reminder", s"${due.lexical}\u0000$occasion"))
         commitStructured(
           workspace,
           PrmCapture.reminder(ReminderInput(record, owner, due, occasion, recurrence))

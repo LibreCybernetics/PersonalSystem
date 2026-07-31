@@ -259,6 +259,70 @@ class ModuleSuite extends CatsEffectSuite:
       decision <- base.disclosureOf(axiom, DisclosurePolicy.personal("agent"))
     yield assert(!decision.isDisclosed, "a health note was disclosable to an agent")
 
+  test("where an interaction happened is sensitive outright, and stays on the device"):
+    // Not an escalation like `healthNote`: place is `sensitive` from the start, so no per-provider
+    // grant can release it (SPEC §3.3, §12.11). One meeting place is a fact; places plus the dates
+    // §7 already records are a movement trace.
+    val lunch = Iri("noesis:e/lunch")
+    val cafe = Iri("noesis:e/cafe-jaguar")
+    val axiom = Axiom.ObjectAssertion(lunch, RelationshipsModule.location, cafe)
+    val record = AxiomRecord(axiom.id, axiom, AxiomAnnotations.empty, AxiomStatus.Active, 1L)
+
+    assertEquals(PolicyCascade.sensitivity(record, config.policies), Sensitivity.Sensitive)
+
+    for
+      base <- installed
+      // A record the PRM validator accepts: an interaction needs a participant, a date and a
+      // channel, so a bare class assertion would be rejected and the disclosure claim below would
+      // then hold over a fact that is not in the base at all.
+      committed <- base.commit(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.ClassAssertion(cafe, ResourcesModule.SpatialThing)),
+          Intent.Assert(Axiom.ClassAssertion(lunch, RelationshipsModule.Interaction)),
+          Intent.Assert(Axiom.ObjectAssertion(lunch, RelationshipsModule.participant, alice)),
+          Intent.Assert(
+            Axiom.DataAssertion(
+              lunch,
+              RelationshipsModule.occurredAt,
+              Literal.date(PartialDate.of(2026, 7, 30))
+            )
+          ),
+          Intent.Assert(
+            Axiom.DataAssertion(
+              lunch,
+              RelationshipsModule.interactionChannel,
+              Literal.string("in-person")
+            )
+          ),
+          Intent.Assert(axiom)
+        )
+      )
+      _ = committed.fold(r => fail(r.render), identity)
+      // The strongest grant the model has, so this is the fail-closed claim rather than a default.
+      decision <- base.disclosureOf(axiom, DisclosurePolicy("greedy", Sensitivity.Sensitive))
+    yield assert(!decision.isDisclosed, "a meeting place was disclosable")
+
+  test("a place is a vf:SpatialThing, which is a geo:SpatialThing"):
+    // The alignment is what makes the place model an import rather than an invention: `crm:` says
+    // that an interaction has a place, ValueFlows says what a place is, and Basic Geo says what it
+    // means to be located. Coordinates are data properties on it, and are sensitive.
+    val cafe = Iri("noesis:e/cafe-jaguar")
+    val coordinate =
+      Axiom.DataAssertion(cafe, ResourcesModule.Geo.lat, Literal.decimal(BigDecimal("19.4326")))
+    val record =
+      AxiomRecord(coordinate.id, coordinate, AxiomAnnotations.empty, AxiomStatus.Active, 1L)
+
+    assertEquals(PolicyCascade.sensitivity(record, config.policies), Sensitivity.Sensitive)
+
+    for
+      base <- installed
+      committed <- base.commit(
+        NonEmptyList.of(Intent.Assert(Axiom.ClassAssertion(cafe, ResourcesModule.SpatialThing)), Intent.Assert(coordinate))
+      )
+      _ = committed.fold(r => fail(r.render), identity)
+      entailed <- base.entails(Axiom.ClassAssertion(cafe, ResourcesModule.Geo.SpatialThing))
+    yield assert(entailed, "a vf:SpatialThing should classify as a geo:SpatialThing")
+
   test("contact data is below the suspend threshold, so it is stored but not quizzed"):
     val method = Iri("noesis:e/marco-phone")
     val axiom =
@@ -273,7 +337,7 @@ class ModuleSuite extends CatsEffectSuite:
 
   test("birthdays are auto-activated as learning items and verbalize readably"):
     val axiom =
-      Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
+      Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.anniversary(5, 12))
     assertEquals(Modules.itemPolicies(modules).policyFor(axiom), ItemPolicy.AutoActivate)
 
     for
@@ -307,7 +371,7 @@ class ModuleSuite extends CatsEffectSuite:
             Axiom.DataAssertion(
               lia,
               RelationshipsModule.birthday,
-              Literal.date(PartialDate.monthDay(5, 12))
+              Literal.anniversary(5, 12)
             )
           )
         ) ++ employmentIntents)
@@ -751,7 +815,7 @@ class ModuleSuite extends CatsEffectSuite:
             Axiom.DataAssertion(
               lia,
               RelationshipsModule.birthday,
-              Literal.date(PartialDate.monthDay(5, 12))
+              Literal.anniversary(5, 12)
             )
           )
         ) ++ phone.toList)
@@ -774,7 +838,7 @@ class ModuleSuite extends CatsEffectSuite:
       base <- installed
       engine <- engineFor(base)
       commit <- base.assert(
-        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
+        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.anniversary(5, 12))
       )
       result = commit.fold(r => fail(r.render), identity)
       items <- engine.handle(result.events)
@@ -794,7 +858,7 @@ class ModuleSuite extends CatsEffectSuite:
       engine <- engineFor(base)
       _ <- base.assert(Axiom.DataAssertion(lia, Vocab.label, Literal.string("Lía")))
       commit <- base.assert(
-        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
+        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.anniversary(5, 12))
       )
       result = commit.fold(r => fail(r.render), identity)
       items <- engine.handle(result.events)
@@ -828,7 +892,7 @@ class ModuleSuite extends CatsEffectSuite:
 
   test("retracting an axiom retires its learning items"):
     val axiom =
-      Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
+      Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.anniversary(5, 12))
     for
       base <- installed
       engine <- engineFor(base)

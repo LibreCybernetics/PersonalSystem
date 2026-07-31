@@ -115,11 +115,11 @@ object Foaf:
         else
           val methodIntents = methods.collect { case Right(found) => found.toList }.flatten
           val dates = data(graph, external, birthday).headOption
-            .flatMap(raw => PartialDate.parse(raw).toOption)
+            .flatMap(Literal.dateOrAnniversary)
             .toList
-            .map(date =>
+            .map(value =>
               Intent.Assert(
-                Axiom.DataAssertion(contact, RelationshipsModule.birthday, Literal.date(date)),
+                Axiom.DataAssertion(contact, RelationshipsModule.birthday, value),
                 imported
               )
             )
@@ -185,10 +185,12 @@ object Foaf:
       Triple(card.contact, Vocab.rdfType, Node.Ref(classIri)),
       Triple(card.contact, name, Node.Lit(Literal.string(card.displayName)))
     )
-    val birth = card.birthday.toList.map: date =>
-      val lexical = (date.month, date.day) match
-        case (Some(month), Some(day)) => f"$month%02d-$day%02d"
-        case _                       => date.render
+    val birth = card.birthday.toList.map: value =>
+      // FOAF's birthday is `mm-dd`, so a located date contributes its recurrence and anything else
+      // goes out as it is stored.
+      val lexical = value.asAnniversary
+        .map(day => f"${day.getMonthValue}%02d-${day.getDayOfMonth}%02d")
+        .getOrElse(value.lexical)
       Triple(card.contact, birthday, Node.Lit(Literal.string(lexical)))
     val contactData =
       if !options.includeContactData then Nil

@@ -41,7 +41,7 @@ noesis contact employment-add sarah --at molina --title Researcher
 noesis contact interaction-add sarah --with marco --on 2026-07-30 --channel in-person
 
 # Generic semantic capture remains available; prefixed names are vocabulary terms.
-noesis assert lia crm:birthday 05-12          # a yearless partial date
+noesis assert lia crm:birthday 05-12          # a recurring day: xsd:gMonthDay, no year invented
 noesis assert sarah crm:spouseOf marco
 noesis assert sarah crm:parentOf lia
 noesis assert marco crm:parentOf lia
@@ -87,7 +87,7 @@ overwrite an existing path.
 | Spec area | Status |
 |---|---|
 | §3.2 Journal & projections | Dedicated [`journal`](modules/journal/) module with checksummed, versioned, crash-recoverable commit frames, cross-process locking and fsync; state, current-graph, point-in-time and time-travel projections, all rebuilt from it |
-| §3.1 Representation | Dedicated [`logic`](modules/logic/) module with the RDFS core plus the OWL role constructs the vocabularies need — symmetry, transitivity, inverses, chains, disjointness, irreflexivity; content-derived stable axiom ids; partial dates |
+| §3.1 Representation | Dedicated [`logic`](modules/logic/) module with the RDFS core plus the OWL role constructs the vocabularies need — symmetry, transitivity, inverses, chains, disjointness, irreflexivity; content-derived stable axiom ids; located partial dates, with recurring days kept separate |
 | §3.3 Annotations & cascade | One cascade for sensitivity, utility, confidence and scope: owner override → term policy → module default → behavioral and temporal signals, with decay |
 | §3.3.1 Sensitivity | Four levels, per-scope `internal` grants, and the derived-fact rule `min over justifications (max over axioms)` |
 | §3.4 Reasoning | Dedicated [`reasoner`](modules/reasoner/) module with forward-chaining closure, **justification tracking**, explicit incomplete results when a configured cap is reached, minimal explanations, consistency checking that rejects a commit *with its justification*, EL profile warnings, and conjunctive graph-pattern queries |

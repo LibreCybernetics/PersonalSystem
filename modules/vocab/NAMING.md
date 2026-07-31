@@ -28,7 +28,7 @@ for items whose naming was never ours to control.
 | `core:`, `crm:`, `ll:`, `ref:`, `noesis:` | prescriptive | this project |
 | `vf:` | descriptive | ValueFlows |
 | `foaf:` | descriptive | FOAF Vocabulary Project |
-| `rdf:`, `rdfs:`, `xsd:`, `owl:` | descriptive | W3C |
+| `rdf:`, `rdfs:`, `xsd:`, `owl:`, `geo:` | descriptive | W3C |
 
 The distinction decides what a failing name *means*. A `crm:` term that breaks its rule is a bug to
 fix by renaming. A `vf:` term that breaks its rule is a mistyped import — the name upstream is
@@ -60,8 +60,19 @@ subset without minting local terms in that namespace. The canonical contact mode
 
 The four seams of the module contract: the ontology, the policy book, the item policy book and the
 templates. A term that reaches none of them is a Scala `val` and not a registered name — the suite
-cannot see it, and neither can the system. Sixteen such terms exist today, mostly SPEC §7.2's Name
-model; they become registered names when a module installs them.
+cannot see it, and neither can the system. Ten such terms exist today; they become registered names
+when a module installs them.
+
+## The part this register does not cover
+
+ISO/IEC 11179-5 governs *names*. It says nothing about definitions, and the terms registered here
+have none — no module carries a definition for any term it declares. Two standards govern that gap
+and agree with each other: ISO/IEC 11179-4:2004 §4.1 (a definition shall be singular, state what the
+concept is rather than only what it is not, be a descriptive phrase, use only common abbreviations,
+and embed no other definition) and ISO 704:2022 §6.4–§6.5 (writing intensional definitions, and the
+circular, inaccurate and negative definitions to avoid). Both are purchased and neither binds until
+`Module` grows a `definitions` seam. Until then a term here is named but not defined, and the
+Scaladoc beside its declaration is not a definition in either standard's sense.
 
 ## Normative reference
 

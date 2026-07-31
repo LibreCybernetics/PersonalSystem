@@ -54,6 +54,12 @@ object Namespaces:
   val owl = "http://www.w3.org/2002/07/owl#"
   val foaf = "http://xmlns.com/foaf/0.1/"
 
+  /** W3C Basic Geo (WGS84). Bound because ValueFlows' `vf:SpatialThing` extends `geo:SpatialThing`,
+    * so the place model of SPEC §7 reaches it through a vocabulary §8 already imports rather than
+    * through one Noesis invents.
+    */
+  val geo = "http://www.w3.org/2003/01/geo/wgs84_pos#"
+
   /** Noesis's own namespaces. `noesis:` is where minted entity IRIs live; the rest are the module
     * vocabularies of SPEC §5–§8.
     */
@@ -66,6 +72,7 @@ object Namespaces:
       "xsd" -> xsd,
       "owl" -> owl,
       "foaf" -> foaf,
+      "geo" -> geo,
       "noesis" -> base,
       "core" -> s"${base}ns/core#",
       "crm" -> s"${base}ns/crm#",

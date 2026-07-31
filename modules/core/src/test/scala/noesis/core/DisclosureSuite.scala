@@ -38,7 +38,7 @@ class DisclosureSuite extends FunSuite:
     val book = PolicyBook.empty
       .withProperty(birthday, TermPolicy(sensitivity = Some(Sensitivity.Public)))
       .withModule(ModuleDefaults("crm", Sensitivity.Personal))
-    val axiom = Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
+    val axiom = Axiom.DataAssertion(lia, birthday, Literal.anniversary(5, 12))
 
     val overridden = record(axiom, at(Sensitivity.Sensitive))
     assertEquals(PolicyCascade.sensitivity(overridden, book), Sensitivity.Sensitive)
@@ -94,7 +94,7 @@ class DisclosureSuite extends FunSuite:
       .withProperty(birthday, TermPolicy.utility(0.9))
       .withModule(ModuleDefaults("vf", utilityWeight = 0.2))
 
-    val birthdayAxiom = Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
+    val birthdayAxiom = Axiom.DataAssertion(lia, birthday, Literal.anniversary(5, 12))
     val ledgerAxiom = Axiom.DataAssertion(alice, Iri("vf:quantity"), Literal.decimal(BigDecimal(1)))
 
     assertEquals(PolicyCascade.recallUtility(record(birthdayAxiom, AxiomAnnotations.empty), book), 0.9)
@@ -128,7 +128,7 @@ class DisclosureSuite extends FunSuite:
     )
 
   test("an upcoming occasion boosts utility, and the boost decays without reinforcement"):
-    val axiom = Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
+    val axiom = Axiom.DataAssertion(lia, birthday, Literal.anniversary(5, 12))
     val rec = record(axiom, AxiomAnnotations.empty)
 
     val fresh = PolicyCascade.recallUtility(

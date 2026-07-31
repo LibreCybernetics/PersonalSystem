@@ -68,7 +68,7 @@ final case class ContactCard(
     displayName: String,
     structuredName: Option[StructuredNameView],
     organization: Boolean,
-    birthday: Option[PartialDate],
+    birthday: Option[Literal],
     methods: List[ContactMethodView],
     employments: List[EmploymentView],
     recentInteractions: List[InteractionView],
@@ -87,7 +87,7 @@ final case class ReminderDue(
     reminder: Iri,
     contact: Iri,
     occasion: String,
-    due: PartialDate
+    due: Literal
 )
 
 final case class OccasionDue(
@@ -198,7 +198,7 @@ object Prm:
               dataOne(triples, interaction, RelationshipsModule.interactionDirection),
               dataOne(triples, interaction, RelationshipsModule.interactionSummary)
             )
-      .sortBy(_.occurred.lowerBound.map(_.toEpochDay).getOrElse(Long.MinValue))
+      .sortBy(_.occurred.lowerBound.toEpochDay)
       .reverse
 
   def dueFollowUps(state: KbState, today: LocalDate): List[FollowUpDue] =
@@ -217,7 +217,7 @@ object Prm:
           val channel = dataOne(triples, plan, RelationshipsModule.qualifyingChannel)
           val latest = interactionsFor(triples, contact)
             .filter(interaction => channel.forall(_ == interaction.channel))
-            .flatMap(_.occurred.lowerBound)
+            .map(_.occurred.lowerBound)
             .maxOption
           val due = latest.fold(today)(_.plusDays(cadence.toLong))
           FollowUpDue(plan, contact, latest, due, !due.isAfter(today))
@@ -228,22 +228,30 @@ object Prm:
     instances(triples, RelationshipsModule.Reminder).flatMap: reminder =>
       for
         contact <- objectOne(triples, reminder, RelationshipsModule.reminderAbout)
-        due <- dataLiteral(triples, reminder, RelationshipsModule.due).flatMap(_.asDate)
+        due <- dataLiteral(triples, reminder, RelationshipsModule.due)
         occasion <- dataOne(triples, reminder, RelationshipsModule.occasion)
       yield ReminderDue(reminder, contact, occasion, due)
 
   def remindersDue(state: KbState, today: LocalDate): List[ReminderDue] =
-    val partialToday = PartialDate.from(today)
-    reminders(state).filter: reminder =>
-      reminder.due.lowerBound.exists(!_.isAfter(today)) ||
-        reminder.due.sameMonthDay(partialToday)
+    reminders(state).filter(reminder => fallsBy(reminder.due, today))
+
+  /** Has this due value arrived by `today`?
+    *
+    * Two readings, because a reminder's due value is either a date or a recurrence: a located date
+    * has arrived once it is not in the future, and a recurring day arrives on the day it names, in
+    * whatever year today is. The second reading is what the yearless case meant before the two were
+    * separate types.
+    */
+  private[vocab] def fallsBy(due: Literal, today: LocalDate): Boolean =
+    due.asDate.exists(!_.lowerBound.isAfter(today)) ||
+      due.asAnniversary.exists(_.atYear(today.getYear) == today)
 
   def occasions(state: KbState, today: LocalDate): List[OccasionDue] =
     val triples = Projections.current(state).triples
     val birthdays = instances(triples, RelationshipsModule.Person).flatMap: person =>
       dataLiteral(triples, person, RelationshipsModule.birthday)
-        .flatMap(_.asDate)
-        .flatMap(nextOccurrence(_, today))
+        .flatMap(_.asAnniversary)
+        .map(nextOccurrence(_, today))
         .map(date =>
           OccasionDue(
             PrmIds.child(person, "occasion", "birthday"),
@@ -258,8 +266,8 @@ object Prm:
       )
       .flatMap: relationship =>
         dataLiteral(triples, relationship, RelationshipsModule.anniversary)
-          .flatMap(_.asDate)
-          .flatMap(nextOccurrence(_, today))
+          .flatMap(_.asAnniversary)
+          .map(nextOccurrence(_, today))
           .toList
           .flatMap: date =>
             objectValues(
@@ -355,18 +363,29 @@ object Prm:
       case "phone" | "sms" => normalizePhone(value)
       case _ => value.trim
 
-  private[vocab] def nextOccurrence(value: PartialDate, today: LocalDate): Option[LocalDate] =
-    for
-      month <- value.month
-      day <- value.day
-    yield
-      val thisYear = java.time.MonthDay.of(month, day).atYear(today.getYear)
-      if thisYear.isBefore(today) then
-        java.time.MonthDay.of(month, day).atYear(today.getYear + 1)
-      else thisYear
+  /** The next time a recurring day comes round, today included.
+    *
+    * Takes a `MonthDay` rather than a date because that is what an occasion *is*: the recurrence,
+    * not the year it started in. A birthday reaches this either way — `Literal.asAnniversary`
+    * answers for a `gMonthDay` and for a located date alike — and the result is total, where the
+    * old signature had to return `Option` for values that were never occasions at all.
+    *
+    * 29 February resolves to 28 February in a common year, which is `MonthDay.atYear`'s behaviour
+    * and the conventional reading of the occasion.
+    */
+  private[vocab] def nextOccurrence(value: java.time.MonthDay, today: LocalDate): LocalDate =
+    val thisYear = value.atYear(today.getYear)
+    if thisYear.isBefore(today) then value.atYear(today.getYear + 1) else thisYear
 
-  private def birthday(triples: Set[Triple], contact: Iri): Option[PartialDate] =
-    dataLiteral(triples, contact, RelationshipsModule.birthday).flatMap(_.asDate)
+  /** The birthday as stored, rather than as a located date.
+    *
+    * A birthday is a located date when the year is known and a recurring day when it is not, and
+    * both are ordinary answers. Reading it as a `PartialDate` would silently drop every yearless
+    * one — which is the common case — so the card carries the literal and each consumer asks it for
+    * what it needs.
+    */
+  private def birthday(triples: Set[Triple], contact: Iri): Option[Literal] =
+    dataLiteral(triples, contact, RelationshipsModule.birthday)
 
   private[vocab] def structuredName(
       triples: Set[Triple],

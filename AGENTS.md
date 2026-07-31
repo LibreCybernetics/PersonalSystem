@@ -74,8 +74,12 @@ These cost real time. Check here before debugging from scratch.
 - **Range declarations interact with disjointness.** `crm`'s social properties range over `Agent`,
   not `Person`, because Person and Organization are disjoint in core and a narrower range would make
   "I know this company" an inconsistency rather than a fact.
-- **decline reads a leading `--` as an option**, so the canonical partial date `--05-12` is
+- **decline reads a leading `--` as an option**, so the canonical `xsd:gMonthDay` form `--05-12` is
   unparseable as an argument. `Literal.parse` accepts bare `MM-DD` for this reason; keep that.
+- **A yearless date is not a date.** `PartialDate` holds only located dates (`2026`, `2026-05`,
+  `2026-05-12`); a recurring day such as a birthday without a year is `java.time.MonthDay` with
+  `xsd:gMonthDay`, built by `Literal.anniversary`. Reach for `Literal.asAnniversary` when matching
+  occasions — it answers for both, which is the point of the split.
 - **JVM argument decoding uses the platform locale.** Under a C locale, `Lía` is mangled *before it
   is stored*. The launcher sets `LC_ALL` and `sun.jnu.encoding`; keep both.
 - **A `final case class` cannot be anonymously subclassed.** `DisclosurePolicy` gained a `local` flag
@@ -93,6 +97,14 @@ These cost real time. Check here before debugging from scratch.
 ## Adding things
 
 **A vocabulary module:** implement `Module` in `modules/vocab` and add it to `Modules.all`.
+
+**A namespace:** bind it in `Namespaces.default`, then add its naming convention to
+`modules/conformance/src/test/resources/mdr/naming.json` — `NamingConformanceSuite` fails on a bound
+namespace with no documented convention, which is the point. An imported vocabulary's convention is
+*descriptive*: record the names as published, including the ones that break your house style
+(`geo:lat_long` has an underscore), because upstream is correct by definition and a rule that
+forbade it would fail the import rather than the typo. Never coin a term in someone else's
+namespace; put the property that uses their class in yours.
 
 **An inference rule:** follow the monotonicity and provenance requirements in
 [DESIGN.md](DESIGN.md), implement `Rule` in `reasoner` or a vocabulary module, combine premise

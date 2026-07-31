@@ -107,10 +107,10 @@ object PrmAgenda extends AgendaProducer:
     (followUps ++ reminders ++ occasions)
       .sortBy(entry => (entry.due.toEpochDay, entry.subject.value))
 
-  private def agendaDate(value: PartialDate, today: LocalDate): Option[LocalDate] =
-    value.lowerBound.orElse:
-      (value.month, value.day) match
-        case (Some(month), Some(day)) =>
-          val thisYear = LocalDate.of(today.getYear, month, day)
-          Some(if thisYear.isBefore(today) then thisYear.plusYears(1) else thisYear)
-        case _ => None
+  /** The day an agenda entry lands on: a located date is its own answer, and a recurring day is the
+    * next time it comes round. `None` only when the value is neither.
+    */
+  private def agendaDate(value: Literal, today: LocalDate): Option[LocalDate] =
+    value.asDate
+      .map(_.lowerBound)
+      .orElse(value.asAnniversary.map(Prm.nextOccurrence(_, today)))

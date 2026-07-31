@@ -29,8 +29,12 @@ DL is the system's ceiling, not a claim that this algebra presently implements a
   and unknown datatypes round-trippable. `Datatypes` supplies the lexical space and canonical
   mapping for each datatype minted; capture canonicalizes numerals so that one fact typed twice does
   not become two axioms.
-- Partial dates distinguish absent components from invented values, and carry whichever XSD date
-  datatype their known components determine. Two shapes have no XSD counterpart (deviation D1).
+- Partial dates distinguish absent components from invented values: `2026`, `2026-05` and
+  `2026-05-12` are one type, always located in time, and each carries the XSD date datatype its
+  precision determines. A value with no year is not an imprecise date but a recurrence — "12 May"
+  names a day in every year — so it is `java.time.MonthDay` with `xsd:gMonthDay`, and a located date
+  yields the recurrence it is an instance of. Keeping the two apart is what makes every date value's
+  datatype an XSD one; Noesis mints none of its own.
 
 ## 2.1 Profile checking
 
@@ -96,7 +100,7 @@ a completeness claim.
 | [RFC 3987](https://www.rfc-editor.org/rfc/rfc3987) / [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986) — IRI, URI | `Iri.parse`, and the form every stored identifier takes | Scheme syntax and excluded characters |
 | [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562) — UUID | `Iri.fresh`, `FluentId.fresh` | Version 4 only. Obsoletes RFC 4122 |
 | [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) §3.3 | the shape of `Literal` | Literals, language-tagged strings, and IRIs as terms. No blank nodes (D6). A lexical form is not checked for being a sequence of Unicode scalar values (D10) |
-| [XSD 1.1 Part 2](https://www.w3.org/TR/xmlschema11-2/) §3.3 | `Datatypes` lexical spaces and canonical mappings | The datatypes Noesis mints (D1, D2) |
+| [XSD 1.1 Part 2](https://www.w3.org/TR/xmlschema11-2/) §3.3 | `Datatypes` lexical spaces and canonical mappings | The datatypes Noesis writes. Lexical spaces include the optional timezone; the date *value* type does not read one (D11), and years stay inside 0001–9999 (D2) |
 | [BCP 47](https://www.rfc-editor.org/info/bcp47) — RFC 5646 §2.1 | `LanguageTag` | Well-formedness of `langtag` and `privateuse` (D4, D5) |
 | [OWL 2 Profiles](https://www.w3.org/TR/owl2-profiles/) §4 | `Profile` | EL membership of the implemented axiom cases |
 | ISO/IEC 11179-5:2015 §2.2.2, §7, §9.2–§9.7 — naming principles (purchased) | the names `Vocab`, `CoreDatatype` and `Namespaces` declare, and the shape `Iri.fresh` mints | The documented convention per namespace; the rules themselves are in `modules/vocab/NAMING.md` and its corpus |
@@ -107,6 +111,7 @@ a completeness claim.
 - [OWL 2 Manchester Syntax](https://www.w3.org/TR/owl2-manchester-syntax/) — the shape `Axiom.manchester` renders towards. A W3C Note, and the rendering is approximate; not conformance-tested.
 - [OWL 2 Mapping to RDF Graphs](https://www.w3.org/TR/owl2-mapping-to-rdf/) — what `Triples` would have to implement to be a serialization rather than a query view (D8).
 - [RDF 1.2 Concepts](https://www.w3.org/TR/rdf12-concepts/) — Candidate Recommendation as of April 2026. Where triple terms land, and therefore the eventual standard footing for the RDF-star axiom identity of root SPEC §3.1. Tracked, not adopted.
+- [EDTF](https://www.loc.gov/standards/datetime/) / ISO 8601-2:2019 ⊘ — the notation `PartialDate` should be using. EDTF is maintained by the Library of Congress, freely published, and included in ISO 8601-2 as a profile, so it is the retrievable form of that standard. Its Level 1–2 unspecified-digit syntax covers all eight shapes `PartialDate` can hold with one lexical form, including the two that have no XSD datatype. Not adopted: the migration rewrites every stored date and therefore every `AxiomId` that mentions one. The mapping, and that cost, are recorded beside D1 and D2 in `modules/conformance/DEVIATIONS.md`.
 - [ISO/IEC 24707:2018](https://standards.iso.org/ittf/PubliclyAvailableStandards/) — Common Logic. The ISO framework for a family of logic-based languages, and the standards-body alternative to the path §1 takes. Not adopted: Noesis's axiom language is an OWL 2 subset with a decidable profile as its ceiling, while CL is first-order and undecidable, so a CL dialect would describe the language we deliberately did not build. Relevant again only if interchange with a CL-based system is ever wanted.
 - [ISO/IEC 11404:2007](https://standards.iso.org/ittf/PubliclyAvailableStandards/) — General-Purpose Datatypes. The ISO datatype vocabulary, not used: RDF literals are typed by XSD 1.1 Part 2, and a second datatype system would have to be mapped onto the first at every boundary.
 - [UAX #15](https://www.unicode.org/reports/tr15/) — Unicode normalization. Not applied: `AxiomId` hashes the lexical form as given, so two normalizations of one name yield two identifiers. A candidate deviation once names are captured from more than one source.

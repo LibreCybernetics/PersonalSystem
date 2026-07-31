@@ -72,7 +72,7 @@ class ReasonerSuite extends FunSuite:
   test("domain applies to data assertions too"):
     val closure = closureOf(
       Axiom.PropertyDomain(birthday, Person),
-      Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
+      Axiom.DataAssertion(lia, birthday, Literal.anniversary(5, 12))
     )
     assert(closure.contains(Axiom.ClassAssertion(lia, Person)))
 

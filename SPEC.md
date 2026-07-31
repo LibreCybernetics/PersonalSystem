@@ -58,7 +58,7 @@ Clients: Web / Mobile / CLI UI          MCP agents (external LLM apps)
 ### 3.1 Representation
 
 - **Logic:** OWL 2 DL (SROIQ(D)) as the expressivity ceiling; the EL profile is preferred and the system warns when an axiom leaves it (EL keeps classification polynomial). TBox (concepts), RBox (role axioms incl. chains, e.g. `worksAt ∘ worksAt⁻ ⊑ colleagueOf`), ABox (individual assertions — where most personal facts live).
-- Roles are binary; events and n-ary relations are reified individuals. Language-tagged strings and full XSD datatypes (partial dates like `--05-12` permitted).
+- Roles are binary; events and n-ary relations are reified individuals. Language-tagged strings and full XSD datatypes. Dates may be imprecise (`2026`, `2026-05`) but are always located in time; a recurring day such as a yearless birthday is `xsd:gMonthDay` (`--05-12`) and is a *recurrence*, not a date — it has no bounds and cannot bound a fluent.
 - **Axiom identity:** every asserted axiom has a stable `axiomId` (RDF-star), so annotations, learning items, references, and justifications address axioms, not bare triples. Entity IRIs are opaque UUIDs — names are data (§7.2), so renames never break anything.
 
 The executable language boundary and its serialization compatibility rules are specified in
@@ -73,6 +73,8 @@ The **journal** is an append-only log of operations (`assert`, `retract`, `recla
 - *module state* — e.g., resource balances and custody folded from economic events (§8).
 
 This one principle yields time-travel queries, trivial backup (snapshot + journal), and audit for free. Module TBoxes live in namespaced graphs; free-text notes attach to entities/axioms (indexed for search and LLM context, but non-logical).
+
+**Time in the journal is a UTC instant, and the owner's zone is a display setting.** A monotonic sequence number orders replay, and belief decay (§4.2) measures elapsed time, so neither has a zone to be wrong about; the same is not true of a timestamp shown to a person, which is why the CLI renders in the zone given by `--zone` and defaults to the system's. That covers everything until §7.4's agenda makes *which local day* decide behaviour — the point at which a zone recorded per entry starts to earn its place. It would be an optional field, since journal entries are not hashed. Recorded event times are a different matter (§12.12).
 
 The executable operation protocol, replay ordering, and implemented durability guarantees are
 specified in [`modules/journal/SPEC.md`](modules/journal/SPEC.md).
@@ -98,7 +100,9 @@ Since there are no co-users, sensitivity governs only what crosses the boundary:
 | `public` | Findable on the public internet | Unrestricted |
 | `internal` | Learnable only inside a specific org / from specific people; not personal or PII. Carries `knowledgeScope` link(s) to that org/person | Disclosed only under a matching per-scope grant, e.g. `internal(org:acme)` |
 | `personal` | Non-sensitive personal info about oneself or others (birthdays, preferences, who works where) | Explicit per-provider / per-agent grant |
-| `sensitive` | Sensitive personal info (health, finances, legal, identity history, protected attributes) | Never leaves the device unencrypted; never sent to remote LLMs; never over MCP |
+| `sensitive` | Sensitive personal info (health, finances, legal, identity history, protected attributes, **place**) | Never leaves the device unencrypted; never sent to remote LLMs; never over MCP |
+
+Place is `sensitive` outright rather than escalating into it, and the asymmetry is deliberate: a health note is one fact about one person, while a place joined to the dates §7 already records is a movement trace, and the trace is worth more than any of its facts. The same reasoning applies to any zone recorded per journal entry, which is a coarse trace of the owner.
 
 Capture *proposes* a level (and scope) from provenance heuristics — public-URL reference → `public`; touches a person → at least `personal`; learned in a work interaction → `internal(that org)` — and the owner confirms in the commit UI. **Derived facts:** disclosable under a policy iff at least one justification is *fully* disclosable under it; effective level = `min over justifications (max over axioms)`, internal scopes unioning within the chosen justification. A conclusion derivable from public facts alone is public, whatever other derivation paths exist.
 
@@ -288,7 +292,7 @@ GET /ll/mastery/summary?targetLang · POST /ll/import · GET /ll/reader/gloss
 ```
 crm:Agent ⊒ crm:Person, crm:Organization   (⊑ core:Person, core:Organization)
 crm:NamedEntity ⊒ crm:Person, crm:Organization, crm:CompanionAnimal
-Data: birthday (partial dates ok) · namePronunciation · metOn/metAt
+Data: birthday (a date, or a yearless recurrence) · namePronunciation · metOn
 
 crm:ContactMethod
   subclasses: EmailAddress · TelephoneNumber · OnlineAccount · PostalAddress
@@ -309,6 +313,7 @@ crm:Employment:
 crm:Interaction  reified: participants · date · channel · note ·
                  kind from an extensible vocabulary ·
                  mentionedTopic → any KB entity      # ties talk to the whole KB
+                 location → vf:SpatialThing          # where; `sensitive`, never escalated into
 crm:LifeEvent · crm:Gift {to/from, occasion, status ∈ idea|planned|given|received}
 crm:Preference (likes/dislikes/allergies/topics-to-avoid)
 crm:ContactNote: about → Agent · noteBody · noteKind · recordedAt
@@ -385,6 +390,8 @@ POST /crm/import/foaf · GET /crm/people/{id}/foaf
 
 Adopts the [ValueFlows](https://valueflo.ws) ontology (REA: Resources, Events, Agents) directly — its distinctions map onto personal needs exactly: *ownership vs. custody* **is** lending/borrowing; *commitments and claims* **are** favors. One alignment axiom: `vf:Agent ≡ core:Agent`, so the Marco holding your drill is the same Marco in §7. The owner is `vf`'s perspective agent `core:me`.
 
+Place comes from here too. `vf:SpatialThing` — ValueFlows' own class, extending `geo:SpatialThing` from the [W3C Basic Geo](https://www.w3.org/2003/01/geo/wgs84_pos) vocabulary, with `geo:lat`/`long`/`alt` on it — is what §7's `location` ranges over, so a place is imported rather than invented and `crm:Place` never exists. Noesis coins no `vf:` term (the naming register in `modules/vocab/NAMING.md` makes that a rule): properties that *use* a place live in the namespace of whatever has one. ValueFlows' own `currentLocation` and `primaryLocation` attach to resources and agents and are imported when §8 needs them, not before. GeoSPARQL is the escape hatch if geometry is ever required; a named place with optional coordinates is what personal use actually needs.
+
 ```
 vf:EconomicResource   drill, book, bank account
   conformsTo → ResourceSpecification · primaryAccountable → Agent
@@ -458,9 +465,22 @@ this repository — the ISO/IEC 11179-5 naming rules are in
 `modules/conformance/src/test/resources/mdr/naming.json` in full — so that conformance can be
 verified by a reader who has not bought the standard, even though the requirement itself cannot be
 read without it. And the testing rule below is untouched: price was never the load-bearing
-constraint, evidence is. Two references remain uncited for reasons that are *not* about price:
-ISO 15944-4 (which is why §8 cites ValueFlows rather than REA directly) and IEEE 9274.1.1 (xAPI),
-where the open vocabulary is the better fit rather than merely the cheaper one.
+constraint, evidence is. ISO 15944-4 remains uncited for a reason that is *not* about price: §8
+cites ValueFlows because it is the better fit, not because it is cheaper.
+
+**Where a paywalled standard has a retrievable form.** Several do, and the form is often official
+rather than a summary. Checking for one is now part of considering a reference, because it decides
+whether a requirement can be quoted in a corpus and therefore whether the citation can ever become
+normative.
+
+| Standard | Retrievable form | Status |
+|---|---|---|
+| ISO 8601-2:2019 — date and time extensions | [EDTF](https://www.loc.gov/standards/datetime/) (Library of Congress), included in Part 2 as a profile — all EDTF features are supported by Part 2 | Complete specification. The mapping onto `PartialDate` is in `modules/conformance/DEVIATIONS.md` beside D1 and D2 |
+| ISO 25964-1/-2 — thesauri and interoperability | [NISO](https://www.niso.org/schemas/iso25964) publishes the data model, XML schema and the ISO 25964↔SKOS-XL↔MADS correspondence table; [SKOS-Thes](https://www.dublincore.org/specifications/skos-thes/) is the machine-readable form, maintained by DCMI | Model and mappings, not the prose requirements |
+| IEEE 9274.1.1-2023 — xAPI | [IEEE SA Open Source](https://opensource.ieee.org/xapi/xapi-base-standard-documentation) hosts the base standard documentation under Apache 2.0; its predecessor, [ADL xAPI 1.0.3](https://github.com/adlnet/xAPI-Spec), is open in full | Readable. The ADL text was read directly; the IEEE repository's licence is stated by IEEE SA, but its contents were not retrievable from here. §10.1 previously called this standard paywalled, which was wrong about the requirements even where it was right about the PDF |
+| ISO/IEC 25012 — data quality model | The characteristic set and its inherent / system-dependent split are published on the [ISO 25000 portal](https://iso25000.com/index.php/en/iso-25000-standards/iso-25012) | Structure and definitions, not the measurement guidance |
+| ISO 704:2022 — terminology work | Publisher preview: scope, contents and normative references | Structure only. The method itself — §6.4 writing intensional definitions, §6.5 circular, inaccurate and negative definitions — is not retrievable |
+| ISO 30401:2018 — knowledge management systems | Publisher preview: clause structure | Structure only, and see below |
 
 **Where the references live.** Each module `SPEC.md` carries its own `Normative references` and
 `Informative references` sections, scoped to what that module implements. The cross-cutting ones —
@@ -489,7 +509,11 @@ is not a recorded deviation is a bug, and must never become a skipped test.
 and are candidates for narrower normative use as matching subsystems and corpora are built:
 [SKOS](https://www.w3.org/TR/skos-reference/) and
 [SKOS-XL](https://www.w3.org/TR/skos-reference/skos-xl.html) for §7.1's extensible relationship
-vocabulary and §7.2's Name objects; [OWL-Time](https://www.w3.org/TR/owl-time/) for the fluent
+vocabulary and §7.2's Name objects — with
+[SKOS-Thes](https://www.dublincore.org/specifications/skos-thes/), the DCMI-maintained extension
+carrying the ISO 25964 constructs SKOS lacks, as the form to adopt if the vocabulary ever needs
+thesaurus structure, and ISO 25964-2 as the published account of the vocabulary-mapping problem
+§7.1 will meet; [OWL-Time](https://www.w3.org/TR/owl-time/) for the fluent
 boundaries of §3.6; [Web Annotation](https://www.w3.org/TR/annotation-model/) plus
 [Media Fragments](https://www.w3.org/TR/media-frags/) for the locators of §3.7, which §3.7 already
 gestures at; [OntoLex-Lemon](https://www.w3.org/2016/05/ontolex/) for §6, whose hub-and-spoke design
@@ -517,6 +541,15 @@ Resources) is the candidate for §9's reference metadata, and
 [ISO/IEC 2382-36](https://standards.iso.org/ittf/PubliclyAvailableStandards/) for §4's learning
 vocabulary.
 
+Two more arrived with the place and time-zone work of §3.2, §7.1 and §8.
+[W3C Basic Geo](https://www.w3.org/2003/01/geo/wgs84_pos) is *used* — `geo:SpatialThing` and the
+coordinate properties are bound and asserted — but it is a vocabulary rather than a specification
+with clauses to conform to, so it is cited informatively until something about it is testable.
+[RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) (IXDTF) is the notation for an instant carrying a
+named zone, and would become normative alongside the RFC 3339 citation in `noesis-journal` the day a
+zone is stored rather than displayed. The CLI renders RFC 3339 with an offset today, which is IXDTF's
+base form without a suffix.
+
 **The terminology and metadata-registry standards.** These are cited informatively below and
 purchased rather than free (⊘). They are the settled answers in areas where §5–§7 currently invent
 their own, and they are grouped here because they stand or fall together: each becomes normative
@@ -532,6 +565,32 @@ only when the vocabulary carries the artefact it governs.
 
 Paywalled references are given by designation, date and title rather than as links, per ISO/IEC
 Directives, Part 2 §10.3 — a catalogue URL is neither stable nor retrievable without a purchase.
+
+Three more, each informative and each with the gate that would change that:
+
+- **IEEE 9274.1.1-2023 (xAPI)** — §4's review log is already the shape this standard describes: an
+  immutable statement of actor, verb and object, identified by a UUID, distinguishing when an event
+  happened from when it was recorded, and correctable only by voiding rather than editing. Those are
+  §3.2's journal rules arrived at independently. It becomes a citation when the review log is
+  exported or an LRS is spoken to; until then there is nothing to test.
+- **ISO/IEC 25012 (data quality model)** — its inherent characteristics (accuracy, completeness,
+  consistency, credibility, currentness) name what §3.3's `truthConfidence` and §12.8's
+  classification-correctness risk currently describe in this project's own words, and its
+  system-dependent ones (traceability, confidentiality) name §10's auditability and §3.3's
+  disclosure. Vocabulary alignment, gated the same way ISO 1087 is.
+- **ISO 704:2022 (terminology work)** — the method behind two other citations: ISO/IEC 5394 §5.2.4
+  requires naming to follow it, and its §6.4–§6.5 (writing intensional definitions; circular,
+  inaccurate and negative definitions) are the same ground as ISO/IEC 11179-4 §4.1. When the
+  `definitions` seam lands, those two together are the rule set to test against, so this is worth
+  holding before that work starts rather than after.
+
+**Considered and rejected: ISO 30401:2018 (knowledge management systems).** It is a management-system
+standard in the ISO 9001 mould — clauses for organizational context, leadership, roles, planning,
+support, operation, evaluation and improvement — and its requirements are on an organization, not on
+software. §1.1 says Noesis has no human accounts or roles and exactly one principal. There is no
+subject in this system for its requirements to attach to, and adopting the vocabulary of knowledge
+*management* for a personal knowledge *base* would import an organizational frame the design
+deliberately does not have. Recorded here so the question is not reopened by its title alone.
 
 **On the vocabulary of this section.** The terms are used in the sense the standards bodies give
 them. [ISO/IEC Directives, Part 2](https://www.iso.org/directives-and-policies.html) §15.1 defines a
@@ -565,6 +624,7 @@ RDF quad store with RDF-star (Jena TDB2 / Oxigraph); ELK (EL) with HermiT/Openll
     not identity keys; imports need explainable candidate matching and explicit owner-confirmed
     merges without losing journal provenance. FOAF inverse-functional properties remain
     interoperability statements and never bypass that confirmation boundary.
+12. **Time zones and event time** — what remains after §3.2 settled recording time (UTC instant, displayed in the reader's zone), §3.3 settled place (`sensitive`), §7.1 gave `location` a range and §8 imported `vf:SpatialThing`. Three questions are open. *Per-entry zones*: an optional field on `JournalEntry`, cheap because entries are not hashed, but pointless until §7.4's agenda makes "which local day" decide behaviour — and itself a coarse trace of the owner, so it inherits §3.3's treatment. *Event time*: an offset in a captured `xsd:dateTime` is part of the fact, which is why the UTC normalization proposed as F4 in `modules/conformance/DEVIATIONS.md` must not ship before there is somewhere else for the zone to live; [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) is the notation for carrying one, extending the RFC 3339 `noesis-journal` already cites, though only upward — an RFC 3339 parser rejects the `[Area/Location]` suffix. *Geometry*: GeoSPARQL if a place ever needs a shape rather than a point. Calendar dates take no zone in any of this, ever (D11), and no place is ever captured automatically.
 
 ---
 

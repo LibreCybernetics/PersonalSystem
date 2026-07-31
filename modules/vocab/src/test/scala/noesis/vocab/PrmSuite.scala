@@ -172,7 +172,7 @@ class PrmSuite extends CatsEffectSuite:
     assertEquals(
       problems(
         PrmCapture.reminder(
-          ReminderInput(Iri("noesis:e/rem"), lia, PartialDate.monthDay(5, 12), "")
+          ReminderInput(Iri("noesis:e/rem"), lia, Literal.anniversary(5, 12), "")
         )
       ),
       List("reminder occasion must not be blank")
@@ -500,19 +500,19 @@ class PrmSuite extends CatsEffectSuite:
       _ <- commit(
         base,
         PrmCapture.reminder(
-          ReminderInput(past, lia, PartialDate.of(2026, 7, 1), "past")
+          ReminderInput(past, lia, Literal.date(PartialDate.of(2026, 7, 1)), "past")
         )
       )
       _ <- commit(
         base,
         PrmCapture.reminder(
-          ReminderInput(future, lia, PartialDate.of(2026, 9, 1), "future")
+          ReminderInput(future, lia, Literal.date(PartialDate.of(2026, 9, 1)), "future")
         )
       )
       _ <- commit(
         base,
         PrmCapture.reminder(
-          ReminderInput(annual, lia, PartialDate.monthDay(8, 15), "annual", Some("yearly"))
+          ReminderInput(annual, lia, Literal.anniversary(8, 15), "annual", Some("yearly"))
         )
       )
       state <- base.state
@@ -531,6 +531,15 @@ class PrmSuite extends CatsEffectSuite:
         Prm.remindersDue(state, LocalDate.of(2026, 8, 15)).map(_.reminder).toSet,
         Set(past, annual)
       )
+      // The recurring one is due on its day and on no other, while a dated one stays due once
+      // passed. A due value with no recurring day at all — a month, here — is neither.
+      assertEquals(
+        Prm.remindersDue(state, LocalDate.of(2026, 8, 14)).map(_.reminder).toSet,
+        Set(past)
+      )
+      assert(!Prm.fallsBy(Literal.date(PartialDate.Month(2026, 9)), LocalDate.of(2026, 8, 15)))
+      assert(Prm.fallsBy(Literal.date(PartialDate.Month(2026, 7)), LocalDate.of(2026, 8, 15)))
+      assert(!Prm.fallsBy(Literal.string("someday"), LocalDate.of(2026, 8, 15)))
 
   test("vCard imports typed fields atomically and round-trips its supported subset"):
     val document =
@@ -577,12 +586,12 @@ class PrmSuite extends CatsEffectSuite:
       ).fold(problems => fail(problems.mkString(", ")), identity)
     yield
       assertEquals(card.methods.map(_.kind).toSet, Set("email", "phone", "postal"))
-      assertEquals(card.birthday, Some(PartialDate.monthDay(5, 12)))
+      assertEquals(card.birthday, Some(Literal.anniversary(5, 12)))
       assertEquals(card.structuredName.flatMap(_.family), Some("García, Molina"))
       assertEquals(card.structuredName.flatMap(_.givenName), Some("Lía"))
       assertEquals(
         Prm.reminders(state).map(reminder => reminder.occasion -> reminder.due),
-        List("anniversary" -> PartialDate.monthDay(6, 18))
+        List("anniversary" -> Literal.anniversary(6, 18))
       )
       assertEquals(
         Prm.occasions(state, LocalDate.of(2026, 5, 1)).map(_.occasion),
@@ -625,8 +634,8 @@ class PrmSuite extends CatsEffectSuite:
           "Dr. Lía, García",
           List("García", "Lía", "María", "Dr.", "PhD"),
           List("Lili", "Li, Li"),
-          Some(PartialDate.of(1988, 5, 12)),
-          Some(PartialDate.monthDay(6, 18)),
+          Some(Literal.date(PartialDate.of(1988, 5, 12))),
+          Some(Literal.anniversary(6, 18)),
           List(VCardField("lia@example.com", Some("Primary"), Set("home", "work"))),
           List(VCardField("+52551234", None, Set("cell"))),
           List(VCardField("matrix:@lia:example.org", None, Set("home"))),
@@ -686,7 +695,7 @@ class PrmSuite extends CatsEffectSuite:
       "Lía García",
       Some(StructuredNameView(Some("García"), Some("Lía"), None, None, None)),
       organization = false,
-      Some(PartialDate.monthDay(5, 12)),
+      Some(Literal.anniversary(5, 12)),
       List(
         ContactMethodView(Iri("noesis:e/email"), "email", "lia@example.com", Some("home"), None, "active", None, None),
         ContactMethodView(Iri("noesis:e/phone"), "phone", "+52 55", None, None, "active", None, None),
@@ -835,7 +844,7 @@ class PrmSuite extends CatsEffectSuite:
       val card = Prm.contactCard(state, liaContact)
       assertEquals(card.methods.map(_.kind).toSet, Set("email", "phone", "social", "website"))
       assertEquals(card.methods.count(_.kind == "website"), 2)
-      assertEquals(card.birthday, Some(PartialDate.monthDay(5, 12)))
+      assertEquals(card.birthday, Some(Literal.anniversary(5, 12)))
       assert(state.activeAxioms.exists:
         case AxiomRecord(
               _,
@@ -891,7 +900,7 @@ class PrmSuite extends CatsEffectSuite:
       "Lía García",
       None,
       organization = false,
-      Some(PartialDate.monthDay(5, 12)),
+      Some(Literal.anniversary(5, 12)),
       List(
         ContactMethodView(Iri("noesis:e/email"), "email", "lia@example.com", None, None, "active", None, None),
         ContactMethodView(Iri("noesis:e/phone"), "phone", "+52 55 1234", None, None, "active", None, None),
@@ -996,7 +1005,7 @@ class PrmSuite extends CatsEffectSuite:
             relationship,
             List(lia, marco),
             "friendship",
-            anniversary = Some(PartialDate.monthDay(8, 2))
+            anniversary = Some(Literal.anniversary(8, 2))
           )
         )
       )
@@ -1042,7 +1051,7 @@ class PrmSuite extends CatsEffectSuite:
       )
       _ = assert(jobResult.isRight, jobResult)
       _ <- base.assert(
-        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
+        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.anniversary(5, 12))
       )
       _ <- base.assert(Axiom.ObjectAssertion(lia, RelationshipsModule.knows, marco))
       _ <- base.assert(Axiom.ObjectAssertion(lia, RelationshipsModule.knows, acme))
@@ -1149,26 +1158,26 @@ class PrmSuite extends CatsEffectSuite:
         Axiom.DataAssertion(
           lia,
           RelationshipsModule.birthday,
-          Literal.date(PartialDate.monthDay(7, 30))
+          Literal.anniversary(7, 30)
         )
       )
       _ <- commit(base, PrmCapture.followUp(FollowUpInput(plan, lia, 30)))
       _ <- commit(
         base,
         PrmCapture.reminder(
-          ReminderInput(dated, lia, PartialDate.of(2026, 7, 29), "call")
+          ReminderInput(dated, lia, Literal.date(PartialDate.of(2026, 7, 29)), "call")
         )
       )
       _ <- commit(
         base,
         PrmCapture.reminder(
-          ReminderInput(annualPast, lia, PartialDate.monthDay(7, 1), "past annual")
+          ReminderInput(annualPast, lia, Literal.anniversary(7, 1), "past annual")
         )
       )
       _ <- commit(
         base,
         PrmCapture.reminder(
-          ReminderInput(annualFuture, lia, PartialDate.monthDay(8, 1), "future annual")
+          ReminderInput(annualFuture, lia, Literal.anniversary(8, 1), "future annual")
         )
       )
       state <- base.state
@@ -1365,11 +1374,11 @@ class PrmSuite extends CatsEffectSuite:
         Axiom.DataAssertion(
           marco,
           RelationshipsModule.birthday,
-          Literal.date(PartialDate.monthDay(9, 1))
+          Literal.anniversary(9, 1)
         )
       )
       _ <- base.assert(
-        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.date(PartialDate.monthDay(5, 12)))
+        Axiom.DataAssertion(lia, RelationshipsModule.birthday, Literal.anniversary(5, 12))
       )
       activeJobResult <- base.commit(
         PrmCapture.employment(EmploymentInput(activeJob, lia, acme))
@@ -1391,7 +1400,7 @@ class PrmSuite extends CatsEffectSuite:
       _ <- commit(
         base,
         PrmCapture.reminder(
-          ReminderInput(annual, lia, PartialDate.monthDay(8, 1), "annual")
+          ReminderInput(annual, lia, Literal.anniversary(8, 1), "annual")
         )
       )
       state <- base.state

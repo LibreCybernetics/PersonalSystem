@@ -26,8 +26,8 @@ final case class VCardContact(
     formattedName: String,
     structuredName: List[String],
     nicknames: List[String],
-    birthday: Option[PartialDate],
-    anniversary: Option[PartialDate],
+    birthday: Option[Literal],
+    anniversary: Option[Literal],
     emails: List[VCardField],
     phones: List[VCardField],
     accounts: List[VCardField],
@@ -86,10 +86,8 @@ object VCard:
       )
     )
     base.flatMap: contactIntents =>
-      val birthday = card.birthday.toList.map(date =>
-        Intent.Assert(
-          Axiom.DataAssertion(contact, RelationshipsModule.birthday, Literal.date(date))
-        )
+      val birthday = card.birthday.toList.map(value =>
+        Intent.Assert(Axiom.DataAssertion(contact, RelationshipsModule.birthday, value))
       )
       val methods =
         card.emails.zipWithIndex.map: (field, index) =>
@@ -191,7 +189,7 @@ object VCard:
       val anniversaryReminders = card.anniversary.toList.map: date =>
         PrmCapture.reminder(
           ReminderInput(
-            PrmIds.child(contact, "reminder", s"anniversary\u0000${date.render}"),
+            PrmIds.child(contact, "reminder", s"anniversary\u0000${date.lexical}"),
             contact,
             date,
             "anniversary",
@@ -263,7 +261,7 @@ object VCard:
       List(name.family, name.givenName, name.additional, name.prefix, name.suffix)
         .map(_.getOrElse(""))
     properties += s"N:${structured.map(escape).mkString(";")}"
-    card.birthday.foreach(date => properties += s"BDAY:${date.render}")
+    card.birthday.foreach(value => properties += s"BDAY:${value.lexical}")
     card.methods.foreach: method =>
       val params = method.label.fold("")(value => s";LABEL=${escapeParam(value)}")
       method.kind match
@@ -326,8 +324,8 @@ object VCard:
             formattedName,
             rawValues(content, "N").headOption.map(splitEscaped(_, ';')).getOrElse(Nil),
             rawValues(content, "NICKNAME").flatMap(splitEscaped(_, ',')),
-            values(content, "BDAY").headOption.flatMap(PartialDate.parse(_).toOption),
-            values(content, "ANNIVERSARY").headOption.flatMap(PartialDate.parse(_).toOption),
+            values(content, "BDAY").headOption.flatMap(Literal.dateOrAnniversary),
+            values(content, "ANNIVERSARY").headOption.flatMap(Literal.dateOrAnniversary),
             fields(content, "EMAIL"),
             fields(content, "TEL"),
             fields(content, "IMPP"),

@@ -48,7 +48,7 @@ final case class KbState(
     fluents.values
       .filter(f => f.isOngoing && f.matches(subject, property, value))
       .toList
-      .sortBy(_.validFrom.flatMap(_.lowerBound).map(_.toEpochDay).getOrElse(Long.MinValue))
+      .sortBy(_.validFrom.map(_.lowerBound.toEpochDay).getOrElse(Long.MinValue))
       .reverse
 
   /** Closed fluents matching a subject/property — the fallback when no open state matches. */

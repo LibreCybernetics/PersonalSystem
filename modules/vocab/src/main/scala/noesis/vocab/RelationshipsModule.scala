@@ -236,7 +236,11 @@ object RelationshipsModule extends Module:
       domain(interactionKind, Interaction),
       domain(interactionChannel, Interaction),
       domain(interactionDirection, Interaction),
+      // Where an interaction happened. The range is ValueFlows' place class, so `crm:` says *that*
+      // something has a place and `vf:` says what a place is; declaring it also makes the CLI type
+      // the value as a reference rather than as a literal (see AGENTS.md).
       domain(location, Interaction),
+      range(location, ResourcesModule.SpatialThing),
       domain(mentionedTopic, Interaction),
       domain(interactionSummary, Interaction),
       range(about, Agent),
@@ -401,6 +405,10 @@ object RelationshipsModule extends Module:
     .withProperty(healthNote, TermPolicy(escalateTo = Some(Sensitivity.Sensitive)))
     .withProperty(gender, TermPolicy(escalateTo = Some(Sensitivity.Sensitive)))
     .withClass(LifeEvent, TermPolicy(escalateTo = Some(Sensitivity.Sensitive)))
+    // Place is `sensitive` outright rather than escalating, and that is the whole reason the place
+    // model waited (SPEC §12.12): one meeting place is a fact, but places plus the dates §7 already
+    // records are a movement trace, and no per-provider grant should be able to release one.
+    .withProperty(location, TermPolicy(sensitivity = Some(Sensitivity.Sensitive)))
 
   override val itemPolicies: ItemPolicyBook = ItemPolicyBook.empty
     // Reified record scaffolding is lookup structure, not memory material.
@@ -496,6 +504,7 @@ object RelationshipsModule extends Module:
     .withProperty(childOf, "{s} is a child of {o}")
     .withProperty(siblingOf, "{s} is a sibling of {o}")
     .withProperty(colleagueOf, "{s} is a colleague of {o}")
+    .withProperty(location, "{s} took place at {o}")
     .withProperty(chosenFamilyOf, "{s} is chosen family to {o}")
     .withProperty(reportsTo, "{s} reports to {o}")
     .withProperty(introducedBy, "{s} was introduced by {o}")

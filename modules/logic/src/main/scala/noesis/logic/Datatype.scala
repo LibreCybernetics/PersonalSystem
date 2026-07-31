@@ -19,14 +19,14 @@ object Rdf:
   /** The datatype of every language-tagged string (RDF 1.1 §3.3). */
   val langString: Iri = Iri("rdf:langString")
 
-/** Datatypes Noesis defines because XSD has no counterpart. */
-object CoreDatatype:
-  /** A date whose known components do not form any XSD date datatype: a year with a day but no
-    * month (`2026---12`), or a date with nothing known at all. XSD has seven date datatypes and
-    * none covers these two shapes, so rather than invent a lexical form for `xsd:date` that is not
-    * in its lexical space, Noesis names the gap. Recorded as a deviation.
-    */
-  val partialDate: Iri = Iri("core:partialDate")
+/** Noesis mints no datatype of its own.
+  *
+  * It used to: `core:partialDate` carried the two shapes the old `PartialDate` could hold and XSD
+  * has no type for — a year with a day but no month, and a date with nothing known at all. Both
+  * were artefacts of one type doing two jobs. Narrowing `PartialDate` to located dates and moving
+  * recurrences to `java.time.MonthDay` made every value's datatype an XSD one, which closed that
+  * deviation by making the shapes unrepresentable rather than by naming a gap.
+  */
 
 /** Lexical spaces and canonical mappings for the datatypes Noesis mints.
   *
@@ -110,28 +110,22 @@ object Datatypes:
     if fraction.forall(_ == '0') then head + suffix
     else s"$head.${fraction.reverse.dropWhile(_ == '0').reverse}$suffix"
 
-  /** The datatypes whose values are dates, however partially known. */
+  /** The datatypes whose values are dates of some kind.
+    *
+    * Wider than what Noesis *mints*: `gMonth` and `gDay` are here because an imported literal may
+    * carry one and RDF 1.1 §5 makes an unknown-to-us datatype the consuming application's problem,
+    * not a syntax error. `PartialDate.parse` will decline them, which is the honest answer — Noesis
+    * has no value for "some May" — and `isDate` still reports what the term is.
+    */
   val dates: Set[Iri] =
-    Set(
-      Xsd.date,
-      Xsd.gYear,
-      Xsd.gYearMonth,
-      Xsd.gMonthDay,
-      Xsd.gMonth,
-      Xsd.gDay,
-      CoreDatatype.partialDate
-    )
+    Set(Xsd.date, Xsd.gYear, Xsd.gYearMonth, Xsd.gMonthDay, Xsd.gMonth, Xsd.gDay)
 
   def isDate(datatype: Iri): Boolean = dates.contains(datatype)
 
-  /** Which datatype a [[PartialDate]] denotes, given which components it knows. */
-  def of(date: PartialDate): Iri = (date.year, date.month, date.day) match
-    case (Some(_), Some(_), Some(_)) => Xsd.date
-    case (Some(_), Some(_), None)    => Xsd.gYearMonth
-    case (Some(_), None, None)       => Xsd.gYear
-    case (None, Some(_), Some(_))    => Xsd.gMonthDay
-    case (None, Some(_), None)       => Xsd.gMonth
-    case (None, None, Some(_))       => Xsd.gDay
-    // A year with a day but no month, and a date with nothing known: no XSD datatype covers either.
-    case (Some(_), None, Some(_))    => CoreDatatype.partialDate
-    case (None, None, None)          => CoreDatatype.partialDate
+  /** Which XSD datatype a [[PartialDate]] denotes. Total, because every shape of the narrowed type
+    * has one — which is what closed deviation D1.
+    */
+  def of(date: PartialDate): Iri = date match
+    case PartialDate.Day(_, _, _) => Xsd.date
+    case PartialDate.Month(_, _)  => Xsd.gYearMonth
+    case PartialDate.Year(_)      => Xsd.gYear
