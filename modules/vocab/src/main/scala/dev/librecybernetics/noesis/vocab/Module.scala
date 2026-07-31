@@ -86,4 +86,5 @@ object Modules:
     modules.flatMap(_.agendaProducers)
 
   /** Every module the MVP ships. */
-  val all: List[Module] = List(CoreModule, RelationshipsModule, LanguageModule, ResourcesModule)
+  val all: List[Module] =
+    List(CoreModule, RelationshipsModule, LanguageModule, ResourcesModule, NotesModule)

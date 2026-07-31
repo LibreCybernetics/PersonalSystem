@@ -24,6 +24,14 @@ The journal is an append-only sequence of operations. Everything outside it is a
 projection. There is no update or delete operation; retraction and correction are themselves
 journaled facts about history.
 
+**Generations.** Pruning (`SPEC.md` §3.2.1) is not an exception to that contract, because it does
+not edit a journal — it reads one and writes another. A generation is immutable once written and is
+only ever appended to. A generation produced by pruning records, in its first entry, the digest of
+the generation it was derived from and what was dropped, so that a reader distinguishes complete
+history from a summary of it without having both in hand. Sequence numbers restart at one and are
+contiguous within a generation (§2); they carry no meaning across generations, and nothing may
+compare them across one.
+
 ## 2. Entry and commit ordering
 
 - `JournalEntry.seq` is the ordering authority and starts at one.

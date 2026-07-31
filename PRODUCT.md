@@ -275,16 +275,17 @@ different annotation and learning consequences and no stated rule for choosing.
 ### J11 — Writing things down
 
 *Intent:* have somewhere to put a thought that is not yet a fact.
-*Roles:* Capturer. *Outcomes:* 1, 3. *Status:* **not built** — specified in `SPEC.md` §8.5, planned for 0.2.
+*Roles:* Capturer. *Outcomes:* 1, 3. *Status:* **implemented** in 0.2 — `SPEC.md` §8.5.
 
 | # | Must already know | Command | Result | Friction |
 |---|---|---|---|---|
 | 1 | that there is a page for today | `noesis note today` | the dated page, created on first use | Low |
-| 2 | that `[[…]]` means an entity | `noesis note append 'met [[Lía García]] about local-first'` | a block; the link resolves against current names | Low |
-| 3 | that an unresolved link asks rather than guesses | — | clarification prompt, never a silent new entity | Low — §3.5.3 applied |
-| 4 | that editing is a round-trip, not a live file | `noesis note edit today` | `$EDITOR` opens; the saved buffer diffs back into block operations | Medium — F16 |
-| 5 | that every block keeps its history | `noesis note history <blockId>` | every revision, because block text is a fluent | Low |
-| 6 | nothing | `noesis as-of 2026-03-01` | the note as it stood, from machinery that already exists | Low |
+| 2 | that a thought worth keeping apart from the day gets its own note | `noesis note new 'Local-first software'` | a permanent note, or a literature note with `--literature` | Low |
+| 3 | that `[[…]]` means an entity | `noesis note append 'met [[Lía García]] about local-first'` | a block per paragraph; the links resolve against current names | Low |
+| 4 | that an unresolved link asks rather than guesses | — | clarification prompt, never a silent new entity | Low — §3.5.3 applied |
+| 5 | that editing is a round-trip, not a live file | `noesis note edit today` | `$EDITOR` opens; the saved buffer diffs back into block operations | Medium — F16 |
+| 6 | that every block keeps its history | `noesis note history <blockId>` | every revision, because block text is a fluent | Low |
+| 7 | nothing | `noesis as-of 2026-03-01` | the note as it stood, from machinery that already exists | Low |
 
 *Verdict (design):* the whole journey rests on blocks being fluents, so history, time travel and
 `state.changed` come from §3.6 rather than from anything new. Step 4 is the only real cost, and it
@@ -311,14 +312,15 @@ than a future one.
 ### J13 — Finding my way back
 
 *Intent:* find what I wrote, and everything I have ever written about someone.
-*Roles:* Curator, Learner. *Outcomes:* 3. *Status:* **not built** — planned for 0.2.
+*Roles:* Curator, Learner. *Outcomes:* 3. *Status:* **partial** in 0.2 — backlinks and search ship; tags do not.
 
 | # | Must already know | Command | Result | Friction |
 |---|---|---|---|---|
 | 1 | nothing | `noesis backlinks lia` | every block mentioning her — a closure query, not an index | Low |
 | 2 | nothing | `noesis search 'local-first'` | blocks, notes and quotes matching, by label and text | Low |
-| 3 | nothing | `noesis note show <id>` | the note as an outline, with block ids | Low |
-| 4 | graph-pattern syntax | `noesis query "?b note:mentions noesis:e/lia"` | the same answer as step 1, generalized | Medium — F1 |
+| 3 | nothing | `noesis note list` | every note, with its title and how many blocks it holds | Low |
+| 4 | nothing | `noesis note show <id>` | the note as an outline, with block ids | Low |
+| 5 | graph-pattern syntax | `noesis query "?b note:mentions noesis:e/lia"` | the same answer as step 1, generalized | Medium — F1 |
 
 *Verdict (design):* backlinks fall out of the reasoner because `[[links]]` are axioms. That is the
 argument for links being knowledge rather than markup — Obsidian maintains an index for this and
@@ -343,6 +345,25 @@ Noesis does not need one.
 library of other people's writing, and it costs exactly two things: F14 (re-reading means
 re-supplying) and F15 (comprehension questions cannot go stale). Both are recorded as accepted
 rather than discovered later.
+
+### J15 — Making the journal smaller without making it a lie
+
+*Intent:* drop history that answers no question, while keeping the history that does.
+*Roles:* Curator, Exiter. *Outcomes:* 3, 4. *Status:* **not built** — specified in `SPEC.md` §3.2.1, planned for 0.3.
+
+| # | Must already know | Command | Result | Friction |
+|---|---|---|---|---|
+| 1 | that history has a size, and where it went | `noesis journal size` | the journal's size broken down by what is generating it | Low |
+| 2 | that keeping history is per property, not global | `noesis prune --show-policy` | which properties keep history and which do not, with the default for each | Low |
+| 3 | that a prune is rehearsed first | `noesis prune --dry-run` | what would go, what is held back, and by which pointer | Low — the F5 pattern applied before it is needed |
+| 4 | that pruning writes a new generation | `noesis prune` | generation *n+1*, opening with a prune record; generation *n* untouched | Medium — F18 |
+| 5 | that the old generation is discarded deliberately | `noesis journal discard <generation>` | the bytes go, as a separate act | Low — the only step that actually loses anything |
+| 6 | that `as-of` is now approximate for pruned properties | `noesis as-of 2026-03-01` | the right words in today's arrangement, and a note saying so | Medium — F19 |
+
+*Verdict (design):* every step exists to keep two things apart that a size-driven feature naturally
+merges — making the log smaller, and making a fact never have existed. Steps 4 and 5 are separate
+commands for that reason alone, and step 6 tells the truth about what step 4 cost rather than
+rendering a past that never held.
 
 ---
 
@@ -703,7 +724,7 @@ And    a birthday due in the lead time is projected from the fact itself,
 As the Capturer, when I have a thought that is not yet an assertion, I want somewhere to write it,
 so that capture is never blocked on knowing how to formalize it.
 
-*Role:* Capturer · *Journey:* J11.1, J11.2 · *Spec:* §8.5.1 · *Status:* **not built**
+*Role:* Capturer · *Journey:* J11.1, J11.3 · *Spec:* §8.5.1 · *Status:* **implemented**
 
 ```
 Given  no page exists for today
@@ -719,7 +740,7 @@ And    it is a fluent, so the text can be superseded without losing the id
 As the Capturer, when I write `[[Lía García]]`, I want it to mean the entity, so that what I write
 joins the graph instead of sitting beside it.
 
-*Role:* Capturer · *Journey:* J11.2, J11.3 · *Spec:* §8.5.2 · *Status:* **not built**
+*Role:* Capturer · *Journey:* J11.3, J11.4 · *Spec:* §8.5.2 · *Status:* **implemented**
 
 ```
 Given  an entity whose current name is Lía García
@@ -735,7 +756,7 @@ And    a former name never resolves, because §7.2 forbids rendering it
 As the Capturer, when a block needs more than one line of thought, I want to edit it in `$EDITOR`,
 so that writing is not constrained by the shape of a command.
 
-*Role:* Capturer, Curator · *Journey:* J11.4 · *Spec:* §8.5.3 · *Status:* **not built**
+*Role:* Capturer, Curator · *Journey:* J11.5 · *Spec:* §8.5.3 · *Status:* **implemented**
 
 ```
 Given  a note with three blocks
@@ -752,7 +773,7 @@ And    facts and quotes pointing at those blocks still point at them
 As the Curator, when a note has changed, I want its history, so that "what did I think then" is
 answerable.
 
-*Role:* Curator · *Journey:* J11.5, J11.6 · *Spec:* §8.5.1, §3.6 · *Status:* **not built**
+*Role:* Curator · *Journey:* J11.6, J11.7 · *Spec:* §8.5.1, §3.6 · *Status:* **implemented**
 
 ```
 Given  a block edited three times
@@ -818,7 +839,7 @@ And    no remote provider is configurable in this release
 As the Curator, when I want what I know about a person, I want what I *wrote* about them too, so
 that notes and facts are one body of knowledge rather than two.
 
-*Role:* Curator, Learner · *Journey:* J13.1, J13.2 · *Spec:* §8.5.2 · *Status:* **not built**
+*Role:* Curator, Learner · *Journey:* J13.1, J13.2 · *Spec:* §8.5.2 · *Status:* **implemented**
 
 ```
 Given  three blocks mentioning Lía across two notes
@@ -910,6 +931,69 @@ When   noesis backlinks <id>
 Then   every note block and axiom deriving from it is listed
 ```
 
+### US-37 — Know what is generating the journal before deciding to prune
+
+As the Curator, when the journal has grown, I want to see what is generating it, so that pruning is
+a decision about a known cost rather than a reflex about a number.
+
+*Role:* Curator · *Journey:* J15.1, J15.2 · *Spec:* §3.2.1 · *Status:* **not built**
+
+```
+Given  a workspace whose notes have been edited many times
+When   noesis journal size
+Then   the total is broken down by property, with superseded states counted separately
+When   noesis prune --show-policy
+Then   every time-varying property is listed as keeping history or not, with the default shown
+And    note:text keeps history and note:order does not, per §3.2.1
+```
+
+### US-38 — Prune without ever editing a journal
+
+As the Curator, when I prune, I want a new generation rather than a rewritten log, so that the
+history I keep stays as verifiable as it was before.
+
+*Role:* Curator · *Journey:* J15.3, J15.4 · *Spec:* §3.2.1, `modules/journal/SPEC.md` §1 · *Status:* **not built**
+
+```
+Given  a workspace with superseded order states and a learning item citing one of them
+When   noesis prune --dry-run
+Then   the prunable states are listed, and the cited one is listed as held back with its pointer
+And    nothing is written
+When   noesis prune
+Then   a new generation is written whose first entry is a prune record
+And    the previous generation is unchanged and still replays
+And    every surviving axiom and fluent keeps the identifier it had
+```
+
+### US-39 — Be told when the past is approximate
+
+As the Curator, when I ask for a note as it stood and the answer is no longer exact, I want to be
+told, so that a pruned journal never quietly renders a past that never held.
+
+*Role:* Curator · *Journey:* J15.6 · *Spec:* §3.2.1 · *Status:* **not built**
+
+```
+Given  a generation in which note:order history was pruned
+When   noesis as-of 2026-03-01
+Then   the blocks show the wording they held on that date
+And    the output states that their arrangement is current, not historical
+```
+
+### US-40 — Discarding bytes is its own decision
+
+As the Exiter, when I want superseded history gone rather than merely unused, I want that to be a
+separate act, so that shrinking the journal can never be mistaken for erasing a fact.
+
+*Role:* Exiter · *Journey:* J15.5 · *Spec:* §3.2.1, §3.4 · *Status:* **not built**
+
+```
+Given  a workspace with a pruned generation and the generation it came from
+When   noesis journal discard <the source generation>
+Then   its bytes are removed and the prune record's digest of it remains
+When   the same is attempted for the current generation
+Then   it is refused, because that is retraction's job and not this command's
+```
+
 ---
 
 ## 6. Friction ledger
@@ -934,8 +1018,10 @@ Every friction identified above, with its root cause and status. **Open** means 
 | **F13** | No latency evidence for §10's budgets | J2, J3 | Nothing measures capture round-trip or review submit | **Accepted for now** — the budgets bind the LLM-backed capture path that does not exist yet. Revisit when it does |
 | **F14** | Re-extracting from a source means supplying the text again | J14.2 | §8.5.4 keeps no copy of the text | **Accepted** — the direct cost of the retention rule. The alternative is holding the copyrighted text the rule exists to avoid holding, and the digest at least makes "is this the same text?" answerable |
 | **F15** | Comprehension questions cannot go stale | J14.6 | §4.1 detects staleness from source axioms; an open comprehension question has only a reference | **Accepted** — regenerating requires the text, which is not kept. Recorded as a deliberate departure rather than left to be discovered when a question outlives its accuracy |
-| **F16** | Editing a note is a round-trip, not a live file | J11.4 | D1: blocks are journaled state, so a file cannot be the truth | **Accepted** — what buys per-block history, time travel and stable link targets. A read-only Markdown mirror keeps `grep` working |
+| **F16** | Editing a note is a round-trip, not a live file | J11.5 | D1: blocks are journaled state, so a file cannot be the truth | **Accepted** — what buys per-block history, time travel and stable link targets. A read-only Markdown mirror keeps `grep` working |
 | **F17** | Extraction volume is unbounded | J12.2, J14.3 | A model proposes as much as the text supports; §12.1's batch queue is the only control | **Open** — US-29. This is the one that decides whether the module is usable, and it cannot be judged until real text meets a real model |
+| **F18** | Pruning writes a whole new generation, so it needs room for two | J15.4 | §3.2.1 forbids editing a journal in place, and a generation is only immutable if it is never touched | **Accepted** — the alternative is compaction that rewrites the log, which makes the log's own history unverifiable. Disk is the cheapest thing this system spends |
+| **F19** | After a prune, `as-of` is approximate for the pruned properties | J15.6 | The states that answered the question are the ones removed | **Accepted** — the direct and only cost of pruning, which is why §3.2.1 makes the choice per property and why US-39 requires the output to say so rather than render silently |
 
 ---
 
@@ -973,21 +1059,15 @@ noesis undo
 noesis agenda
 noesis contact duplicates
 noesis contact merge
-noesis note today
-noesis note new
-noesis note append
-noesis note edit
-noesis note show
-noesis note list
-noesis note history
 noesis note extract
-noesis backlinks
-noesis search
 noesis reference add
 noesis reference show
 noesis reference list
 noesis reference quote-add
 noesis read
+noesis prune
+noesis journal size
+noesis journal discard
 ```
 
 ## 9. Product decisions
@@ -1028,3 +1108,23 @@ Dated, numbered, and appended — never rewritten. A decision that reverses an e
   quiz`, then the gateway, then extraction, then reading sessions. The reachability gate (§7) still
   applies: F7 blocks the reading journey, because "quiz me on what I read" is unbuildable while the
   review loop cannot ask a question.
+- **PD-07 (2026-07-31) — Superseded history is prunable, by generation and by property.**
+  `SPEC.md` §3.2.1 settles how an append-only log gets smaller without becoming unverifiable: a
+  prune reads one generation and writes the next, never edits one. Three consequences were chosen
+  rather than fallen into. *Per property, not per size* — the owner says `note:text` keeps every
+  draft and `note:order` keeps none, because a threshold cannot tell the difference between history
+  that answers a question and history that does not. *Pointers win over policy* — anything citing a
+  superseded state keeps it, since identifiers are content-derived and a dangling one is
+  unrepairable. *Pruning and forgetting stay separate commands* — retraction makes a fact stop
+  counting, discarding a generation makes bytes go away, and merging them would let a size feature
+  quietly become an erasure feature. The admitted cost is F19: `as-of` goes approximate for pruned
+  properties, and the output has to say so.
+- **PD-08 (2026-07-31) — Sibling order carries an integer part.** Measured, not assumed: the plain
+  fractional midpoint grows keys by about one character per five blocks, so a 200-block note reaches
+  40-character order keys and a 1000-block one reaches 200. Appending is the dominant operation on a
+  dated page, so it is the one that must not degrade. A length-prefixed integer part makes appending
+  and prepending constant-size and leaves growth only where it is unavoidable — repeated insertion
+  into one gap. PD-07's pruning does not substitute for this: pruning cleans up superseded order
+  states, while the length of the *current* key is what this decision governs. Rebalancing was
+  rejected for a reason pruning does not fix either — it emits a `state.changed` burst for every
+  block in the note, which is a false signal to §4.1 whether or not the states are later pruned.

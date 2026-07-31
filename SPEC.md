@@ -79,6 +79,24 @@ This one principle yields time-travel queries, trivial backup (snapshot + journa
 The executable operation protocol, replay ordering, and implemented durability guarantees are
 specified in [`modules/journal/SPEC.md`](modules/journal/SPEC.md).
 
+#### 3.2.1 Pruning superseded state
+
+An append-only journal grows without bound, and most of that growth is *superseded state*: the previous wording of a block edited forty times, the position a block held before it was moved, the earlier value of any fluent since replaced. Some of that history is the point — "what did I think then" (§8.5.1) is answerable only because the old wording is still there. Some of it answers a question nobody will ever ask.
+
+**Pruning removes superseded history that nothing points at, and it never happens in place.** A prune reads journal generation *n* and writes generation *n+1*; the source generation is retained until the owner discards it in a separate, explicit act. The append-only contract of `modules/journal/SPEC.md` §1 therefore holds unchanged *within* a generation, which is what keeps replay, checksums and conditional append meaning what they meant. Compaction that edited a journal in place would make the log's own history unverifiable, which is the property everything else here is built on.
+
+Three rules make a prune mechanical rather than a judgment call:
+
+1. **Only closed, superseded fluents are candidates.** An asserted axiom is never pruned — retraction is the operation for a fact that should stop counting, and it is itself journaled (§3.4). An ongoing fluent is current state, not history.
+2. **Anything pointing at a candidate keeps it.** A learning item, quote, reference link, justification or annotation naming a fluent blocks its removal. Identifiers are content-derived (§3.1), so a surviving pointer into a pruned state would be a dangling reference that no replay could repair and no later release could invent an answer for.
+3. **The owner declares which properties keep history**, per property, and a prune obeys that declaration rather than a size threshold. `note:text` keeps all of it, because recovering an earlier draft is a promise this specification makes. `note:order` keeps none, because where a block sat in March is not a question.
+
+**Pruning forfeits `as-of` fidelity for the properties it is applied to, and that is its whole cost.** A note reconstructed as of a past date, after its order history was pruned, shows the right words in today's arrangement. This is stated here rather than discovered later because it is not recoverable: the generation that could have answered is the one being replaced.
+
+The new generation opens with a **prune record** naming the properties pruned, the number of states removed, the digest of the source generation and the date. A journal that is not complete history says so in its own first entry, so that no reader has to infer it from a gap in the record.
+
+**Pruning is not deletion for privacy.** Making a sensitive fact stop counting is retraction; making its bytes go away is retraction followed by discarding the superseded generation. Keeping them two acts is deliberate — conflating them would let "make the journal smaller" quietly become "make this fact never have existed", which is exactly what §3.4's retraction semantics exist to prevent.
+
 ### 3.3 Annotations & the Policy Cascade
 
 Every axiom carries annotation dimensions. All dimensions resolve through **one cascade** (highest precedence first): *explicit owner override → class/property policy → module default → behavioral & temporal signals*. Modules may register additional dimensions.

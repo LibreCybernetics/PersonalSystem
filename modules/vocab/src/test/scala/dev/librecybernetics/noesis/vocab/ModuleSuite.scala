@@ -43,6 +43,9 @@ class ModuleSuite extends CatsEffectSuite:
   private val me = CoreModule.me
   private val oldName = Iri("noesis:e/name-adam")
   private val newName = Iri("noesis:e/name-alice")
+  private val daily = Iri("noesis:e/n-2026-07-31")
+  private val blockOne = Iri("noesis:e/b-one")
+  private val blockTwo = Iri("noesis:e/b-two")
 
   private val modules = Modules.all
   private val config = Modules.configure(KbConfig.default, modules)
@@ -71,7 +74,7 @@ class ModuleSuite extends CatsEffectSuite:
 
   test("modules contribute rules, policies, naming, validation, interchange and agenda"):
     assert(config.rules.length > dev.librecybernetics.noesis.reasoner.RdfsRules.all.length, "no module rules merged")
-    assert(config.policies.modules.keySet == Set("core", "crm", "ll", "vf"), config.policies.modules.keySet.toString)
+    assert(config.policies.modules.keySet == Set("core", "crm", "ll", "vf", "note"), config.policies.modules.keySet.toString)
     assert(config.templates.byProperty.contains(RelationshipsModule.birthday))
     assert(config.namingSchemes.nonEmpty, "structured naming scheme was not merged")
     assert(config.validators.contains(PrmValidation), "PRM validator was not merged")
@@ -391,6 +394,99 @@ class ModuleSuite extends CatsEffectSuite:
       assert(knows)
       assert(items.exists(_.prompt.contains("birthday")), items.map(_.prompt).toString)
       assert(items.exists(!_.suspended), "auto-activated items should be active")
+
+  // ── Notes and blocks (SPEC §8.5) ──────────────────────────────────────────
+
+  test("editing a block supersedes its text, so the previous wording keeps its interval"):
+    // The whole reason §8.5.1 makes block text a fluent: per-block history and `as-of` are §3.6's
+    // machinery, and the journal gains no operation to get them.
+    for
+      base <- installed
+      _ <- base.assert(Axiom.ClassAssertion(blockOne, NotesModule.Block))
+      _ <- base.assert(
+        Axiom.DataAssertion(blockOne, NotesModule.text, Literal.string("PR 8072 is open"))
+      )
+      opened <- base.state
+      _ <- base.commit(
+        NonEmptyList.one(
+          Intent.Supersede(
+            blockOne,
+            NotesModule.text,
+            Node.Lit(Literal.string("PR 8072 is still open"))
+          )
+        )
+      )
+      after <- base.state
+    yield
+      assertEquals(opened.ongoingFluents.size, 1, "asserting block text should open one fluent")
+      assertEquals(after.ongoingFluents.size, 1, "an edited block still has exactly one current text")
+      assertEquals(after.fluents.size, 2, "the superseded wording must survive as a closed interval")
+
+  test("a note is not a block, so an outline cannot fold a page into itself"):
+    for
+      base <- installed
+      _ <- base.assert(Axiom.ClassAssertion(daily, NotesModule.Daily))
+      rejected <- base.assert(Axiom.ClassAssertion(daily, NotesModule.Block))
+    yield assert(rejected.isLeft, s"a note was also accepted as a block: $rejected")
+
+  test("a block is never its own parent"):
+    for
+      base <- installed
+      _ <- base.assert(Axiom.ClassAssertion(blockOne, NotesModule.Block))
+      rejected <- base.assert(
+        Axiom.ObjectAssertion(blockOne, NotesModule.parentBlock, blockOne)
+      )
+    yield assert(rejected.isLeft, s"a block was accepted as its own parent: $rejected")
+
+  test("a block may mention anything, because nothing is disjoint from owl:Thing"):
+    // The range exists so the CLI types the object as a reference rather than a string — the trap
+    // that once stored `spouseOf "marco"`. It must not also make mentioning a company, rather than
+    // a person, an inconsistency: that is what a narrower range would have cost.
+    for
+      base <- installed
+      _ <- base.assert(Axiom.ClassAssertion(blockOne, NotesModule.Block))
+      _ <- base.assert(Axiom.ClassAssertion(marco, RelationshipsModule.Person))
+      _ <- base.assert(Axiom.ClassAssertion(acme, RelationshipsModule.Organization))
+      person <- base.assert(Axiom.ObjectAssertion(blockOne, NotesModule.mentions, marco))
+      organization <- base.assert(Axiom.ObjectAssertion(blockOne, NotesModule.mentions, acme))
+      closure <- base.closure
+    yield
+      assert(person.isRight, s"mentioning a person was rejected: $person")
+      assert(organization.isRight, s"mentioning an organization was rejected: $organization")
+      assert(
+        closure.view.ranges.contains(NotesModule.mentions),
+        "note:mentions must declare a range, or the CLI types its object as a literal"
+      )
+
+  test("writing and rearranging notes drafts no learning items"):
+    // `state.changed` fires on every supersession, so without these policies a note edited ten
+    // times would put ten change items in the queue and the mechanics of writing would crowd out
+    // everything worth remembering.
+    for
+      base <- installed
+      engine <- engineFor(base)
+      _ <- base.assert(Axiom.ClassAssertion(daily, NotesModule.Daily))
+      _ <- base.assert(Axiom.ClassAssertion(blockOne, NotesModule.Block))
+      commit <- base.commit(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.ObjectAssertion(blockOne, NotesModule.blockOf, daily)),
+          Intent.Assert(Axiom.DataAssertion(blockOne, NotesModule.text, Literal.string("a thought"))),
+          Intent.Assert(Axiom.DataAssertion(blockOne, NotesModule.order, Literal.string("m"))),
+          Intent.Assert(Axiom.ObjectAssertion(blockOne, NotesModule.mentions, marco))
+        )
+      )
+      drafted <- commit.fold(problem => IO.raiseError(new AssertionError(problem.toString)), c => engine.handle(c.events))
+    yield assertEquals(drafted, Nil, s"note structure drafted items: ${drafted.map(_.prompt)}")
+
+  test("what is written about someone is as protected as what could be drawn out of it"):
+    // The floor of SPEC §8.5.8. The escalation that closes the laundering path — a block yielding a
+    // sensitive fact becoming sensitive itself — is a capture-time consequence and arrives with
+    // extraction; this pins the term-level half that is expressible as policy.
+    val axiom =
+      Axiom.DataAssertion(blockTwo, NotesModule.text, Literal.string("marco's diagnosis is …"))
+    val record = AxiomRecord(axiom.id, axiom, AxiomAnnotations.empty, AxiomStatus.Active, 1L)
+
+    assertEquals(PolicyCascade.sensitivity(record, config.policies), Sensitivity.Sensitive)
 
   // ── Renames (SPEC §7.2) ───────────────────────────────────────────────────
 

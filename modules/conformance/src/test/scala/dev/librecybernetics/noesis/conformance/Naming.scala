@@ -47,6 +47,7 @@ object Naming:
       Vocab.Person -> Role.Class,
       Vocab.Organization -> Role.Class,
       Vocab.Fluent -> Role.Class,
+      Vocab.Thing -> Role.Class,
       Vocab.me -> Role.Individual,
       Vocab.timeVarying -> Role.Property,
       Vocab.rdfType -> Role.Property,
