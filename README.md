@@ -93,7 +93,7 @@ overwrite an existing path.
 | §3.4 Reasoning | Dedicated [`reasoner`](modules/reasoner/) module with forward-chaining closure, **justification tracking**, explicit incomplete results when a configured cap is reached, minimal explanations, consistency checking that rejects a commit *with its justification*, EL profile warnings, and conjunctive graph-pattern queries |
 | §3.5 Capture | Intent → operations → validated atomic commit; nothing reaches the journal before the reasoner accepts it |
 | §3.6 Fluents | Open, close and supersede; the plain-assertion sugar; current-graph materialization; `state.changed` carrying both old and new value |
-| §4 Learning engine | Items drafted from events by policy; belief with α-update and exponential decay by stability; retention and elucidation queues; belief in derived facts; change items at elevated priority; durable review log |
+| §4 Learning engine | Items drafted from events by policy; belief with α-update and exponential decay by stability; retention and elucidation queues; belief in derived facts; change items at elevated priority; durable review log. `noesis quiz` asks the stored question with its answer withheld, grades against the item's typed answer, regenerates a question whose source fact has changed rather than asking it, and declines to grade what needs a judge |
 | §5 Modules | The module contract as a plain value: ontology, rules, policies, item policies, templates, naming schemes, validators, document adapters and agenda producers, merged into one configuration |
 | §5.2 Verbalizer | Template-first, always using current names (§7.2) |
 | §6 `ll:` | Interlingual hub-and-spoke; translation derived as `Lexeme → Concept → Lexeme`; false friends, cognates, belief-tensor keys |
@@ -104,14 +104,10 @@ overwrite an existing path.
 
 ### Built but not reachable
 
-Three finished, tested subsystems have no owner-facing surface. [PRODUCT.md](PRODUCT.md) ranks these
+Two finished, tested subsystems have no owner-facing surface. [PRODUCT.md](PRODUCT.md) ranks these
 above new capability, because exposing them is cheaper than building anything and they sit on the
 journeys used most.
 
-- **Questions are never asked.** `modules/lms` models a `Question` with a typed answer, distractors
-  and staleness detection against its source fact. The CLI reaches none of it: `noesis queue` prints
-  the fact itself and `noesis review <itemId> <grade>` records a self-assessed number, so the review
-  loop cannot tell the owner they were wrong (friction F7).
 - **The shared agenda answers to a PRM name.** `noesis contact due` runs *every* module's agenda
   producer — it is already §5.2's cross-module agenda — but is reachable only through the `contact`
   namespace (friction F6).

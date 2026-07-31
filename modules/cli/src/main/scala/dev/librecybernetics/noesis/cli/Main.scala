@@ -16,7 +16,7 @@ import dev.librecybernetics.noesis.logic.*
 import dev.librecybernetics.noesis.core.policy.DisclosurePolicy
 import dev.librecybernetics.noesis.reasoner.query.PatternSyntax
 import dev.librecybernetics.noesis.reasoner.{Consistency, Support}
-import dev.librecybernetics.noesis.lms.{ItemId, QueueMode}
+import dev.librecybernetics.noesis.lms.{ItemId, QueueEntry, QueueMode}
 import dev.librecybernetics.noesis.vocab.*
 
 enum ContactCommand:
@@ -120,7 +120,6 @@ enum ArchiveCommand:
   case Verify(source: Path)
   case Restore(source: Path, target: Path)
 
-/** What the CLI was asked to do. */
 /** Writing and reading back notes (SPEC §8.5). */
 enum NoteCommand:
   case Today
@@ -131,6 +130,7 @@ enum NoteCommand:
   case ListNotes
   case History(block: String)
 
+/** What the CLI was asked to do. */
 enum Command:
   case Init
   case Assert(
@@ -160,6 +160,7 @@ enum Command:
   case AsOf(date: java.time.LocalDate)
   case Contact(command: ContactCommand)
   case Archive(command: ArchiveCommand)
+  case Quiz(mode: QueueMode, limit: Int)
   case Note(command: NoteCommand)
   case Backlinks(target: String)
   case Search(term: String)
@@ -312,6 +313,12 @@ object Main
       Opts.option[QueueMode]("mode", "selection policy").withDefault(QueueMode.Mixed),
       Opts.option[Int]("limit", "queue length").withDefault(10)
     ).mapN(Command.Queue.apply)
+
+  private val quiz = Opts.subcommand("quiz", "be asked the queued questions, and graded"):
+    (
+      Opts.option[QueueMode]("mode", "selection policy").withDefault(QueueMode.Mixed),
+      Opts.option[Int]("limit", "how many to ask").withDefault(10)
+    ).mapN(Command.Quiz.apply)
 
   private val answer = Opts.subcommand("review", "record a review outcome for an item"):
     (
@@ -578,7 +585,8 @@ object Main
       zoneOpt,
       init orElse assertCmd orElse retract orElse closeState orElse supersede orElse
         show orElse query orElse entails orElse explain orElse check orElse journal orElse
-        queue orElse answer orElse items orElse disclose orElse loans orElse exportCmd orElse asOf
+        queue orElse quiz orElse answer orElse items orElse disclose orElse loans orElse
+        exportCmd orElse asOf
           orElse contact orElse archive orElse note orElse backlinks orElse search
     ).mapN(run)
 
@@ -895,6 +903,9 @@ object Main
       case Command.Archive(archiveCommand) =>
         runArchive(workspace.root, archiveCommand)
 
+      case Command.Quiz(mode, limit) =>
+        executeQuiz(workspace, mode, limit)
+
       case Command.Note(noteCommand) =>
         executeNote(workspace, zone, noteCommand)
 
@@ -908,6 +919,63 @@ object Main
 
       case Command.Search(term) =>
         kb.state.flatMap(state => print(Notes.search(state, term))).as(ExitCode.Success)
+
+  // ── The review loop (SPEC §4.1, §4.3) ─────────────────────────────────────
+
+  /** Asks the queued questions one at a time, grades each, and logs the outcome.
+    *
+    * The loop is sequential and re-reads the queue's entries in order rather than recomputing it
+    * per answer: a review changes belief, so recomputing would let one correct answer reorder what
+    * is still to come, and the owner would be unable to tell how long the session was.
+    */
+  private def executeQuiz(workspace: Workspace, mode: QueueMode, limit: Int): IO[ExitCode] =
+    val engine = workspace.engine
+
+    def askOne(index: Int, total: Int, entry: QueueEntry): IO[(Int, Int)] =
+      engine.nextQuestion(entry).flatMap: question =>
+        (question, Quiz.unaskable(question)) match
+          case (_, Some(skipped)) =>
+            IO.println(s"[$index/$total] ${entry.item.prompt}") *>
+              IO.println(skipped.render).as((0, 0))
+
+          case (Some(asked), None) =>
+            for
+              _ <- print(Quiz.ask(index, total, entry, asked))
+              _ <- IO.print("  > ")
+              typed <- IO.readLine
+              started <- IO.monotonic
+              outcome <- engine.answer(asked, Quiz.chosen(asked, typed), 0L)
+              finished <- IO.monotonic
+              scored <- outcome match
+                case None =>
+                  IO.println("  could not be graded").as((0, 0))
+                case Some(result) =>
+                  // The recorded latency is the owner's, measured around the read; a review logged
+                  // with a fabricated one would distort the discrimination stats it feeds.
+                  val measured = result.copy(
+                    review = result.review.copy(latencyMs = (finished - started).toMillis)
+                  )
+                  workspace.recordReview(measured.review) *>
+                    print(Quiz.verdict(asked, measured))
+                      .as((1, if measured.review.grade >= 1.0 then 1 else 0))
+            yield scored
+
+          // `unaskable` returns a reason for every absent question, so this cannot arise.
+          case (None, None) => IO.pure((0, 0))
+
+    for
+      entries <- engine.queue(mode, limit)
+      code <-
+        if entries.isEmpty then IO.println("nothing due — the queue is empty").as(ExitCode.Success)
+        else
+          for
+            tallies <- entries.zipWithIndex.traverse: (entry, at) =>
+              askOne(at + 1, entries.length, entry)
+            asked = tallies.map(_._1).sum
+            correct = tallies.map(_._2).sum
+            _ <- IO.println(Quiz.summary(asked, correct, entries.length - asked))
+          yield ExitCode.Success
+    yield code
 
   // ── Notes (SPEC §8.5) ─────────────────────────────────────────────────────
 

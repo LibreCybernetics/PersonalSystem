@@ -237,8 +237,32 @@ final class LearningEngine[F[_]: {Sync, Clock}](
       state <- kb.state
     yield Scheduler.queue(items, utilityOf(utilityRecords(state)), now, mode, limit)
 
+  /** The question to ask about a queued item, least-asked first.
+    *
+    * A question whose source axioms have changed is **regenerated rather than asked** (SPEC §4.1).
+    * `sourceHash` exists to make that detectable, and asking anyway would quietly test the owner on
+    * a fact that no longer holds — then log the answer as evidence about their memory, which is the
+    * one thing §12.3 needs to be able to trust.
+    */
   def nextQuestion(entry: QueueEntry): F[Option[Question]] =
-    store.questionsFor(entry.item.id).map(_.minByOption(_.asked))
+    val current = Question.hashOf(entry.item.axioms)
+    for
+      stored <- store.questionsFor(entry.item.id)
+      usable <- stored.filterNot(_.isStale(current)) match
+        case Nil if stored.nonEmpty => regenerate(entry.item)
+        case fresh                  => fresh.pure[F]
+    yield usable.minByOption(_.asked)
+
+  /** Rebuilds an item's questions from the axioms as they now stand. */
+  private def regenerate(item: Item): F[List[Question]] =
+    for
+      verbalizer <- kb.verbalizer
+      closure <- kb.closure
+      state <- kb.state
+      axioms = item.axioms.toList.flatMap(state.axiom(_)).map(_.axiom)
+      rebuilt = axioms.flatMap(Questions.forAtomicFact(item, _, verbalizer, closure.view))
+      _ <- store.putQuestions(item.id, rebuilt)
+    yield rebuilt
 
   // ── Reviews (SPEC §4.2, §4.6) ─────────────────────────────────────────────
 
