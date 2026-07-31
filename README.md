@@ -99,6 +99,7 @@ overwrite an existing path.
 | §6 `ll:` | Interlingual hub-and-spoke; translation derived as `Lexeme → Concept → Lexeme`; false friends, cognates, belief-tensor keys |
 | §7 `crm:` PRM | Structured names; concurrent email, phone, online and postal contact methods; employment; relationships; interactions; notes; preferences; reminders; follow-up; circles; companion animals; gifts; duplicate-candidate detection; vCard 4.0 and mapped FOAF/RDF interchange; cardinality-free social reasoning |
 | §8 `vf:` | ValueFlows alignment; custody, loans and balances as folds over event history |
+| §8.5 `note:` | Notes and journaling: blocks as fluents, so per-block history and `as-of` come from §3.6 and the journal gains no operation; sibling order as a fractional index; `[[links]]` resolved against current names into `note:mentions` axioms, never minting an entity; backlinks as a closure projection rather than an index; an `$EDITOR` round-trip that preserves block identity across rewording, moving and re-indenting; a read-only Markdown mirror for `grep` |
 | §10 | Local-first, append-only, transparent checksummed archives with verified restore, Turtle, vCard and mapped FOAF/RDF export |
 
 ### Built but not reachable
@@ -129,7 +130,15 @@ confirming it beforehand, which §1.3 and §3.5.5 require (F2).
   the review log that §12.3 depends on for refitting the belief model.
 - **No MCP gateway** (§9) and **no HTTP API** (§3.8). The disclosure engine both depend on is built
   and tested; what is missing is transport, OAuth and rate limiting.
-- **No references module** (§3.7), and therefore no remediation (§4.5).
+- **No references module** (§3.7), and therefore no remediation (§4.5), no reading sessions and no
+  quotes (§8.5.4). `note:cites` is specified and deliberately unbound until `ref:Quote` exists.
+- **Nothing extracts facts from notes** (§8.5.5). Notes are written, linked, searched and edited;
+  turning what was written into axioms needs the model that is not here, so `noesis note extract`
+  remains a proposal. `note:` therefore contributes no learning items yet, by policy rather than by
+  omission — the mechanics of writing are `ItemPolicy.Ignore`, and the facts extracted *from* notes
+  would be scheduled by the ordinary cascade.
+- **Journal pruning is specified and unbuilt** (§3.2.1). Superseded state accumulates; `noesis
+  prune`, `noesis journal size` and `noesis journal discard` are proposals.
 - **No production reasoner.** §11 names ELK and HermiT; this is a naive fixpoint over a rule set and
   does not meet §10's "500 ms at 10⁶ axioms". The implementation and its compatibility contract are
   isolated in `noesis-reasoner`; an external engine must preserve journal-backed justifications as

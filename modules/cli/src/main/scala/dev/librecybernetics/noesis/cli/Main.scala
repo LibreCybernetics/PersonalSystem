@@ -121,6 +121,16 @@ enum ArchiveCommand:
   case Restore(source: Path, target: Path)
 
 /** What the CLI was asked to do. */
+/** Writing and reading back notes (SPEC §8.5). */
+enum NoteCommand:
+  case Today
+  case New(title: String, literature: Boolean)
+  case Append(text: String, on: Option[java.time.LocalDate], note: Option[String])
+  case Edit(note: Option[String], from: Option[Path])
+  case Show(note: Option[String], asOf: Option[java.time.LocalDate])
+  case ListNotes
+  case History(block: String)
+
 enum Command:
   case Init
   case Assert(
@@ -150,6 +160,9 @@ enum Command:
   case AsOf(date: java.time.LocalDate)
   case Contact(command: ContactCommand)
   case Archive(command: ArchiveCommand)
+  case Note(command: NoteCommand)
+  case Backlinks(target: String)
+  case Search(term: String)
 
 object Main
     extends CommandIOApp(
@@ -511,6 +524,54 @@ object Main
         contactGiftAdd orElse contactShow orElse contactDue orElse contactImport orElse contactExport
     ).map(Command.Contact.apply)
 
+  private val noteToday = Opts.subcommand("today", "open today's page and show it"):
+    Opts(NoteCommand.Today)
+
+  private val noteNew = Opts.subcommand("new", "start a titled note"):
+    (
+      Opts.argument[String]("title"),
+      Opts.flag("literature", "what a source said, rather than what you now think").orFalse
+    ).mapN(NoteCommand.New.apply)
+
+  private val noteAppend = Opts.subcommand("append", "add a passage, one block per paragraph"):
+    (
+      Opts.argument[String]("text"),
+      Opts.option[java.time.LocalDate]("on", "the dated page to write to, defaulting to today").orNone,
+      Opts.option[String]("note", "a note other than a dated page").orNone
+    ).mapN(NoteCommand.Append.apply)
+
+  private val noteEdit = Opts.subcommand("edit", "edit a note in $EDITOR and diff the result back"):
+    (
+      Opts.argument[String]("note").orNone,
+      Opts
+        .option[String]("from", "read the saved buffer from a file instead of opening an editor")
+        .map(Path(_))
+        .orNone
+    ).mapN(NoteCommand.Edit.apply)
+
+  private val noteShow = Opts.subcommand("show", "show a note as Markdown"):
+    (
+      Opts.argument[String]("note").orNone,
+      Opts.option[java.time.LocalDate]("as-of", "the note as it stood on a past date").orNone
+    ).mapN(NoteCommand.Show.apply)
+
+  private val noteList = Opts.subcommand("list", "list every note")(Opts(NoteCommand.ListNotes))
+
+  private val noteHistory = Opts.subcommand("history", "show every wording a block has had"):
+    Opts.argument[String]("block").map(NoteCommand.History.apply)
+
+  private val note = Opts.subcommand("note", "write and read back notes"):
+    (
+      noteToday orElse noteNew orElse noteAppend orElse noteEdit orElse noteShow orElse
+        noteList orElse noteHistory
+    ).map(Command.Note.apply)
+
+  private val backlinks = Opts.subcommand("backlinks", "show everything written about an entity"):
+    Opts.argument[String]("entity").map(Command.Backlinks.apply)
+
+  private val search = Opts.subcommand("search", "find blocks whose text contains a term"):
+    Opts.argument[String]("term").map(Command.Search.apply)
+
   def main: Opts[IO[ExitCode]] =
     (
       rootOpt,
@@ -518,7 +579,7 @@ object Main
       init orElse assertCmd orElse retract orElse closeState orElse supersede orElse
         show orElse query orElse entails orElse explain orElse check orElse journal orElse
         queue orElse answer orElse items orElse disclose orElse loans orElse exportCmd orElse asOf
-          orElse contact orElse archive
+          orElse contact orElse archive orElse note orElse backlinks orElse search
     ).mapN(run)
 
   // ── Execution ─────────────────────────────────────────────────────────────
@@ -833,6 +894,135 @@ object Main
 
       case Command.Archive(archiveCommand) =>
         runArchive(workspace.root, archiveCommand)
+
+      case Command.Note(noteCommand) =>
+        executeNote(workspace, zone, noteCommand)
+
+      case Command.Backlinks(target) =>
+        val entity = Workspace.iri(target)
+        for
+          state <- kb.state
+          closure <- kb.closure
+          _ <- print(Notes.backlinks(Backlinks.of(state, closure, entity), entity))
+        yield ExitCode.Success
+
+      case Command.Search(term) =>
+        kb.state.flatMap(state => print(Notes.search(state, term))).as(ExitCode.Success)
+
+  // ── Notes (SPEC §8.5) ─────────────────────────────────────────────────────
+
+  private def executeNote(workspace: Workspace, zone: ZoneId, command: NoteCommand): IO[ExitCode] =
+    val kb = workspace.kb
+
+    /** The note a command is about: the one named, or today's page. */
+    def target(named: Option[String]): IO[Iri] =
+      named match
+        case Some(token) => IO.pure(Workspace.iri(token))
+        case None        => today.map(NoteIds.daily)
+
+    def today: IO[java.time.LocalDate] =
+      IO.realTimeInstant.map(_.atZone(zone).toLocalDate)
+
+    def outlineOf(note: Iri): IO[Outline.Note] = kb.state.map(Outline.of(_, note))
+
+    /** Commits, then rebuilds the mirror, so that a file search never lags the journal. */
+    def commit(intents: List[Intent]): IO[ExitCode] =
+      Notes.commitAll(workspace, intents).flatTap: _ =>
+        kb.state.flatMap(Notes.mirror(workspace.root, _))
+
+    command match
+      case NoteCommand.Today =>
+        for
+          day <- today
+          code <- Notes.commitAll(workspace, NotesCapture.daily(day).toList)
+          state <- kb.state
+          _ <- Notes.mirror(workspace.root, state)
+          _ <- print(Notes.show(Outline.of(state, NoteIds.daily(day))))
+        yield code
+
+      case NoteCommand.New(title, literature) =>
+        val kind = if literature then NoteKind.Literature else NoteKind.Permanent
+        val id = NoteIds.note(kind, title)
+        for
+          day <- today
+          code <- commit(NotesCapture.note(id, kind, title, day).toList)
+          _ <- IO.println(s"${id.display}  $title")
+        yield code
+
+      case NoteCommand.Append(text, on, named) =>
+        for
+          day <- today
+          note <- named.map(token => IO.pure(Workspace.iri(token))).getOrElse(
+            IO.pure(NoteIds.daily(Notes.resolveDate(on, day)))
+          )
+          // Opening the page is idempotent, so quick capture never has to ask whether it exists.
+          _ <- Notes.commitAll(
+            workspace,
+            if named.isEmpty then NotesCapture.daily(Notes.resolveDate(on, day)).toList else Nil
+          )
+          outline <- outlineOf(note)
+          blocks <- Notes.freshBlocks(NotesCapture.paragraphs(text).length)
+          written <- IO.fromEither(
+            NotesCapture.appendAll(outline, blocks, text).leftMap(problem => Problem(problem.render))
+          )
+          state <- kb.state
+          links = blocks.zip(NotesCapture.paragraphs(text)).map((block, paragraph) =>
+            Notes.mentions(state, block, paragraph)
+          )
+          code <- commit(written ++ links.flatMap(_._1))
+          _ <- print(links.flatMap(_._2).map(question => s"  $question"))
+        yield code
+
+      case NoteCommand.Show(named, asOf) =>
+        for
+          note <- target(named)
+          state <- kb.state
+          outline = asOf.fold(Outline.of(state, note))(Outline.asOf(state, note, _))
+          _ <- print(Notes.show(outline))
+        yield ExitCode.Success
+
+      case NoteCommand.ListNotes =>
+        kb.state.flatMap(state => print(Notes.listing(Notes.all(state)))).as(ExitCode.Success)
+
+      case NoteCommand.History(block) =>
+        val id = Workspace.iri(block)
+        for
+          state <- kb.state
+          wordings = state.fluents.values.toList
+            .filter(f => f.statedSubject == id && f.statedProperty == NotesModule.text)
+            .sortBy(_.validFrom.map(_.lowerBound.toEpochDay).getOrElse(Long.MinValue))
+          _ <- print(
+            if wordings.isEmpty then List(s"${id.display} has no recorded wording")
+            else wordings.map(fluent => s"  ${fluent.describe}")
+          )
+        yield ExitCode.Success
+
+      case NoteCommand.Edit(named, from) =>
+        for
+          note <- target(named)
+          state <- kb.state
+          before = Outline.of(state, note)
+          buffer = NoteEditor.render(before, Notes.loadBearing(state, before))
+          saved <- from match
+            case Some(path) => fs2.io.file.Files[IO].readUtf8(path).compile.string
+            case None       => Notes.inEditor(buffer)
+          lines <- IO.fromEither(
+            NoteEditor.parse(saved, before).leftMap(problem => Problem(problem.render))
+          )
+          matched = NoteEditor.align(before, lines)
+          fresh <- Notes.freshBlocks(NoteEditor.additions(matched))
+          intents <- IO.fromEither(
+            NoteEditor.plan(before, matched, fresh).leftMap(problem => Problem(problem.render))
+          )
+          code <- commit(intents)
+          _ <- IO.println(
+            if intents.isEmpty then "no changes"
+            else s"${intents.length} change(s), ${NoteEditor.removed(before, matched).length} removal(s)"
+          )
+        yield code
+
+  /** A failure the owner caused and can act on, rendered without a stack trace. */
+  private final case class Problem(detail: String) extends RuntimeException(detail)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 

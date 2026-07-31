@@ -163,6 +163,17 @@ Key implementation points:
    persistence paths and tightens POSIX modes to `0700`/`0600`, independent of the caller's umask.
    Archives are created with the same owner-only modes, carry SHA-256 checksums for every payload,
    and restore only into a new path.
+10. **A file is never the truth about a note.** Block text, position and parent are fluents, so the
+    Markdown mirror and the `$EDITOR` buffer are both renderings. The mirror is rewritten wholesale
+    from state and is never read back; the buffer is read back only through
+    `NoteEditor.parse`/`align`/`plan`, which resolve every line to an existing block or an explicit
+    new one. Nothing infers a block identity from a file's position alone, because every extracted
+    fact, quote and link addresses a block id — a diff that mints ids freely does not corrupt the
+    note, it detaches the knowledge from it while the note still looks right.
+11. **An edit emits only what changed.** `NoteEditor.plan` returns no intents for an untouched
+    buffer, and supersedes a fluent only where its value differs. This is an invariant rather than
+    an optimization: superseding unconditionally would write an edit history in which the owner
+    rewrote every block each time the editor opened, and would fire `state.changed` for all of them.
 
 ## Testing principles
 

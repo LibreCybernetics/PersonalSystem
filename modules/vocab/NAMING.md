@@ -25,7 +25,7 @@ for items whose naming was never ours to control.
 
 | Namespace | Kind | Authority |
 |---|---|---|
-| `core:`, `crm:`, `ll:`, `ref:`, `noesis:` | prescriptive | this project |
+| `core:`, `crm:`, `ll:`, `note:`, `ref:`, `noesis:` | prescriptive | this project |
 | `vf:` | descriptive | ValueFlows |
 | `foaf:` | descriptive | FOAF Vocabulary Project |
 | `rdf:`, `rdfs:`, `xsd:`, `owl:`, `geo:` | descriptive | W3C |
@@ -43,8 +43,11 @@ meaning), so that correcting what an entity *is* never invalidates its identifie
 therefore also forbids vocabulary terms there — a class named in the entity namespace would tie the
 ontology to identifiers chosen to be arbitrary.
 
-`ref:` is bound but empty. SPEC §9 is not implemented, and settling the convention before the first
-term exists is cheaper than renaming afterwards.
+`ref:` and `note:` are bound but empty. SPEC §3.7 and §8.5 are not implemented, and settling a
+convention before the first term exists is cheaper than renaming afterwards — which is also why the
+register carries the one distinction that costs most to get wrong: `note:Daily` is the dated page,
+and the append-only log of §3.2 is the journal. A namespace that used either word for the other
+would make both unreadable.
 
 `core:` carries the only cross-namespace agreement: `vf:Agent ≡ core:Agent`. That is an equivalence
 axiom rather than a shared name, which is what the uniqueness rules mean by "one name per item" — two

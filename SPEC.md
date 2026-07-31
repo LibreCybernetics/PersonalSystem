@@ -79,6 +79,24 @@ This one principle yields time-travel queries, trivial backup (snapshot + journa
 The executable operation protocol, replay ordering, and implemented durability guarantees are
 specified in [`modules/journal/SPEC.md`](modules/journal/SPEC.md).
 
+#### 3.2.1 Pruning superseded state
+
+An append-only journal grows without bound, and most of that growth is *superseded state*: the previous wording of a block edited forty times, the position a block held before it was moved, the earlier value of any fluent since replaced. Some of that history is the point — "what did I think then" (§8.5.1) is answerable only because the old wording is still there. Some of it answers a question nobody will ever ask.
+
+**Pruning removes superseded history that nothing points at, and it never happens in place.** A prune reads journal generation *n* and writes generation *n+1*; the source generation is retained until the owner discards it in a separate, explicit act. The append-only contract of `modules/journal/SPEC.md` §1 therefore holds unchanged *within* a generation, which is what keeps replay, checksums and conditional append meaning what they meant. Compaction that edited a journal in place would make the log's own history unverifiable, which is the property everything else here is built on.
+
+Three rules make a prune mechanical rather than a judgment call:
+
+1. **Only closed, superseded fluents are candidates.** An asserted axiom is never pruned — retraction is the operation for a fact that should stop counting, and it is itself journaled (§3.4). An ongoing fluent is current state, not history.
+2. **Anything pointing at a candidate keeps it.** A learning item, quote, reference link, justification or annotation naming a fluent blocks its removal. Identifiers are content-derived (§3.1), so a surviving pointer into a pruned state would be a dangling reference that no replay could repair and no later release could invent an answer for.
+3. **The owner declares which properties keep history**, per property, and a prune obeys that declaration rather than a size threshold. `note:text` keeps all of it, because recovering an earlier draft is a promise this specification makes. `note:order` keeps none, because where a block sat in March is not a question.
+
+**Pruning forfeits `as-of` fidelity for the properties it is applied to, and that is its whole cost.** A note reconstructed as of a past date, after its order history was pruned, shows the right words in today's arrangement. This is stated here rather than discovered later because it is not recoverable: the generation that could have answered is the one being replaced.
+
+The new generation opens with a **prune record** naming the properties pruned, the number of states removed, the digest of the source generation and the date. A journal that is not complete history says so in its own first entry, so that no reader has to infer it from a gap in the record.
+
+**Pruning is not deletion for privacy.** Making a sensitive fact stop counting is retraction; making its bytes go away is retraction followed by discarding the superseded generation. Keeping them two acts is deliberate — conflating them would let "make the journal smaller" quietly become "make this fact never have existed", which is exactly what §3.4's retraction semantics exist to prevent.
+
 ### 3.3 Annotations & the Policy Cascade
 
 Every axiom carries annotation dimensions. All dimensions resolve through **one cascade** (highest precedence first): *explicit owner override → class/property policy → module default → behavioral & temporal signals*. Modules may register additional dimensions.
@@ -170,7 +188,7 @@ ref:ReferenceLink   axiom(s) | entity  ↔  reference @ locator
               contradicts, primarySource} · linkQuality [0,1]
 ```
 
-Ingestion: URL paste (OpenGraph/oEmbed; Crossref for DOIs, OpenLibrary for ISBNs) or file import. **Capture-from-reference:** highlighting text or marking a timestamp opens the capture pipeline pre-filled; committed axioms are auto-linked to that locator. **Retro-linking:** embedding similarity between reference segments and axiom verbalizations proposes links (always confirmed). Enables queries like "everything supported by this book" or "unwatched videos linked to what I'm learning."
+Ingestion: URL paste (OpenGraph/oEmbed; Crossref for DOIs, OpenLibrary for ISBNs) or file import. Supplying the *full text* of a source is a reading session, and §8.5.4 governs it: the text is transient and only owner-confirmed quotes and facts persist. **Capture-from-reference:** highlighting text or marking a timestamp opens the capture pipeline pre-filled; committed axioms are auto-linked to that locator. **Retro-linking:** embedding similarity between reference segments and axiom verbalizations proposes links (always confirmed). Enables queries like "everything supported by this book" or "unwatched videos linked to what I'm learning."
 
 ### 3.8 Core API (sketch)
 
@@ -415,6 +433,101 @@ vf:Agreement   bundles related commitments/events ("the drill loan")
 GET /vf/loans?direction&status · GET /vf/claims?agent
 GET /vf/agents/{id}/ledger · GET /vf/balances · POST /vf/events|commitments|intents
 ```
+
+---
+
+## 8.5 Module: Notes, Journaling & Reading (`note:`, `ref:`)
+
+**Goals.** Writing is how most knowledge arrives, and almost none of it arrives as an axiom. This module gives the owner somewhere to write — a dated page, an atomic note, an outline — and then turns what was written into formal knowledge *with the owner's confirmation*, so that the knowledge base grows from ordinary note-taking rather than from remembering to phrase things as assertions. It also lets the owner read a chapter or an essay, keep what matters from it, and be quizzed on it, **without the system retaining the text**.
+
+Second-brain systems are informative product-design inspiration and each contributes one idea. From [Zettelkasten](https://zettelkasten.de/introduction/): atomic notes, and the split between a *literature note* (what the source said) and a *permanent note* (what you now think). From [Logseq](https://docs.logseq.com/#/page/start%20here): the block as the addressable unit, so a link or a fact points at a sentence rather than a document. From [Obsidian](https://help.obsidian.md/Linking+notes+and+files/Internal+links): `[[wiki links]]` as the ordinary way to mention a thing, and backlinks as a first-class view. From [org-mode](https://orgmode.org/manual/): plain text as the editing surface, and a dated capture target. Noesis adopts none of their storage models: notes are ordinary journaled state, blocks are fluents (§3.6), links are axioms, and there is no parallel note store.
+
+### 8.5.1 Blocks are fluents
+
+A note is a document; a **block** is an addressable node in its outline. Block text, a block's parent, and its position among siblings are all *states with a start and possibly an end* — which is what §3.6 already models. Editing a block is therefore a supersession, not a rewrite; moving one is a supersession of its parent; and `as-of` reconstructs a note as it stood on any past date with no additional machinery. This is the whole reason the module needs no new journal operation.
+
+```
+note:Note ⊒ note:Daily · note:Permanent · note:Literature
+  note:title · note:createdOn · note:tag
+note:Block
+  note:blockOf     → note:Note      asserted once, never changes
+  note:parentBlock → note:Block     fluent — re-indenting supersedes it
+  note:order       → xsd:string     fluent — fractional index among siblings
+  note:text        → xsd:string     fluent — editing supersedes it
+  note:mentions    → owl:Thing      asserted from [[links]]
+  note:cites       → ref:Quote      asserted when a block quotes a source
+```
+
+`note:Daily` is the dated page, and it is deliberately *not* called a journal: this specification already uses that word for the append-only log of §3.2, and one of the two would end up meaning the other.
+
+**Sibling order is a fractional index** — a sortable string key chosen so that inserting a block between two others produces a key strictly between theirs. Renumbering siblings on every insertion would make the cost of typing a line proportional to the size of the outline, and the journal records that cost permanently.
+
+### 8.5.2 Links, backlinks and tags
+
+`[[Lía García]]` in block text denotes an entity. Resolution is by current name (§7.2) against existing entities; an unresolved link is a **clarification prompt**, never a silent new entity (§3.5.3). Confirmed links are `note:mentions` axioms, so "everything I have written about Lía" is a graph-pattern query rather than a text search, and **backlinks are a projection of the closure** rather than an index that can fall out of date. Tags are `note:tag` literals; they are a coarse retrieval aid and never a substitute for the ontology.
+
+### 8.5.3 The editing round-trip
+
+Blocks are journaled state, so a text editor cannot be the source of truth. It can be the *interface*: the owner asks to edit a note, Noesis materializes it as Markdown, opens `$EDITOR`, and diffs the saved buffer back into block operations. The diff must map edited lines onto **existing block identifiers** — a block that moved or was reworded keeps its identity, and only genuinely new lines mint new blocks — because every extracted fact, quote and link points at a block id. Quick capture (`append`) bypasses the editor entirely, since the common case is one line.
+
+A read-only Markdown mirror of every note is exported on change, so that `grep`, `ripgrep` and file-based search work as they would over any other second brain. The mirror is a projection: deleting it costs nothing and rebuilding it is deterministic.
+
+### 8.5.4 References and reading, without retention
+
+A **reference** is a source: a book, chapter, essay, paper, talk. §3.7 defines the reference model; this section adds what happens when the owner hands Noesis the text itself.
+
+**The text is transient.** It is read into memory, used for the length of one reading session, and discarded. It is never written to the journal, never mirrored, never cached, never placed in a temporary file, and never logged. What persists is the reference record, a digest of the text, the quotes the owner confirmed, the facts the owner confirmed, and the questions generated while the text was in memory. Re-extracting later means supplying the text again.
+
+This is not only a storage decision. It is what makes it defensible to hand a purchased chapter to a personal knowledge base at all: Noesis is not a library of other people's writing, and §3 of this specification does not describe one.
+
+```
+ref:sourceDigest   SHA-256 over the normalized text (NFC, LF, trailing space stripped)
+ref:Quote          verbatim excerpt + ref:Locator     — asserted, never superseded
+ref:ReferenceLink  axiom | entity ↔ reference @ locator
+```
+
+Normalization is specified because the digest is useless otherwise: the same chapter saved by a different editor must produce the same digest, or "is this the text I read?" cannot be answered. Supplying a text whose digest differs from the recorded one is reported, not silently accepted.
+
+**Your words are fluents; someone else's are axioms.** A block is editable because it is yours. A `ref:Quote` is a claim about what a source said — revising it would make the claim false — so it is an ordinary asserted axiom with no fluent, and a literature note *cites* quotes rather than containing them. That separation is what keeps "what it said" and "what I think about it" from drifting into each other.
+
+The owner's confirmation is the only bound on how much of a source is retained. Confirm forty quotes from one chapter and forty quotes are stored. Noesis does not second-guess that: the rule it enforces is that nothing unconfirmed is kept.
+
+### 8.5.5 Extraction
+
+Extraction is §3.5's capture pipeline with a note block or a reading session as its input, and it obeys §3.5 in full: candidates carry formal axioms, Manchester rendering, translation confidence and the exact source span; ambiguities become clarification prompts; validation runs consistency pre-flight on a scratch projection; and **nothing reaches the journal before the owner confirms it**. A paragraph can propose a dozen axioms, so confirmation is a batch queue with accept-all, per-item accept, edit and reject — §12.1's confirmation fatigue is the governing risk of this whole module, not an afterthought.
+
+**The model is a trust boundary of its own.** It runs locally, but it is a separate operating-system process that could log what it is shown, and the model behind it can be replaced. Prompt context is therefore assembled from a `DisclosureView` (§3.3.1) exactly as an external agent's would be: `sensitive` facts are excluded by default, and `--include-sensitive` widens the policy for one invocation and is recorded. The *supplied* text of a reading session is owner input rather than knowledge-base content and is passed whole; the distinction is that Noesis chooses what leaves the knowledge base, and the owner chooses what enters the session.
+
+Every proposal records the model name and digest that produced it. Without that, extraction provenance is not reproducible, and §1.4's promise that every derived thing is explainable from the journal would not hold for the facts that arrived this way.
+
+### 8.5.6 Learning from what was written and read
+
+A confirmed fact is an ordinary axiom, so §4 drafts items for it with no special case — which is the point of extracting into the formal representation rather than into a pile of highlights.
+
+Reading comprehension needs more than the facts, and is contributed through §4.1's module-defined item kind. Questions are generated **while the text is in memory** and stored, because they must remain answerable after it is gone. Two forms are permitted:
+
+- **Open questions**, graded against a rubric by the local model, always displaying the reference axioms, with the owner able to override; the grade records the model and digest that produced it. Where no model is configured, the grader declines rather than guessing (§4.3).
+- **Cloze**, permitted *only* over a quote the owner already confirmed. Any other cloze would store an unconfirmed passage inside the question, which is the retention rule defeated by the back door.
+
+A consequence to state plainly: §4.1 marks a question stale when the axioms it came from change, and an open comprehension question has no source axioms — only a reference. It cannot be staleness-checked, and regenerating it requires supplying the text again. That is the price of not keeping the text, and it is paid deliberately.
+
+### 8.5.7 The local model gateway
+
+§5.2's LLM Gateway, in its local-first form. [Ollama](https://ollama.com) serves a pinned local model; the gateway holds the endpoint, the constrained-JSON contract and the sensitivity gate, and it is the only component in the system that talks to a model.
+
+The endpoint is an abstract choice between a Unix domain socket and loopback TCP. A Unix socket is preferred, because file permissions then *are* the access control and no local process without them can reach the model; Ollama does not yet serve one ([ollama/ollama#8072](https://github.com/ollama/ollama/pull/8072) remains unmerged), so loopback is the shipping default and the socket path works the day upstream lands or behind a relay today. Remote providers are not configurable: the privacy gate of §3.5 exists for them, and this module does not create the surface it would guard.
+
+### 8.5.8 Sensitivity, and what the views show
+
+Blocks are ordinary axioms and fluents, so **nothing about notes is hidden by a rule of its own**. Two different questions are often confused here, and the module answers them separately.
+
+*What may leave* is the policy cascade (§3.3), unchanged. Block text defaults to `personal`; a block in a note tagged health, finance, legal or identity escalates to `sensitive`; a quote inherits the level of its reference, defaulting to `personal`; and reading-session text is never stored, so it has no level to carry. Disclosure, export and MCP see exactly what the cascade admits, with no note-shaped exception — a rule that hid notes from those surfaces by default would be a place for facts to lurk unexamined, which is the opposite of what §3.3.1 is for.
+
+One escalation is specific to this module and closes a path around the cascade. **A block from which a `sensitive` fact was extracted is itself at least `sensitive`.** Prose that yielded a sensitive assertion contains that information in sentence form; leaving the block at `personal` would let a `sensitive` fact be disclosed by quoting the paragraph it came from. This is the same reasoning as §3.3.1's rule for derived facts, applied in the other direction — there, a conclusion is as protected as the premises it needs; here, a source is as protected as what was drawn out of it.
+
+*What is shown* is presentation, and is answered by progressive disclosure rather than by policy. An entity page summarizes high-cardinality relations instead of listing them: fourteen blocks mentioning someone appear as a count with a route to them (§8.5.2), because a page that pastes fourteen paragraphs into a contact card has not disclosed more, it has simply stopped being usable. Nothing is concealed — the route is always present, and the summary states the true count.
+
+**Other defaults.** Utility: `note:text` and `note:order` are ignored by learning outright — a note edited ten times must not draft ten change items — while facts extracted from notes take the utility of the property they assert. Item policies: `note:mentions` ignored, extracted facts by the ordinary cascade, comprehension items module-generated. MCP tools: none in this release; the notes surface is owner-only.
 
 ---
 

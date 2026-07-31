@@ -20,7 +20,7 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `reasoner` | `ReasonerSuite`, `QuerySuite`: inference, fixpoint behavior, journal-backed justifications, explicit resource-limit incompleteness, consistency, EL warnings, and graph-pattern queries |
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
-| `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts |
+| `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts. `FractionalIndexSuite`: sibling order keys, including that appending and prepending stay constant-size. `OutlineSuite`: the note projection, `as-of` over text, arrangement and nesting, and outlines the axiom language cannot rule out. `NotesCaptureSuite`: writing, paragraph chunking, `[[link]]` resolution against current names, and backlinks. `NoteMarkdownSuite`, `NoteEditorSuite`: the mirror, the editable buffer, and which block an edited line is. `NoteRoundTripSuite`: render, edit, plan and commit against a real knowledge base, including that an untouched buffer writes nothing |
 | `cli` | `ArchiveSuite`: coordinated archive creation, checksum/replay/projection verification, restore into a fresh workspace, overwrite refusal, and tamper detection. `CommandSurfaceSuite`: derivation of the command tree from `Main`'s typed AST. `ProductTraceSuite`: traceability between that surface and [PRODUCT.md](PRODUCT.md). `ProductDocumentSuite`: the traceability rules themselves, against fixtures |
 | `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
@@ -234,6 +234,39 @@ harness cannot re-evaluate per mutant. `CompileError` mutants do not count eithe
 
 The [mutation-testing design principles](DESIGN.md#mutation-testing) treat an equivalent mutant as
 evidence of behaviorally redundant code and meaningful boundaries as directly testable concepts.
+
+### A mutant that never returns is not a mutant a test caught
+
+Stryker4s records a mutant that throws `StackOverflowError` as **`Survived`**, not as detected. A
+recursive function therefore hides every mutation that breaks its termination condition rather than
+its arithmetic: the test asserting the right answer never runs, no assertion fails, and the report
+says the suite did not notice. Adding assertions cannot fix it — the mutant has to be made to return
+a wrong value instead of not returning.
+
+**`@tailrec` does not solve this, and usually cannot be applied.** A recursion that builds a result
+around its call — `prefix + midpoint(rest)` — is not in tail position, and the annotation is a
+compile error rather than a fix. Where an accumulator *can* be threaded through to make it tail
+recursive, the annotation converts the overflow into an infinite loop, which Stryker4s records as
+`Timeout`. That counts as detected and passes the CI gate, which fails only on `Survived` and
+`NoCoverage` (`.github/workflows/mutation.yml`). It is still the worse outcome: the mutant costs a
+full timeout instead of failing in milliseconds, and "the run hung" is weaker evidence than "an
+assertion caught a wrong answer". Reach for it only when a function genuinely must recurse.
+
+The better fix is to make termination structural, so that no mutation of a guard can affect it:
+
+- `FractionalIndex` consumes the shared prefix of two keys in one step instead of one character at a
+  time, leaving a closed form. Nothing in it recurses.
+- `Outline.childrenOf` descends on the blocks *not yet placed* rather than on the whole note, so
+  each level strictly shrinks its input. Depth is bounded by the block count whatever `parentBlock`
+  says — which matters twice over, since a cycle is a shape the axiom language cannot rule out and
+  a projection must survive rather than assume away.
+
+Both were found this way: `vocab` reported fifteen `Survived` mutants that no assertion could reach,
+and three `Timeout`s in the outline walk. After the rewrites the module reports 740 detected mutants
+and **zero** scored by overflow or timeout.
+
+Before adding recursion to a mutation-tested module, ask what a mutated guard does. If it can loop,
+the mutation score has quietly stopped measuring that function.
 
 ## Continuous integration and reporting
 

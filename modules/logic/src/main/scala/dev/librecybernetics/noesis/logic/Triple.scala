@@ -44,6 +44,17 @@ object Vocab:
   val Organization: Iri = Iri("core:Organization")
   val Fluent: Iri = Iri("core:Fluent")
 
+  /** OWL's universal class, imported rather than coined (SPEC §10.1, naming register).
+    *
+    * The range of a property whose object may be anything at all — `note:mentions` is the case that
+    * needed it. Declaring *a* range is what makes the CLI type the value as a reference rather than
+    * as a string, which is the trap a rangeless object property falls into; and because nothing is
+    * disjoint from `owl:Thing`, no legitimate object can make the assertion inconsistent. A coined
+    * `core:` superclass would have done the same job while adding an upper-ontology term and a list
+    * of subclasses to keep current.
+    */
+  val Thing: Iri = Iri("owl:Thing")
+
   val timeVarying: Iri = Iri("core:timeVarying")
 
 /** Conversions between axioms and their triple projection.

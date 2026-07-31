@@ -78,6 +78,7 @@ object Namespaces:
       "crm" -> s"${base}ns/crm#",
       "ll" -> s"${base}ns/ll#",
       "vf" -> s"${base}ns/vf#",
-      "ref" -> s"${base}ns/ref#"
+      "ref" -> s"${base}ns/ref#",
+      "note" -> s"${base}ns/note#"
     )
   )

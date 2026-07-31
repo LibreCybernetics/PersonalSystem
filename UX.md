@@ -92,6 +92,10 @@ own scripts a compatibility concern.
 - **Identifiers are shown wherever the thing they identify is shown.** Facts carry axiom ids, items
   carry item ids, records carry record handles. This is what makes principle 1 operational.
 - **Empty is stated, not blank.** `(none)`, `(no asserted facts)`, `(nothing due)`.
+- **High-cardinality relations are summarized, with a route.** A view that would list fourteen
+  blocks states the count and names the command that lists them. This is principle 4, and it is
+  *presentation only* — the count is the true count, and summarizing is never a substitute for the
+  sensitivity cascade deciding what may be shown at all (SPEC §8.5.8).
 
 ## 4. Error message rubric
 
@@ -132,7 +136,55 @@ The budget from principle 2, made concrete:
   batch commits nothing — atomicity is already guaranteed by `DESIGN.md` invariant 2, and the surface
   must not appear to offer partial application.
 
-## 6. Locale, encoding and time
+### 5.1 Model proposals
+
+A proposal is a confirmation whose content the owner did not write, which raises the stakes of every
+rule above rather than changing them.
+
+- **The queue is summarized before it is walked.** How many proposals, over how many blocks, at what
+  sensitivity, and how many are already entailed. An owner who cannot see the size of the batch
+  cannot decide whether to review it now, and will accept it wholesale instead.
+- **Already-entailed proposals are separated, not hidden.** §3.5.4's redundancy check makes them
+  cheap to skip; presenting them mixed in spends attention on nothing.
+- **Every proposal shows its source.** The block, or the reference and locator, so the owner can
+  check the claim against what was actually written.
+- **A rejection is remembered.** Re-running extraction over unchanged text must not re-propose what
+  was already declined, or the queue punishes the owner for using it twice.
+- **Confidence is shown and never acted on.** It orders the queue; it never auto-accepts. §1.3 admits
+  no threshold above which the owner stops being asked.
+- **The model and digest that produced a proposal are shown on request and recorded on commit.**
+
+## 6. Long-running work
+
+Local inference is seconds to minutes, not milliseconds, and a reading session is longer still. §10's
+capture budget does not apply to it and must not be quoted as though it did.
+
+- **Say what is happening, and roughly how far along.** A silent process is indistinguishable from a
+  hung one, which is principle 8 applied to work that takes time.
+- **Interruption is safe by construction.** Nothing is committed until confirmation, so `Ctrl-C`
+  during extraction or reading loses proposals and nothing else. Say so rather than making the owner
+  find out.
+- **Budgets, per step:** review submit < 200 ms and structured capture < 3 s p50 stay as §10 sets
+  them. Extraction over one block should be under 10 s p50 on a small local model; a reading session
+  is bounded by the text and reports progress instead of promising a time. Any budget without a
+  measurement is an aspiration — see F13.
+
+## 7. The editing round-trip
+
+Blocks are journaled state, so a text editor edits a *rendering* of them and the result is diffed
+back (F16). That contract has consequences the surface owes the owner:
+
+- **Block identity survives editing.** Rewording, re-indenting or moving a line keeps its id; only a
+  genuinely new line mints a new block. Every extracted fact, quote and link points at those ids, so
+  a diff that mints ids freely silently detaches the knowledge from the writing.
+- **The materialized buffer shows ids for blocks that carry knowledge**, so the owner can see which
+  lines are load-bearing before rewriting them.
+- **A conflicting edit is reported, never merged.** If the note changed underneath the editor, the
+  save is refused with both versions available — fail-closed, as everywhere else.
+- **The read-only Markdown mirror is a projection.** It is safe to delete, is rebuilt
+  deterministically, and is never read back as truth.
+
+## 8. Locale, encoding and time
 
 - Arguments, storage, rendering and export round-trip any Unicode name exactly. The launcher's
   `LC_ALL` and `sun.jnu.encoding` settings are load-bearing; changing them requires a round-trip test
@@ -143,7 +195,7 @@ The budget from principle 2, made concrete:
   is a data error the surface must not commit on the owner's behalf.
 - Verbalization is per configured language and always uses current names (§7.2).
 
-## 7. Applying this to a change
+## 9. Applying this to a change
 
 For any change to the owner-facing surface:
 
