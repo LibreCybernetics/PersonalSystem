@@ -21,7 +21,7 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts |
-| `cli` | `ArchiveSuite`: coordinated archive creation, checksum/replay/projection verification, restore into a fresh workspace, overwrite refusal, and tamper detection |
+| `cli` | `ArchiveSuite`: coordinated archive creation, checksum/replay/projection verification, restore into a fresh workspace, overwrite refusal, and tamper detection. `CommandSurfaceSuite`: derivation of the command tree from `Main`'s typed AST. `ProductTraceSuite`: traceability between that surface and [PRODUCT.md](PRODUCT.md). `ProductDocumentSuite`: the traceability rules themselves, against fixtures |
 | `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
@@ -128,6 +128,13 @@ instead of weakening the assertion.
   consequences, and derived-premise handling as applicable.
 - **CLI behavior:** Evidence uses the launcher with a disposable workspace and covers affected
   parsing, rendered output, and persistence/reopen behavior.
+- **Owner-facing behavior:** Evidence is the launcher transcript of the affected journey step in
+  [PRODUCT.md](PRODUCT.md) §4, checked against the acceptance criteria of the story it serves rather
+  than against the author's intent. Every new or changed failure path is checked against the error
+  rubric in [UX.md](UX.md) §4, and any `--json` output is treated as a persisted format by the rule
+  above. A change that removes friction updates its ledger row; a change that adds friction adds one
+  and names the principle that makes the trade acceptable. A new command additionally needs a
+  journey step, which `ProductTraceSuite` enforces — see [Product traceability](#product-traceability).
 - **RDF serialization:** Reading and writing belong to `noesis-journal`, with unit claims in
   `SerializationSuite` and grammar conformance in `modules/conformance`. Writer evidence uses an
   independently written transcription of the grammar rather than the writer's own interpretation
@@ -167,6 +174,29 @@ nix flake check
 The `agent-sandbox-sources` check runs ShellCheck over both shell scripts, compiles
 `nix/agent-proxy.py` as Python, and executes `nix/agent-proxy-test.py`. Changes to `flake.nix`,
 `nix/agent-session.sh`, `nix/agent-run.sh`, or the agent proxy must also run this check locally.
+
+## Product traceability
+
+`ProductTraceSuite` in the `cli` module compares the shipped command surface against
+[PRODUCT.md](PRODUCT.md), and runs with the rest of that module under
+`cli/testOnly noesis.cli.*`. It fails when a shipped command appears in no journey or story, when a
+product document invokes a command that does not exist and is not declared under "Proposed
+commands", when a proposal has since shipped, when a story cites a journey step that does not
+exist, when a journey is served by no story, when a story is missing a field or its acceptance
+criteria, when an `F`/`US` cross-reference dangles, when a subcommand is never composed into
+`Main.main`, when two sibling commands share a name, and when help text breaks the conventions in
+[UX.md](UX.md).
+
+The surface it checks is **derived, not transcribed**: `CommandSurface` is a macro that reads
+`Main`'s typed AST, recognizing `Opts.subcommand` by method symbol and nesting by symbol reference.
+decline's `Opts` constructors are `private[decline]`, so the built value cannot be inspected at
+runtime, and a hand-maintained list would drift silently — which is the exact failure this check
+exists to catch. Because the derivation is structural, a command's own help text cannot be mistaken
+for structure.
+
+Whether a journey is *worth* serving is not checkable and remains a review question; the suite only
+guarantees that the document and the surface describe the same product. `ProductDocumentSuite`
+covers the rules themselves against fixtures, so a rule that stops firing is caught too.
 
 ## Mutation testing
 

@@ -101,6 +101,26 @@ overwrite an existing path.
 | §8 `vf:` | ValueFlows alignment; custody, loans and balances as folds over event history |
 | §10 | Local-first, append-only, transparent checksummed archives with verified restore, Turtle, vCard and mapped FOAF/RDF export |
 
+### Built but not reachable
+
+Three finished, tested subsystems have no owner-facing surface. [PRODUCT.md](PRODUCT.md) ranks these
+above new capability, because exposing them is cheaper than building anything and they sit on the
+journeys used most.
+
+- **Questions are never asked.** `modules/lms` models a `Question` with a typed answer, distractors
+  and staleness detection against its source fact. The CLI reaches none of it: `noesis queue` prints
+  the fact itself and `noesis review <itemId> <grade>` records a self-assessed number, so the review
+  loop cannot tell the owner they were wrong (friction F7).
+- **The shared agenda answers to a PRM name.** `noesis contact due` runs *every* module's agenda
+  producer — it is already §5.2's cross-module agenda — but is reachable only through the `contact`
+  namespace (friction F6).
+- **Duplicate candidates are detected and unreachable.** The PRM module computes them; no command
+  shows them, so §12.11's owner-confirmed merge has no surface (friction F8).
+
+Two further gaps belong to the structured-capture path that exists because the LLM does not: the
+vocabulary cannot be browsed from inside the tool (F1), and `assert` reports a commit rather than
+confirming it beforehand, which §1.3 and §3.5.5 require (F2).
+
 ### Not implemented
 
 - **No LLM anywhere.** §3.5's natural-language translation, §4.3's generated cases and the rubric
@@ -141,7 +161,9 @@ modules/cli     Command-line interface
 The runtime uses cats-effect, fs2, circe, and decline. See [DESIGN.md](DESIGN.md) for module
 boundaries and dependency rules. Each foundational module has its own README and implementation
 specification. [THREAT_MODEL.md](THREAT_MODEL.md) records application assets, trust boundaries,
-controls and residual risks.
+controls and residual risks. [PRODUCT.md](PRODUCT.md) records who the system serves, the journeys it
+must support, the friction ledger and the ordering rule for what to build next; [UX.md](UX.md)
+records the conventions the owner-facing surface follows.
 
 ## Development
 
