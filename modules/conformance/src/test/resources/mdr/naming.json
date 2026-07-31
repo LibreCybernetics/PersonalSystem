@@ -70,12 +70,24 @@
     {
       "prefix": "ref",
       "kind": "prescriptive",
-      "scope": "Reserved for the references and locators of SPEC §3.7 and §9. No term is declared yet; the namespace is bound so that the convention is settled before the first one is.",
+      "scope": "The sources of SPEC §3.7 and the reading sessions of §8.5.4: references and their metadata, pinpoint locators, verbatim quotes, and the links from an axiom or entity to where it came from. No term is declared yet; the namespace is bound so that the convention is settled before the first one is.",
       "authority": "This project. No register of record exists until the module does.",
-      "semantic": "A class name will denote a kind of reference or locator; a property name will denote a relation from a reference to its target or its metadata.",
-      "syntactic": "One name part per term.",
+      "semantic": "A class name denotes a kind of source, a locator into one, or a verbatim excerpt of one. A property name denotes a relation from a reference to its metadata, or from a claim to the source that supports it, and reads subject-first so that `{s} {property} {o}` verbalizes. A name never records whether the text behind a reference is retained, because §8.5.4 says it is not.",
+      "syntactic": "One name part per term, no separators, except where a qualifier precedes what it qualifies (`sourceDigest`).",
       "lexical": "ASCII letters and digits, English, no abbreviations. UpperCamelCase for classes; lowerCamelCase for properties.",
       "uniqueness": "One item per name and one name per item within the namespace.",
+      "classPattern": "^[A-Z][A-Za-z0-9]*$",
+      "propertyPattern": "^[a-z][A-Za-z0-9]*$"
+    },
+    {
+      "prefix": "note",
+      "kind": "prescriptive",
+      "scope": "The notes, dated pages and outline blocks of SPEC §8.5: what the owner writes, how it is structured, and what it mentions or cites. No term is declared yet; the namespace is bound so that the convention is settled before the first one is.",
+      "authority": "This project. No register of record exists until the module does.",
+      "semantic": "A class name denotes a kind of note or the addressable block itself. A property name denotes a relation from a note or block to its content, to its place in the outline, or to what it refers to, and reads subject-first so that `{s} {property} {o}` verbalizes. Nothing in a name records whether the value is time-varying: `text` and `order` are fluents and `blockOf` is not, and §3.6 is where that is said rather than the name.",
+      "syntactic": "One name part per term, no separators, except where a qualifier precedes what it qualifies (`parentBlock`). A relational property ends in the preposition-derived part that fixes its direction (`blockOf`).",
+      "lexical": "ASCII letters and digits, English, no abbreviations. UpperCamelCase for classes; lowerCamelCase for properties.",
+      "uniqueness": "One item per name and one name per item within the namespace. `Daily` is named for the page rather than for the log of §3.2, which this project calls the journal; the two must not share a name.",
       "classPattern": "^[A-Z][A-Za-z0-9]*$",
       "propertyPattern": "^[a-z][A-Za-z0-9]*$"
     },

@@ -24,12 +24,13 @@ principle that justifies the cost. Convenience does not buy its way past fail-cl
 
 `SPEC.md` §1.1 fixes exactly one human principal. Personas in the ordinary product sense would
 therefore be a fiction. What genuinely varies is the *situation* the same person is in: attention,
-stakes and tolerance differ enough between these five that a design good for one is often wrong for
+stakes and tolerance differ enough between these six that a design good for one is often wrong for
 another.
 
 | Role | When | Attention available | Characteristic failure |
 |---|---|---|---|
 | **Capturer** | Mid-conversation, or just after | Seconds. Will not read documentation | The fact is lost, or entered wrongly and never noticed |
+| **Reader** | An hour with a chapter or a paper | Long, deliberate, easily broken | Highlights accumulate and are never revisited; the reading leaves no trace worth having |
 | **Learner** | Daily, briefly | Minutes, willing but impatient | The queue stops being worth trusting, so the habit dies |
 | **Curator** | Occasionally, deliberately | High | A wrong fact is discovered but is expensive to correct, so it stays |
 | **Auditor** | Rarely, high stakes | High, adversarial | Cannot answer "what does this agent actually see?" and so grants nothing, or grants blindly |
@@ -270,6 +271,78 @@ owner-confirmed merges a requirement, so the missing surface is the whole featur
 capabilities reachable only by reading `noesis contact --help` in full. Step 3's ambiguity is the
 one substantive design question here: two correct ways to say "Sarah is married to Marco", with
 different annotation and learning consequences and no stated rule for choosing.
+
+### J11 — Writing things down
+
+*Intent:* have somewhere to put a thought that is not yet a fact.
+*Roles:* Capturer. *Outcomes:* 1, 3. *Status:* **not built** — specified in `SPEC.md` §8.5, planned for 0.2.
+
+| # | Must already know | Command | Result | Friction |
+|---|---|---|---|---|
+| 1 | that there is a page for today | `noesis note today` | the dated page, created on first use | Low |
+| 2 | that `[[…]]` means an entity | `noesis note append 'met [[Lía García]] about local-first'` | a block; the link resolves against current names | Low |
+| 3 | that an unresolved link asks rather than guesses | — | clarification prompt, never a silent new entity | Low — §3.5.3 applied |
+| 4 | that editing is a round-trip, not a live file | `noesis note edit today` | `$EDITOR` opens; the saved buffer diffs back into block operations | Medium — F16 |
+| 5 | that every block keeps its history | `noesis note history <blockId>` | every revision, because block text is a fluent | Low |
+| 6 | nothing | `noesis as-of 2026-03-01` | the note as it stood, from machinery that already exists | Low |
+
+*Verdict (design):* the whole journey rests on blocks being fluents, so history, time travel and
+`state.changed` come from §3.6 rather than from anything new. Step 4 is the only real cost, and it
+is the price of D1 — the journal is the truth, so a file cannot be.
+
+### J12 — Turning writing into knowledge
+
+*Intent:* get the facts out of what was written, without retyping them as assertions.
+*Roles:* Capturer, Curator. *Outcomes:* 1, 2, 3. *Status:* **not built** — planned for 0.3.
+
+| # | Must already know | Command | Result | Friction |
+|---|---|---|---|---|
+| 1 | that extraction is asked for, never automatic | `noesis note extract today` | proposals, each with its axiom, Manchester rendering, confidence and source block | Low |
+| 2 | that a paragraph can propose a dozen axioms | — | a batch queue: accept all, accept one, edit, reject | **High** — F5, the governing risk |
+| 3 | that nothing was committed before this | — | confirmed axioms land; the rest is discarded | Low — closes F2 |
+| 4 | nothing | `noesis show lia` | the fact, alongside facts entered by hand — no second class | Low |
+| 5 | nothing | `noesis queue` | an item drafted from it, by the ordinary cascade | Low |
+
+*Verdict (design):* this is §3.5's capture pipeline finally built, and it is what closes F2 —
+confirmation cannot stay a post-hoc report once a model is proposing the content. The risk is
+entirely in step 2: extraction makes §12.1's confirmation fatigue the central UX problem rather
+than a future one.
+
+### J13 — Finding my way back
+
+*Intent:* find what I wrote, and everything I have ever written about someone.
+*Roles:* Curator, Learner. *Outcomes:* 3. *Status:* **not built** — planned for 0.2.
+
+| # | Must already know | Command | Result | Friction |
+|---|---|---|---|---|
+| 1 | nothing | `noesis backlinks lia` | every block mentioning her — a closure query, not an index | Low |
+| 2 | nothing | `noesis search 'local-first'` | blocks, notes and quotes matching, by label and text | Low |
+| 3 | nothing | `noesis note show <id>` | the note as an outline, with block ids | Low |
+| 4 | graph-pattern syntax | `noesis query "?b note:mentions noesis:e/lia"` | the same answer as step 1, generalized | Medium — F1 |
+
+*Verdict (design):* backlinks fall out of the reasoner because `[[links]]` are axioms. That is the
+argument for links being knowledge rather than markup — Obsidian maintains an index for this and
+Noesis does not need one.
+
+### J14 — Reading something long
+
+*Intent:* read a chapter and keep what matters, without the system keeping the chapter.
+*Roles:* Reader, Learner. *Outcomes:* 2, 3. *Status:* **not built** — planned for 0.3.
+
+| # | Must already know | Command | Result | Friction |
+|---|---|---|---|---|
+| 1 | that a source is registered before it is read | `noesis reference add --title 'Local-First Software' --url …` | a reference record | Low |
+| 2 | that the text is not kept | `noesis read chapter.txt --reference <id>` | digest recorded; the session runs in memory | Low |
+| 3 | that suggestions are suggestions | — | proposed quotes, facts and comprehension questions, each with a locator | **High** — F5 again, and longer |
+| 4 | nothing | — | confirmed quotes and facts land; the text is discarded | Low |
+| 5 | nothing | `noesis reference show <id>` | exactly what was kept from it | Low |
+| 6 | that comprehension is graded, not scored | `noesis quiz --reference <id>` | open questions graded against a rubric, cloze only over confirmed quotes | Medium — F15 |
+| 7 | nothing | `noesis backlinks <id>` | every note and fact that came from this source | Low |
+
+*Verdict (design):* the no-store rule is what makes this journey defensible rather than a private
+library of other people's writing, and it costs exactly two things: F14 (re-reading means
+re-supplying) and F15 (comprehension questions cannot go stale). Both are recorded as accepted
+rather than discovered later.
 
 ---
 
@@ -625,6 +698,218 @@ And    a birthday due in the lead time is projected from the fact itself,
        never duplicated into a stored reminder record
 ```
 
+### US-24 — Put a thought somewhere before it is a fact
+
+As the Capturer, when I have a thought that is not yet an assertion, I want somewhere to write it,
+so that capture is never blocked on knowing how to formalize it.
+
+*Role:* Capturer · *Journey:* J11.1, J11.2 · *Spec:* §8.5.1 · *Status:* **not built**
+
+```
+Given  no page exists for today
+When   noesis note today
+Then   a note:Daily page is created and shown
+When   noesis note append 'met [[Lía García]] about local-first'
+Then   a block is appended with a stable id
+And    it is a fluent, so the text can be superseded without losing the id
+```
+
+### US-25 — Mention a thing, not a string
+
+As the Capturer, when I write `[[Lía García]]`, I want it to mean the entity, so that what I write
+joins the graph instead of sitting beside it.
+
+*Role:* Capturer · *Journey:* J11.2, J11.3 · *Spec:* §8.5.2 · *Status:* **not built**
+
+```
+Given  an entity whose current name is Lía García
+When   a block containing [[Lía García]] is committed
+Then   a note:mentions axiom is asserted from the block to that entity
+When   the link matches no entity
+Then   it is raised as a clarification prompt, never a silent new entity
+And    a former name never resolves, because §7.2 forbids rendering it
+```
+
+### US-26 — Edit in my own editor
+
+As the Capturer, when a block needs more than one line of thought, I want to edit it in `$EDITOR`,
+so that writing is not constrained by the shape of a command.
+
+*Role:* Capturer, Curator · *Journey:* J11.4 · *Spec:* §8.5.3 · *Status:* **not built**
+
+```
+Given  a note with three blocks
+When   noesis note edit today
+Then   the note is materialized as Markdown and $EDITOR opens
+When   a line is reworded, one is re-indented and one is added
+Then   the reworded and re-indented blocks keep their ids
+And    only the genuinely new line mints a new block
+And    facts and quotes pointing at those blocks still point at them
+```
+
+### US-27 — See what a block used to say
+
+As the Curator, when a note has changed, I want its history, so that "what did I think then" is
+answerable.
+
+*Role:* Curator · *Journey:* J11.5, J11.6 · *Spec:* §8.5.1, §3.6 · *Status:* **not built**
+
+```
+Given  a block edited three times
+When   noesis note history <blockId>
+Then   every revision is listed with the date it was superseded
+When   noesis as-of <a date before the last edit>
+Then   the note renders as it stood, with no new machinery
+```
+
+### US-28 — Propose facts, never write them
+
+As the Curator, when I ask for extraction, I want proposals I can accept, edit or reject, so that a
+model never puts anything in the journal on my behalf.
+
+*Role:* Curator · *Journey:* J12.1, J12.2, J12.3 · *Spec:* §8.5.5, §3.5 · *Status:* **not built**
+
+```
+Given  a block reading 'met [[Lía García]], her birthday is 12 May'
+When   noesis note extract today
+Then   a proposal shows the axiom, its Manchester rendering, confidence and source block
+And    nothing has been appended to the journal
+When   the proposal is accepted
+Then   the axiom is committed with note:extractedFrom pointing at that block
+And    the model name and digest that produced it are recorded
+When   the proposal is rejected
+Then   nothing is committed, and the rejection is not re-proposed unchanged
+```
+
+### US-29 — Confirm a batch without confirming a hundred times
+
+As the Curator, when one paragraph proposes a dozen axioms, I want to dispose of them as a batch,
+so that extraction does not cost more attention than typing them would have.
+
+*Role:* Curator · *Journey:* J12.2 · *Spec:* §12.1 · *Status:* **not built**
+
+```
+Given  twelve proposals from one note
+When   the batch queue is shown
+Then   accept-all, per-item accept, edit and reject are all available
+And    the count and the sensitivity of what would be committed are shown before accepting
+When   the batch is cancelled
+Then   nothing is committed, because the commit is atomic
+```
+
+### US-30 — A model never sees what an agent could not
+
+As the Auditor, when text is sent to the local model, I want the same disclosure boundary that
+governs every other external consumer, so that "it runs locally" is not the whole argument.
+
+*Role:* Auditor · *Journey:* J12.1 · *Spec:* §8.5.5, §3.3.1 · *Status:* **not built**
+
+```
+Given  facts at every sensitivity level about a mentioned entity
+When   a prompt is assembled
+Then   its knowledge-base context is a DisclosureView, and sensitive facts are absent
+When   --include-sensitive is passed
+Then   the widened policy is used for that invocation and recorded
+And    no remote provider is configurable in this release
+```
+
+### US-31 — Everything I wrote about someone
+
+As the Curator, when I want what I know about a person, I want what I *wrote* about them too, so
+that notes and facts are one body of knowledge rather than two.
+
+*Role:* Curator, Learner · *Journey:* J13.1, J13.2 · *Spec:* §8.5.2 · *Status:* **not built**
+
+```
+Given  three blocks mentioning Lía across two notes
+When   noesis backlinks lia
+Then   all three are listed with their notes
+And    the answer comes from the closure, so no index can fall out of date
+When   noesis search 'local-first'
+Then   matching blocks, note titles and quotes are returned
+```
+
+### US-32 — Register a source before reading it
+
+As the Reader, when I am about to read something, I want the source recorded first, so that
+everything I keep from it has somewhere to attach.
+
+*Role:* Reader · *Journey:* J14.1 · *Spec:* §3.7, §8.5.4 · *Status:* **not built**
+
+```
+Given  no reference exists for the paper
+When   noesis reference add --title 'Local-First Software' --url https://…
+Then   a ref:Reference is created with its metadata
+And    it is an ordinary entity, so it can be mentioned by [[links]] like any other
+```
+
+### US-33 — Read a chapter without the system keeping it
+
+As the Reader, when I hand Noesis a chapter, I want it used and discarded, so that my knowledge
+base does not become a copy of someone else's book.
+
+*Role:* Reader · *Journey:* J14.2, J14.3, J14.4 · *Spec:* §8.5.4 · *Status:* **not built**
+
+```
+Given  a chapter as a file
+When   noesis read chapter.txt --reference <id>
+Then   ref:sourceDigest records a SHA-256 over the normalized text
+And    proposed quotes, facts and questions are shown with locators
+When   the session ends
+Then   the journal, the Markdown mirror and the workspace contain no unconfirmed
+       substring of the source
+When   the same file is supplied again
+Then   the digest matches and is reported; a different text is reported, not accepted
+```
+
+### US-34 — Keep the quote, keep it verbatim
+
+As the Reader, when a passage matters, I want it kept exactly as written and marked as not mine, so
+that what the source said never blurs into what I think.
+
+*Role:* Reader · *Journey:* J14.3, J14.4 · *Spec:* §8.5.4 · *Status:* **not built**
+
+```
+Given  a proposed quote with its locator
+When   it is confirmed
+Then   a ref:Quote is asserted verbatim, with no fluent and no way to supersede it
+When   a literature note comments on it
+Then   the block cites the quote rather than containing it
+And    the block is editable while the quote is not
+```
+
+### US-35 — Be tested on what I read
+
+As the Reader, when I have finished something, I want to be asked whether I understood it, so that
+reading leaves more than a list of highlights.
+
+*Role:* Reader, Learner · *Journey:* J14.6 · *Spec:* §8.5.6, §4.1 · *Status:* **not built**
+
+```
+Given  comprehension questions generated during the reading session
+When   noesis quiz --reference <id>
+Then   open questions are asked and graded against a rubric by the local model
+And    the grade records the model and digest, and the owner can override it
+And    a cloze question exists only where it was built from a confirmed quote
+When   no model is configured
+Then   the grader declines rather than guessing
+```
+
+### US-36 — See exactly what a source left behind
+
+As the Reader, when I look back at a source, I want what I kept from it, so that the value of
+having read it is visible.
+
+*Role:* Reader, Curator · *Journey:* J14.5, J14.7 · *Spec:* §8.5.4 · *Status:* **not built**
+
+```
+Given  a reference with confirmed quotes and extracted facts
+When   noesis reference show <id>
+Then   its metadata, digest, quotes and the facts linked to it are listed
+When   noesis backlinks <id>
+Then   every note block and axiom deriving from it is listed
+```
+
 ---
 
 ## 6. Friction ledger
@@ -647,6 +932,10 @@ Every friction identified above, with its root cause and status. **Open** means 
 | **F11** | `check` is manual | J1.5, J6.4 | Consistency is enforced at commit; policy and profile findings are only produced on demand | **Accepted** — commit-time consistency already fails closed (`DESIGN.md` invariant 2). Surfacing advisory findings automatically would add output to every command; the Curator asks when curating |
 | **F12** | Capture cannot happen away from the terminal | all | No mobile or web surface (§2) | **Accepted** — local-first, single-device MVP. §10's sync is unbuilt by decision, not oversight |
 | **F13** | No latency evidence for §10's budgets | J2, J3 | Nothing measures capture round-trip or review submit | **Accepted for now** — the budgets bind the LLM-backed capture path that does not exist yet. Revisit when it does |
+| **F14** | Re-extracting from a source means supplying the text again | J14.2 | §8.5.4 keeps no copy of the text | **Accepted** — the direct cost of the retention rule. The alternative is holding the copyrighted text the rule exists to avoid holding, and the digest at least makes "is this the same text?" answerable |
+| **F15** | Comprehension questions cannot go stale | J14.6 | §4.1 detects staleness from source axioms; an open comprehension question has only a reference | **Accepted** — regenerating requires the text, which is not kept. Recorded as a deliberate departure rather than left to be discovered when a question outlives its accuracy |
+| **F16** | Editing a note is a round-trip, not a live file | J11.4 | D1: blocks are journaled state, so a file cannot be the truth | **Accepted** — what buys per-block history, time travel and stable link targets. A read-only Markdown mirror keeps `grep` working |
+| **F17** | Extraction volume is unbounded | J12.2, J14.3 | A model proposes as much as the text supports; §12.1's batch queue is the only control | **Open** — US-29. This is the one that decides whether the module is usable, and it cannot be judged until real text meets a real model |
 
 ---
 
@@ -684,6 +973,21 @@ noesis undo
 noesis agenda
 noesis contact duplicates
 noesis contact merge
+noesis note today
+noesis note new
+noesis note append
+noesis note edit
+noesis note show
+noesis note list
+noesis note history
+noesis note extract
+noesis backlinks
+noesis search
+noesis reference add
+noesis reference show
+noesis reference list
+noesis reference quote-add
+noesis read
 ```
 
 ## 9. Product decisions
@@ -699,3 +1003,28 @@ Dated, numbered, and appended — never rewritten. A decision that reverses an e
   so that re-proposing them is cheap to answer.
 - **PD-04 (2026-07-30) — Reachability before novelty.** Where a subsystem is built and tested but has
   no owner-facing surface, exposing it outranks new capability. This is why F7 leads the ordering.
+- **PD-05 (2026-07-31) — Notes, journaling and reading are one module, specified before built.**
+  `SPEC.md` §8.5 settles the contract ahead of the code because two of its rules are expensive to
+  retrofit: source text is never retained, and a model never sees more than an external agent would.
+  Eight decisions were taken, and each closed off an alternative worth recording:
+  - *Blocks are fluents.* Block text, parent and order are time-varying states, so per-block history
+    and `as-of` come from §3.6 and the journal gains no operation.
+  - *Journal-native blocks with an editor round-trip*, not files-as-truth. Buys history and stable
+    link targets; costs live editing (F16).
+  - *Block-level addressing*, so provenance points at a sentence. This is why own-notes need no
+    text-quote selectors — and why read sources, whose text is not kept, still do.
+  - *Quotes are records; blocks cite them.* Your words are fluents because you revise them;
+    someone else's are axioms because revising them would make the claim false.
+  - *Source text is transient*, with a digest recorded. Not primarily a storage decision: it is what
+    makes handing a purchased chapter to a personal knowledge base defensible.
+  - *The local model is gated like any external consumer.* It is a separate process that could log
+    what it is shown, so prompt context is a `DisclosureView` and `sensitive` is absent by default.
+  - *Comprehension questions are open or cloze-over-confirmed-quotes only*, so no unconfirmed
+    passage is persisted inside a question.
+  - *Loopback now, endpoint abstracted.* Ollama does not yet serve a Unix socket
+    ([ollama/ollama#8072](https://github.com/ollama/ollama/pull/8072)); the socket path is
+    implemented so the switch is configuration rather than a rewrite.
+- **PD-06 (2026-07-31) — Ordering after PD-05.** Notes without a model ship first, then `noesis
+  quiz`, then the gateway, then extraction, then reading sessions. The reachability gate (§7) still
+  applies: F7 blocks the reading journey, because "quiz me on what I read" is unbuildable while the
+  review loop cannot ask a question.

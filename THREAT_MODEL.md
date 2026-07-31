@@ -138,6 +138,16 @@ package endpoint is an intentional egress path. See
 - The future HTTP/MCP/sync surfaces still require authentication, authorization, token storage,
   revocation, rate limiting, request-size limits, transport security, audit policy and a revised
   data-flow analysis.
+- **The local model process of SPEC §8.5.7 is an unanalyzed boundary until it is built.** It is a
+  separate process that receives prompt context and may log or retain it, and the model behind it can
+  be replaced without Noesis observing the change. The specified controls — assembling context from a
+  `DisclosureView` so `sensitive` never enters a prompt, configuring no remote provider, and
+  recording the model and digest with every proposal — are design commitments, not implemented ones.
+  Two of them need this document rewritten rather than extended when the module lands: loopback TCP
+  is reachable by **any** local process, which a Unix socket's file permissions would prevent
+  (deferred only because [ollama/ollama#8072](https://github.com/ollama/ollama/pull/8072) is
+  unmerged); and reading sessions add source text as a *transient* asset whose required property is
+  that it never becomes a durable one.
 
 ## Review triggers
 
