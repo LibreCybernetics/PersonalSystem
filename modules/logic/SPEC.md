@@ -13,7 +13,7 @@ DL is the system's ceiling, not a claim that this algebra presently implements a
 
 - An `Iri` is an opaque string value holding an **absolute IRI**. Compact names are input and
   display notation only: `Iri.apply` expands a bound prefix, so `Iri("crm:worksAt")` *is*
-  `https://noesis.librecybernetics.ws/ns/crm#worksAt` and no compact name survives construction.
+  `https://noesis.librecybernetics.dev/ns/crm#worksAt` and no compact name survives construction.
   Expanding at the single constructor rather than at each boundary is what makes "everything stored
   is an RDF term" an invariant rather than a convention — there is nowhere left to forget.
   `Iri.display` abbreviates again for messages; serializations do their own rendering, because there
@@ -81,8 +81,9 @@ boundaries and annotations.
    alter semantics.
 5. Changes to serialized cases or fields require fixtures for both old and new representations and
    an explicit migration strategy in the journal specification.
-6. A decoder must keep reading the forms it has already written. `Literal` decodes both the current
-   lexical/datatype encoding and the pre-typed-literal sum, told apart by which key is present.
+6. A decoder must keep reading every form it has already written. At 0.1 that is exactly one form
+   per type — nothing predates the first release — so the obligation begins here rather than
+   carrying anything.
 
 ## 7. Normative references
 

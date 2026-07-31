@@ -1,8 +1,8 @@
 # Noesis — Architecture & Specification
 ### A single-user knowledge & learning system on a formal knowledge representation
 
-**Version:** 0.6 (Draft) — Personal Relationship Management and contact interchange design
-**Status:** For review
+**Version:** 0.1 — first release
+**Status:** Current
 
 ---
 
@@ -628,4 +628,4 @@ RDF quad store with RDF-star (Jena TDB2 / Oxigraph); ELK (EL) with HermiT/Openll
 
 ---
 
-*End of specification v0.6.*
+*End of specification v0.1.*

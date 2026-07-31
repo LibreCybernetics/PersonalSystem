@@ -1,5 +1,5 @@
-ThisBuild / organization := "ws.librecybernetics"
-ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / organization := "dev.librecybernetics"
+ThisBuild / version := "0.1.0"
 ThisBuild / scalaVersion := "3.8.4"
 
 val catsEffectV = "3.6.3"
@@ -201,7 +201,7 @@ lazy val cli = project
             |exec "$$java" \\
             |  -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8 \\
             |  -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 \\
-            |  -cp "$classpath" noesis.cli.Main "$$@"
+            |  -cp "$classpath" dev.librecybernetics.noesis.cli.Main "$$@"
             |""".stripMargin
       )
       val _ = script.setExecutable(true)

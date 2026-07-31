@@ -41,29 +41,29 @@ Key implementation points:
 
 | Concern | File |
 |---|---|
-| Axiom language | `modules/logic/src/main/scala/noesis/logic/Axiom.scala` |
-| Journal operations | `modules/journal/src/main/scala/noesis/journal/Operation.scala`, `Journal.scala` |
-| Coordinated log snapshots | `modules/journal/src/main/scala/noesis/journal/JournalArchive.scala` |
-| Journal → state fold | `modules/core/src/main/scala/noesis/core/projection/KbState.scala` |
-| State projections | `modules/core/src/main/scala/noesis/core/projection/Projections.scala` |
-| Reasoner graph | `modules/reasoner/src/main/scala/noesis/reasoner/Graph.scala` |
-| Inference rules | `modules/reasoner/src/main/scala/noesis/reasoner/Rule.scala` (+ module rules in `vocab/`) |
-| Fixpoint, closure | `modules/reasoner/src/main/scala/noesis/reasoner/Reasoner.scala` |
-| Consistency, EL profile | `modules/reasoner/src/main/scala/noesis/reasoner/Consistency.scala` |
-| Annotation cascade | `modules/core/src/main/scala/noesis/core/policy/Policy.scala` |
-| Disclosure rule | `modules/core/src/main/scala/noesis/core/policy/Disclosure.scala` |
-| Intent → operations | `modules/core/src/main/scala/noesis/core/capture/Capture.scala` |
-| Pre-commit validation | `modules/core/src/main/scala/noesis/core/kb/Validation.scala` |
-| Interchange and agenda seams | `modules/core/src/main/scala/noesis/core/module/Extensions.scala` |
-| Service surface | `modules/core/src/main/scala/noesis/core/kb/KnowledgeBase.scala` |
-| Portable archive workflow | `modules/cli/src/main/scala/noesis/cli/Archive.scala` |
-| Command-surface derivation | `modules/cli/src/main/scala/noesis/cli/meta/CommandSurface.scala` |
-| Belief, derived belief | `modules/lms/src/main/scala/noesis/lms/Belief.scala` |
-| Scheduling | `modules/lms/src/main/scala/noesis/lms/Scheduler.scala` |
-| Module contract | `modules/vocab/src/main/scala/noesis/vocab/Module.scala` |
+| Axiom language | `modules/logic/src/main/scala/dev/librecybernetics/noesis/logic/Axiom.scala` |
+| Journal operations | `modules/journal/src/main/scala/dev/librecybernetics/noesis/journal/Operation.scala`, `Journal.scala` |
+| Coordinated log snapshots | `modules/journal/src/main/scala/dev/librecybernetics/noesis/journal/JournalArchive.scala` |
+| Journal → state fold | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/projection/KbState.scala` |
+| State projections | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/projection/Projections.scala` |
+| Reasoner graph | `modules/reasoner/src/main/scala/dev/librecybernetics/noesis/reasoner/Graph.scala` |
+| Inference rules | `modules/reasoner/src/main/scala/dev/librecybernetics/noesis/reasoner/Rule.scala` (+ module rules in `vocab/`) |
+| Fixpoint, closure | `modules/reasoner/src/main/scala/dev/librecybernetics/noesis/reasoner/Reasoner.scala` |
+| Consistency, EL profile | `modules/reasoner/src/main/scala/dev/librecybernetics/noesis/reasoner/Consistency.scala` |
+| Annotation cascade | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/policy/Policy.scala` |
+| Disclosure rule | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/policy/Disclosure.scala` |
+| Intent → operations | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/capture/Capture.scala` |
+| Pre-commit validation | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/kb/Validation.scala` |
+| Interchange and agenda seams | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/module/Extensions.scala` |
+| Service surface | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/kb/KnowledgeBase.scala` |
+| Portable archive workflow | `modules/cli/src/main/scala/dev/librecybernetics/noesis/cli/Archive.scala` |
+| Command-surface derivation | `modules/cli/src/main/scala/dev/librecybernetics/noesis/cli/meta/CommandSurface.scala` |
+| Belief, derived belief | `modules/lms/src/main/scala/dev/librecybernetics/noesis/lms/Belief.scala` |
+| Scheduling | `modules/lms/src/main/scala/dev/librecybernetics/noesis/lms/Scheduler.scala` |
+| Module contract | `modules/vocab/src/main/scala/dev/librecybernetics/noesis/vocab/Module.scala` |
 | Naming convention register | `modules/vocab/NAMING.md` (rules in `modules/conformance/src/test/resources/mdr/naming.json`) |
-| PRM capture and projections | `modules/vocab/src/main/scala/noesis/vocab/PrmCapture.scala`, `Prm.scala` |
-| PRM interchange | `modules/vocab/src/main/scala/noesis/vocab/VCard.scala`, `Foaf.scala` |
+| PRM capture and projections | `modules/vocab/src/main/scala/dev/librecybernetics/noesis/vocab/PrmCapture.scala`, `Prm.scala` |
+| PRM interchange | `modules/vocab/src/main/scala/dev/librecybernetics/noesis/vocab/VCard.scala`, `Foaf.scala` |
 
 ### Architectural ownership rules
 
@@ -148,17 +148,17 @@ Key implementation points:
    fixpoint need not terminate.
 7. **Persistence boundaries are explicit.** Journal-serialized sum types are `enum`s that derive
    `ConfiguredCodec` and use the `given Configuration` in
-   `modules/logic/src/main/scala/noesis/logic/JsonConfig.scala` (discriminator `type`, defaults
-   honored). Identifiers such as `Iri`, `AxiomId`, `FluentId` and `ItemId` are opaque types with
-   explicit Circe instances in their companions. Learning item and question source identifiers use
-   versioned, length-delimited SHA-256 inputs; the `v2` change intentionally does not alias legacy
-   JVM-hash identifiers. These shapes prevent unrelated identifiers from being mixed and make
-   collision behavior independent of a runtime's `hashCode`.
+   `modules/logic/src/main/scala/dev/librecybernetics/noesis/logic/JsonConfig.scala`
+   (discriminator `type`, defaults honored). Identifiers such as `Iri`, `AxiomId`, `FluentId` and
+   `ItemId` are opaque types with explicit Circe instances in their companions. Learning item and
+   question source identifiers are domain-separated, length-delimited SHA-256 values. These shapes
+   prevent unrelated identifiers from being mixed and make collision behavior independent of a
+   runtime's `hashCode`.
 8. **Generic reads are disclosure-scoped.** Raw journal, state, closure and diagnostic projections
-   are implementation capabilities under the `noesis` package. General consumers receive a
-   `DisclosureView` whose state, closure, names and justifications have already crossed one policy
-   boundary. Entailment, explanation and query return `ReasoningResult`, so a sound partial answer
-   cannot be confused with a complete negative or exhaustive result.
+   are implementation capabilities under the `dev.librecybernetics.noesis` package. General
+   consumers receive a `DisclosureView` whose state, closure, names and justifications have already
+   crossed one policy boundary. Entailment, explanation and query return `ReasoningResult`, so a
+   sound partial answer cannot be confused with a complete negative or exhaustive result.
 9. **Local persistence is private by construction.** Opening a workspace rejects symlinked
    persistence paths and tightens POSIX modes to `0700`/`0600`, independent of the caller's umask.
    Archives are created with the same owner-only modes, carry SHA-256 checksums for every payload,

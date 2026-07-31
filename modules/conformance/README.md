@@ -18,7 +18,7 @@ src/test/resources/          corpora, one directory per specification
   bcp47/tags.json              RFC 5646      §2.1           31 vectors
   mdr/naming.json              ISO/IEC 11179-5 §2.2.2, §9  10 namespaces
   ntriples/{positive,negative}.nt  RDF 1.1 N-Triples §2, §6
-src/test/scala/noesis/conformance/
+src/test/scala/dev/librecybernetics/noesis/conformance/
   Manifest.scala             corpus loading; every case carries the clause it comes from
   Ijson.scala                an I-JSON checker, written against the clauses rather than the writer
   Naming.scala               what the shipped vocabularies declare, and in which role
@@ -38,7 +38,7 @@ reproduced in full, so that conformance stays checkable by a reader without a co
 ## Running
 
 ```bash
-nix develop --command sbt -batch "conformance/testOnly noesis.conformance.*"
+nix develop --command sbt -batch "conformance/testOnly dev.librecybernetics.noesis.conformance.*"
 ```
 
 ## Why this is not in the mutation matrix
