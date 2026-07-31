@@ -4,7 +4,10 @@ This document records the principles and constraints of the current implementati
 [SPEC.md](SPEC.md), which is the authority on intended design and deliberately describes more than
 the MVP implements. A disagreement between implementation and spec is a finding rather than an
 implicit reason to change either one. [README.md](README.md) describes the current product and its
-operation; [TESTING.md](TESTING.md) describes its verification practices.
+operation; [TESTING.md](TESTING.md) describes its verification practices. [PRODUCT.md](PRODUCT.md)
+records who the system serves and which journeys it must support, and [UX.md](UX.md) records how the
+owner-facing surface behaves; the principles below constrain both, and where a friction can only be
+removed by weakening an invariant here, the invariant wins.
 
 ## Architecture
 
@@ -54,6 +57,7 @@ Key implementation points:
 | Interchange and agenda seams | `modules/core/src/main/scala/noesis/core/module/Extensions.scala` |
 | Service surface | `modules/core/src/main/scala/noesis/core/kb/KnowledgeBase.scala` |
 | Portable archive workflow | `modules/cli/src/main/scala/noesis/cli/Archive.scala` |
+| Command-surface derivation | `modules/cli/src/main/scala/noesis/cli/meta/CommandSurface.scala` |
 | Belief, derived belief | `modules/lms/src/main/scala/noesis/lms/Belief.scala` |
 | Scheduling | `modules/lms/src/main/scala/noesis/lms/Scheduler.scala` |
 | Module contract | `modules/vocab/src/main/scala/noesis/vocab/Module.scala` |
@@ -64,7 +68,9 @@ Key implementation points:
 ### Architectural ownership rules
 
 - **The verbalizer owns naming.** Display names come from `Verbalizer.label`, never from an IRI's
-  local part. Former names are `sensitive` and must not reach output (§7.2).
+  local part. Former names are `sensitive` and must not reach output (§7.2). This is an
+  architectural rule with an experience consequence, and [UX.md](UX.md) §1 depends on it: no surface
+  may render a display name it derived itself.
 
 ## System design principles
 

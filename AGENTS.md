@@ -15,13 +15,40 @@ to make the current code match the design document.
 
 Operational notes for LLM agents working in this repository. Before changing or validating code,
 read [README.md](README.md) for what the project is, follow the architecture, principles and
-invariants in [DESIGN.md](DESIGN.md), and read [TESTING.md](TESTING.md) for how to verify it. This
-file is about how to change the project without breaking it.
+invariants in [DESIGN.md](DESIGN.md), and read [TESTING.md](TESTING.md) for how to verify it. When
+the change touches anything the owner sees, read [PRODUCT.md](PRODUCT.md) for who it is for and
+[UX.md](UX.md) for how the surface must behave. This file is about how to change the project without
+breaking it.
 
 **[SPEC.md](SPEC.md) is the authority on intent.** It is a design document, not documentation of the
 code — it describes more than is built. When code and spec disagree, that is a finding to report, not
 a bug to silently fix. Deliberate departures are recorded in [DESIGN.md](DESIGN.md) and commented at
 their definitions; do not "correct" them.
+
+## Keep the product surface and its documentation synchronized
+
+The same rule, applied to the owner-facing surface. A change to a command, its output, or any
+failure path must update the journey step and story it serves in [PRODUCT.md](PRODUCT.md); a new
+journey or story that describes behavior the surface does not have must say so with its status,
+rather than describing intent as fact. If the two cannot be reconciled within the task's scope,
+report the discrepancy — do not quietly write a journey that flatters the code.
+
+Adding a command means adding it to a journey. `ProductTraceSuite` fails otherwise — it derives the
+command tree from `Main`'s typed AST, so the surface it checks is the one that ships. It is the only
+mechanical guard the product documentation has, so do not route around it by describing the command
+in prose that avoids the invocation syntax.
+
+You cannot run usability tests, so use the deterministic substitutes:
+
+- **Produce the transcript.** Evidence for owner-facing behavior is the launcher output of the
+  affected journey step, checked against the story's acceptance criteria — not a reading of the
+  source. [TESTING.md](TESTING.md) states the rule and the disposable-workspace procedure.
+- **Check every new failure path against the rubric** in [UX.md](UX.md) §4. A refusal that omits
+  which rule refused it is incomplete work, not a terse message.
+- **Report friction you hit.** If a step cost you more than the journey suggests it should, add a
+  friction-ledger row in [PRODUCT.md](PRODUCT.md) §6. Encountering it while working is the closest
+  thing to observation this repository has, and the ledger is the place for it — not the fix, unless
+  the fix is in scope.
 
 ## Commands
 
@@ -88,6 +115,13 @@ These cost real time. Check here before debugging from scratch.
   `Patch.applyTo[B >: A]`.
 - **Tuple destructuring in a lambda parameter list** (`((a, b), i) => ...`) is not legal Scala 3;
   destructure in the body.
+- **A foreign symbol's tree arrives without its right-hand side on the first read.** `Main` is
+  compiled separately from the suite that inspects it, so `Symbol.tree` from a macro expanding in
+  `cli/test` yields the `ValDef` but no RHS the first time, and the definition only on a second
+  read. `CommandSurface` derived an *empty* command surface because of this — and an empty surface
+  made every traceability rule pass vacuously, which is the worst way for a check to fail. `body`
+  there reads twice on purpose. Relatedly, resolving a member forces the module class to complete;
+  `declarations` read before that completion comes back empty rather than incomplete.
 - **Fluent-backed facts have no `AxiomRecord`.** They are projections, so the annotation cascade
   cannot see them and falls back to a neutral utility. Since `worksAt`, `hasName` and `pronouns` are
   all time-varying *and* the highest-utility properties, this silently mis-ranked name-change items.
