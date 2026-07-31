@@ -131,7 +131,7 @@ package endpoint is an intentional egress path. See
   reads, or protection from shoulder surfing and terminal history.
 - Scala visibility and restricted context types constrain ordinary integrations but are not a
   sandbox. Arbitrary code loaded into the same JVM, reflection, or code deliberately placed in the
-  `noesis` package must be treated as trusted application code.
+  `dev.librecybernetics.noesis` package must be treated as trusted application code.
 - Archive creation leaves an incomplete new directory if the process fails before writing the
   manifest. Such a directory fails verification and must not be treated as a valid backup.
 - No scheduled snapshot, retention policy or automatic restore drill exists.

@@ -47,14 +47,15 @@ New writes store one atomic `JournalFrame` per non-empty line:
 ```
 
 `entries` is a non-empty, ordered commit bundle. `checksum` is lowercase hexadecimal SHA-256 over
-the canonical JSON encoding of `entries`. The reader also accepts the legacy format of one
-`JournalEntry` per line; this branch is unambiguous because a frame has `formatVersion`.
+the canonical JSON encoding of `entries`. A line without `formatVersion` is corruption, not a
+shorter commit: the frame is the unit of atomicity, so a reader that accepted bare entries would
+undo the guarantee the frame exists to provide.
 
 Both forms use this profile:
 
 1. each record is one JSON object conforming to RFC 8259 and restricted to I-JSON (RFC 7493);
-2. serialized in the canonical form of `noesis.logic.Canonical` — RFC 8785 applied after absent
-   optionals are dropped deeply;
+2. serialized in the canonical form of `dev.librecybernetics.noesis.logic.Canonical` — RFC 8785
+   applied after absent optionals are dropped deeply;
 3. written on a single line, terminated by LF, encoded as UTF-8;
 4. with no byte-order mark and no whitespace outside string values.
 
@@ -103,28 +104,20 @@ recovery for the plain review log.
 
 ## 6. Compatibility
 
-Readers must replay existing valid journals exactly. Version-1 commit-frame readers retain the
-legacy one-entry decoder, so an existing valid journal can be appended to without a rewrite; old
-lines and new frames may coexist. A future wire-format change requires golden fixtures, a version
-discriminator or unambiguous decoder, and a migration that preserves sequence order, operation
-meaning, and axiom identities.
+Version 0.1 is the first release. No journal predates it, so the frame above is the only shape that
+has ever been valid and a reader may assume it; `formatVersion` exists so that a *future* change can
+be recognized outright rather than inferred from a payload's shape.
 
-Two changes at `0.1.0-SNAPSHOT` exercised this, and only one of them kept axiom identities.
+From this release on, a reader must replay every previously valid journal exactly. A wire-format
+change therefore requires golden fixtures for both representations, a version discriminator or an
+otherwise unambiguous decoder, and a migration preserving sequence order, operation meaning and
+axiom identities.
 
-**Typed literals kept them.** Literals moved from a circe sum with a `type` discriminator to a
-lexical/datatype pair; the decoder tells the two apart by which key is present rather than by a
-version field, so existing journals replay unchanged.
-
-**Two changes broke them.** Adopting RFC 8785 reordered canonical members, and expanding compact
-names into absolute IRIs changed what those members contain — each changes every `AxiomId`. Neither
-is recoverable by a decoder, because the identifier *is* the content. Both were taken deliberately
-before any released journal existed to migrate, and the migration for the second is the constructor
-itself: a journal written when compact names were stored decodes through `Iri.apply`, so its
-identifiers expand on the way in, and its axioms acquire the identifiers they would have had.
-
-The guarantee in §6 of the logic specification — that an unchanged axiom keeps its `AxiomId` across
-releases — therefore takes effect at the first tagged release, not from the start of this branch.
-Saying so is the point: a compatibility promise the history disproves is worth less than none.
+The last of those is the binding one. An `AxiomId` is derived from the axiom's canonical content, so
+any change to canonicalization — or to what the canonical members contain — changes every
+identifier, and no decoder can recover it, because the identifier *is* the content. That is what
+makes §6 of the logic specification, which promises that an unchanged axiom keeps its `AxiomId`
+across releases, a constraint on this format rather than a remark about it.
 
 ## 7. Normative references
 
@@ -135,7 +128,7 @@ Cited normatively only where Noesis conforms *and* the conformance is tested; de
 |---|---|
 | [ISO/IEC 21778:2017](https://standards.iso.org/ittf/PubliclyAvailableStandards/) / [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) — JSON | §4.1. The two are intended to define one syntactic language; the ISO text is cited because it is the freely retrievable one. Scope: what the reader accepts, tested against the reader that replays the journal |
 | [RFC 7493](https://www.rfc-editor.org/rfc/rfc7493) — I-JSON | §4.1. I-JSON matters specifically: it forbids duplicate keys, lone surrogates and integers beyond 2^53, each of which would break replay determinism. Scope: **writing** — every line Noesis emits is an I-JSON message. Reading is not restricted to I-JSON (D9), and an unpaired surrogate is substituted rather than refused (D10) |
-| [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JCS | §4.2, via `noesis.logic.Canonical` |
+| [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) — JCS | §4.2, via `dev.librecybernetics.noesis.logic.Canonical` |
 | [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) | `JournalEntry.at`. RFC 3339 is a profile of ISO 8601-1 and is what is implemented; the wider standard is not held, so it is not cited |
 | [RDF 1.1 N-Triples](https://www.w3.org/TR/n-triples/) | `NTriples`, reading and writing. No blank nodes (D6) |
 | [RDF 1.1 Turtle](https://www.w3.org/TR/turtle/) §6 | `Turtle`, writing only. Prefixed names, IRIREFs, literal syntax and the `@prefix` directive |

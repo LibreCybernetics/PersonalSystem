@@ -12,7 +12,7 @@ current graphs, entailments, learning items, and balances are rebuilt from repla
 
 - `InMemoryJournal` provides the same ordering/atomic-bundle interface for tests and scratch work.
 - `JsonLinesJournal` appends one checksummed, versioned JSON object per atomic commit and fails
-  loudly on malformed complete content. It still reads legacy one-operation lines.
+  loudly on malformed complete content.
 - `JsonLines` provides the plain append/read format used by auxiliary logs such as reviews.
 - `JournalArchive` captures journal and review bytes under both files' locks and validates immutable
   archived journal bytes without modifying them.
@@ -34,6 +34,6 @@ See [SPEC.md](SPEC.md) for the normative format and replay contract. The root
 
 ```bash
 nix develop --command sbt -batch journal/compile
-nix develop --command sbt -batch "journal/testOnly noesis.journal.*"
+nix develop --command sbt -batch "journal/testOnly dev.librecybernetics.noesis.journal.*"
 nix develop --command sbt -batch journal/stryker
 ```

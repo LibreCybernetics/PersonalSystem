@@ -36,6 +36,6 @@ See [SPEC.md](SPEC.md) for the normative language and compatibility contract. Th
 
 ```bash
 nix develop --command sbt -batch logic/compile
-nix develop --command sbt -batch "logic/testOnly noesis.logic.*"
+nix develop --command sbt -batch "logic/testOnly dev.librecybernetics.noesis.logic.*"
 nix develop --command sbt -batch logic/stryker
 ```

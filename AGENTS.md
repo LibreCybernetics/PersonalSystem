@@ -80,7 +80,7 @@ These cost real time. Check here before debugging from scratch.
 
 - **`Option[Option[A]]` does not round-trip.** `Some(None)` encodes to JSON `null`, indistinguishable
   from absent, so "clear this override" became a silent no-op on replay. Use the explicit three-state
-  `Patch` enum in `modules/logic/src/main/scala/noesis/logic/Annotations.scala`.
+  `Patch` enum in `modules/logic/src/main/scala/dev/librecybernetics/noesis/logic/Annotations.scala`.
 - **fs2 `Files` + `Async` context bounds are ambiguous.** `Files[F]` cannot be summoned when both are
   in scope (fs2 3.12 deprecates the `Async`-derived instance). Either use a named context bound
   (`Files as files`) or pass `Files[F]` as an explicit constructor parameter, as `JsonLinesJournal`

@@ -39,14 +39,14 @@ Shared test fixtures belong in a `Fixtures` or module-specific fixture object.
 Fast feedback comes from running the owning module explicitly:
 
 ```bash
-nix develop --command sbt -batch "logic/testOnly noesis.logic.*"
-nix develop --command sbt -batch "journal/testOnly noesis.journal.*"
-nix develop --command sbt -batch "reasoner/testOnly noesis.reasoner.*"
-nix develop --command sbt -batch "core/testOnly noesis.core.*"
-nix develop --command sbt -batch "lms/testOnly noesis.lms.*"
-nix develop --command sbt -batch "vocab/testOnly noesis.vocab.*"
-nix develop --command sbt -batch "cli/testOnly noesis.cli.*"
-nix develop --command sbt -batch "conformance/testOnly noesis.conformance.*"
+nix develop --command sbt -batch "logic/testOnly dev.librecybernetics.noesis.logic.*"
+nix develop --command sbt -batch "journal/testOnly dev.librecybernetics.noesis.journal.*"
+nix develop --command sbt -batch "reasoner/testOnly dev.librecybernetics.noesis.reasoner.*"
+nix develop --command sbt -batch "core/testOnly dev.librecybernetics.noesis.core.*"
+nix develop --command sbt -batch "lms/testOnly dev.librecybernetics.noesis.lms.*"
+nix develop --command sbt -batch "vocab/testOnly dev.librecybernetics.noesis.vocab.*"
+nix develop --command sbt -batch "cli/testOnly dev.librecybernetics.noesis.cli.*"
+nix develop --command sbt -batch "conformance/testOnly dev.librecybernetics.noesis.conformance.*"
 ```
 
 Inside `nix develop`, the `nix develop --command` prefix is unnecessary. The ordinary CI gate is
@@ -57,14 +57,14 @@ test-bearing module:
 nix develop --command sbt -batch \
   "clean;
   compile;
-  logic/testOnly noesis.logic.*;
-  journal/testOnly noesis.journal.*;
-  reasoner/testOnly noesis.reasoner.*;
-  core/testOnly noesis.core.*;
-  lms/testOnly noesis.lms.*;
-  vocab/testOnly noesis.vocab.*;
-  cli/testOnly noesis.cli.*;
-  conformance/testOnly noesis.conformance.*"
+  logic/testOnly dev.librecybernetics.noesis.logic.*;
+  journal/testOnly dev.librecybernetics.noesis.journal.*;
+  reasoner/testOnly dev.librecybernetics.noesis.reasoner.*;
+  core/testOnly dev.librecybernetics.noesis.core.*;
+  lms/testOnly dev.librecybernetics.noesis.lms.*;
+  vocab/testOnly dev.librecybernetics.noesis.vocab.*;
+  cli/testOnly dev.librecybernetics.noesis.cli.*;
+  conformance/testOnly dev.librecybernetics.noesis.conformance.*"
 ```
 
 A plain `sbt test` result is insufficient evidence that every suite ran. sbt 2 executes tests
@@ -179,13 +179,13 @@ The `agent-sandbox-sources` check runs ShellCheck over both shell scripts, compi
 
 `ProductTraceSuite` in the `cli` module compares the shipped command surface against
 [PRODUCT.md](PRODUCT.md), and runs with the rest of that module under
-`cli/testOnly noesis.cli.*`. It fails when a shipped command appears in no journey or story, when a
-product document invokes a command that does not exist and is not declared under "Proposed
-commands", when a proposal has since shipped, when a story cites a journey step that does not
-exist, when a journey is served by no story, when a story is missing a field or its acceptance
-criteria, when an `F`/`US` cross-reference dangles, when a subcommand is never composed into
-`Main.main`, when two sibling commands share a name, and when help text breaks the conventions in
-[UX.md](UX.md).
+`cli/testOnly dev.librecybernetics.noesis.cli.*`. It fails when a shipped command appears in no
+journey or story, when a product document invokes a command that does not exist and is not declared
+under "Proposed commands", when a proposal has since shipped, when a story cites a journey step
+that does not exist, when a journey is served by no story, when a story is missing a field or its
+acceptance criteria, when an `F`/`US` cross-reference dangles, when a subcommand is never composed
+into `Main.main`, when two sibling commands share a name, and when help text breaks the conventions
+in [UX.md](UX.md).
 
 The surface it checks is **derived, not transcribed**: `CommandSurface` is a macro that reads
 `Main`'s typed AST, recognizing `Opts.subcommand` by method symbol and nesting by symbol reference.

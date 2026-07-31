@@ -2,24 +2,24 @@
 # Derived from the grammar in https://www.w3.org/TR/n-triples/#n-triples-grammar
 # Every IRI here is one Noesis binds a namespace for, so parsing and rendering round-trip.
 
-<https://noesis.librecybernetics.ws/e/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://noesis.librecybernetics.ws/ns/crm#Person> .
-<https://noesis.librecybernetics.ws/e/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Alice" .
-<https://noesis.librecybernetics.ws/e/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Alice"@en .
-<https://noesis.librecybernetics.ws/e/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Алиса"@ru .
-<https://noesis.librecybernetics.ws/e/lia> <https://noesis.librecybernetics.ws/ns/crm#birthday> "--05-12"^^<http://www.w3.org/2001/XMLSchema#gMonthDay> .
-<https://noesis.librecybernetics.ws/e/lia> <https://noesis.librecybernetics.ws/ns/crm#birthYear> "2021"^^<http://www.w3.org/2001/XMLSchema#gYear> .
-<https://noesis.librecybernetics.ws/e/drill> <https://noesis.librecybernetics.ws/ns/vf#quantity> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
-<https://noesis.librecybernetics.ws/e/drill> <https://noesis.librecybernetics.ws/ns/vf#value> "12.50"^^<http://www.w3.org/2001/XMLSchema#decimal> .
-<https://noesis.librecybernetics.ws/e/drill> <https://noesis.librecybernetics.ws/ns/vf#onLoan> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+<https://noesis.librecybernetics.dev/e/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://noesis.librecybernetics.dev/ns/crm#Person> .
+<https://noesis.librecybernetics.dev/e/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Alice" .
+<https://noesis.librecybernetics.dev/e/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Alice"@en .
+<https://noesis.librecybernetics.dev/e/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Алиса"@ru .
+<https://noesis.librecybernetics.dev/e/lia> <https://noesis.librecybernetics.dev/ns/crm#birthday> "--05-12"^^<http://www.w3.org/2001/XMLSchema#gMonthDay> .
+<https://noesis.librecybernetics.dev/e/lia> <https://noesis.librecybernetics.dev/ns/crm#birthYear> "2021"^^<http://www.w3.org/2001/XMLSchema#gYear> .
+<https://noesis.librecybernetics.dev/e/drill> <https://noesis.librecybernetics.dev/ns/vf#quantity> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<https://noesis.librecybernetics.dev/e/drill> <https://noesis.librecybernetics.dev/ns/vf#value> "12.50"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+<https://noesis.librecybernetics.dev/e/drill> <https://noesis.librecybernetics.dev/ns/vf#onLoan> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
 
 # Every ECHAR the grammar defines, and both UCHAR forms.
-<https://noesis.librecybernetics.ws/e/escapes> <http://www.w3.org/2000/01/rdf-schema#label> "quote:\" backslash:\\ tab:\t newline:\n return:\r formfeed:\f backspace:\b" .
-<https://noesis.librecybernetics.ws/e/escapes> <https://noesis.librecybernetics.ws/ns/core#bmp> "ö" .
-<https://noesis.librecybernetics.ws/e/escapes> <https://noesis.librecybernetics.ws/ns/core#astral> "\U0001F600" .
+<https://noesis.librecybernetics.dev/e/escapes> <http://www.w3.org/2000/01/rdf-schema#label> "quote:\" backslash:\\ tab:\t newline:\n return:\r formfeed:\f backspace:\b" .
+<https://noesis.librecybernetics.dev/e/escapes> <https://noesis.librecybernetics.dev/ns/core#bmp> "ö" .
+<https://noesis.librecybernetics.dev/e/escapes> <https://noesis.librecybernetics.dev/ns/core#astral> "\U0001F600" .
 
 # A language tag with script, region and a private-use suffix.
-<https://noesis.librecybernetics.ws/e/tagged> <http://www.w3.org/2000/01/rdf-schema#label> "traditional"@zh-Hant-TW .
-<https://noesis.librecybernetics.ws/e/tagged> <http://www.w3.org/2000/01/rdf-schema#label> "custom"@en-x-noesis .
+<https://noesis.librecybernetics.dev/e/tagged> <http://www.w3.org/2000/01/rdf-schema#label> "traditional"@zh-Hant-TW .
+<https://noesis.librecybernetics.dev/e/tagged> <http://www.w3.org/2000/01/rdf-schema#label> "custom"@en-x-noesis .
 
 # Whitespace between terms is free, and a trailing comment is not part of the triple.
-   <https://noesis.librecybernetics.ws/e/spaced>	<http://www.w3.org/2000/01/rdf-schema#label>    "spaced"   .
+   <https://noesis.librecybernetics.dev/e/spaced>	<http://www.w3.org/2000/01/rdf-schema#label>    "spaced"   .

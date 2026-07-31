@@ -138,14 +138,6 @@ confirming it beforehand, which §1.3 and §3.5.5 require (F2).
   follow-ups and reminders through `noesis contact due`. Sync and end-to-end encryption are also
   unimplemented.
 
-### Compatibility note
-
-Learning item and question source identifiers now use versioned, length-delimited SHA-256 values
-(`it_<kind>_v2_<digest>` and `v2_<digest>`). This deliberately replaces the earlier JVM hash-based
-identifiers before the first tagged release. Existing `reviews.jsonl` lines remain valid archive
-data, but reviews keyed by the old identifiers do not attach to newly generated items; there are no
-legacy aliases.
-
 ## Layout
 
 ```

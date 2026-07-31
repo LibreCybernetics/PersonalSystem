@@ -225,13 +225,14 @@ had. A yearless date is a *recurrence*, not an imprecise date, and is now `java.
 `xsd:gMonthDay` — the same lexical form the old type wrote, so no stored birthday moved and no
 `AxiomId` changed. Two latent faults went with it: the ordering was unlawful (`--05-12` and `--06-01`
 compared equal, so an `Eq` derived from it called two different dates one) and `lowerBound` was an
-`Option` at every call site including those that could never see `None`. `Literal.legacyDate` keeps
-old journals replayable, and refuses the two dropped shapes by name instead of guessing.
+`Option` at every call site including those that could never see `None`. Neither dropped shape has a
+representation to fall back to, and both meant "not known", which is the absence of a value rather
+than a value.
 
 **Stored identifiers are compact names** (was D1, before renumbering). Closed by expanding a bound prefix in `Iri.apply`,
 so `Iri("crm:worksAt")` *is* the absolute IRI and no compact name survives construction. Storage is
 now RDF 1.1 §3.2-conformant with no boundary left that could forget to expand. Compact names remain
-as input notation and as `Iri.display` for messages. Cost paid: every `AxiomId` changed.
+as input notation and as `Iri.display` for messages.
 
 **Minted entity IRIs are not legal Turtle compact names** (was D2). Closed by `Turtle`, which
 escapes `PN_LOCAL_ESC` characters — `noesis:e\/alice` — and falls back to an absolute IRI in angle

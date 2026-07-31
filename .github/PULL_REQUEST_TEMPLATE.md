@@ -26,7 +26,7 @@ reading the source. -->
 ## Checks
 
 - [ ] `nix flake check` passes
-- [ ] `cli/testOnly noesis.cli.*` passes, including `ProductTraceSuite`
+- [ ] `cli/testOnly dev.librecybernetics.noesis.cli.*` passes, including `ProductTraceSuite`
 - [ ] New failure paths follow the error rubric in `UX.md` §4
 - [ ] New commands appear in a `PRODUCT.md` journey and follow the grammar in `UX.md` §2
 - [ ] Documentation and implementation agree in both directions (`AGENTS.md`)

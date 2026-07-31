@@ -19,6 +19,6 @@ See [SPEC.md](SPEC.md) for soundness, saturation, and justification requirements
 
 ```bash
 nix develop --command sbt -batch reasoner/compile
-nix develop --command sbt -batch "reasoner/testOnly noesis.reasoner.*"
+nix develop --command sbt -batch "reasoner/testOnly dev.librecybernetics.noesis.reasoner.*"
 nix develop --command sbt -batch reasoner/stryker
 ```
