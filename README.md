@@ -23,7 +23,9 @@ sbt cli/launcher       # writes an executable launcher and prints its path
 
 The launcher lands at `target/out/jvm/scala-3.8.4/noesis-cli/noesis`. It defaults to a workspace at
 `~/.noesis`; pass `--root DIR` to use another. A workspace is two append-only files —
-`journal.jsonl` and `reviews.jsonl` — and nothing else.
+`journal.jsonl` and `reviews.jsonl` — and nothing else. On POSIX filesystems Noesis creates or
+tightens the workspace to owner-only permissions (`0700` for the directory, `0600` for the files)
+and rejects symlinked persistence paths.
 
 ```bash
 noesis init                                   # install the module ontologies
@@ -63,22 +65,32 @@ noesis disclose tutor --level public          # what an external agent would be 
 noesis loans                                  # derived from the event ledger, never stored
 noesis contact show lia                       # current contact card
 noesis contact due                            # follow-ups and reminders
-noesis contact export lia --format vcard
+noesis contact export lia --format vcard       # contact methods are omitted by default
+noesis contact export lia --format vcard --include-contact-data
 noesis check                                  # consistency, annotation policies, OWL profile
 noesis export                                 # Turtle
+
+# Portable, checksummed exit and recovery.
+noesis archive create /safe/place/noesis-archive
+noesis archive verify /safe/place/noesis-archive
+noesis archive restore /safe/place/noesis-archive /new/noesis-workspace
 ```
 
 `noesis --help` lists the top-level commands; `noesis contact --help` lists the PRM operations.
+An archive is an inspectable directory containing the two source logs, `manifest.json` with
+SHA-256 checksums and format versions, and a `current.ttl` projection. Creation locks both logs
+together; verification replays the journal and recomputes the projection. Restore refuses to
+overwrite an existing path.
 
 ## What is implemented
 
 | Spec area | Status |
 |---|---|
-| §3.2 Journal & projections | Dedicated [`journal`](modules/journal/) module with a JSON Lines append-only journal; state, current-graph, point-in-time and time-travel projections, all rebuilt from it |
+| §3.2 Journal & projections | Dedicated [`journal`](modules/journal/) module with checksummed, versioned, crash-recoverable commit frames, cross-process locking and fsync; state, current-graph, point-in-time and time-travel projections, all rebuilt from it |
 | §3.1 Representation | Dedicated [`logic`](modules/logic/) module with the RDFS core plus the OWL role constructs the vocabularies need — symmetry, transitivity, inverses, chains, disjointness, irreflexivity; content-derived stable axiom ids; partial dates |
 | §3.3 Annotations & cascade | One cascade for sensitivity, utility, confidence and scope: owner override → term policy → module default → behavioral and temporal signals, with decay |
 | §3.3.1 Sensitivity | Four levels, per-scope `internal` grants, and the derived-fact rule `min over justifications (max over axioms)` |
-| §3.4 Reasoning | Dedicated [`reasoner`](modules/reasoner/) module with forward-chaining closure, **justification tracking**, minimal explanations, consistency checking that rejects a commit *with its justification*, EL profile warnings, and conjunctive graph-pattern queries |
+| §3.4 Reasoning | Dedicated [`reasoner`](modules/reasoner/) module with forward-chaining closure, **justification tracking**, explicit incomplete results when a configured cap is reached, minimal explanations, consistency checking that rejects a commit *with its justification*, EL profile warnings, and conjunctive graph-pattern queries |
 | §3.5 Capture | Intent → operations → validated atomic commit; nothing reaches the journal before the reasoner accepts it |
 | §3.6 Fluents | Open, close and supersede; the plain-assertion sugar; current-graph materialization; `state.changed` carrying both old and new value |
 | §4 Learning engine | Items drafted from events by policy; belief with α-update and exponential decay by stability; retention and elucidation queues; belief in derived facts; change items at elevated priority; durable review log |
@@ -87,7 +99,7 @@ noesis export                                 # Turtle
 | §6 `ll:` | Interlingual hub-and-spoke; translation derived as `Lexeme → Concept → Lexeme`; false friends, cognates, belief-tensor keys |
 | §7 `crm:` PRM | Structured names; concurrent email, phone, online and postal contact methods; employment; relationships; interactions; notes; preferences; reminders; follow-up; circles; companion animals; gifts; duplicate-candidate detection; vCard 4.0 and mapped FOAF/RDF interchange; cardinality-free social reasoning |
 | §8 `vf:` | ValueFlows alignment; custody, loans and balances as folds over event history |
-| §10 | Local-first, append-only, Turtle, vCard and mapped FOAF/RDF export |
+| §10 | Local-first, append-only, transparent checksummed archives with verified restore, Turtle, vCard and mapped FOAF/RDF export |
 
 ### Not implemented
 
@@ -106,6 +118,14 @@ noesis export                                 # Turtle
   follow-ups and reminders through `noesis contact due`. Sync and end-to-end encryption are also
   unimplemented.
 
+### Compatibility note
+
+Learning item and question source identifiers now use versioned, length-delimited SHA-256 values
+(`it_<kind>_v2_<digest>` and `v2_<digest>`). This deliberately replaces the earlier JVM hash-based
+identifiers before the first tagged release. Existing `reviews.jsonl` lines remain valid archive
+data, but reviews keyed by the old identifiers do not attach to newly generated items; there are no
+legacy aliases.
+
 ## Layout
 
 ```
@@ -120,7 +140,8 @@ modules/cli     Command-line interface
 
 The runtime uses cats-effect, fs2, circe, and decline. See [DESIGN.md](DESIGN.md) for module
 boundaries and dependency rules. Each foundational module has its own README and implementation
-specification.
+specification. [THREAT_MODEL.md](THREAT_MODEL.md) records application assets, trust boundaries,
+controls and residual risks.
 
 ## Development
 

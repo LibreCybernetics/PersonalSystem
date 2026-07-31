@@ -72,12 +72,13 @@ object Render:
     decision match
       case DisclosureDecision.Disclose(effective) =>
         val scopes =
-          if effective.scopes.isEmpty then "" else effective.scopes.map(_.value).mkString(" (", ", ", ")")
+          if effective.scopes.isEmpty then ""
+          else effective.scopes.map(_.value).toList.sorted.mkString(" (", ", ", ")")
         s"  ✓ ${verbalizer.verbalize(a)}  [${effective.level.toString.toLowerCase(Locale.ROOT)}$scopes]"
       case DisclosureDecision.Redact(reason) =>
         s"  ✗ ${decision.marker} — $reason"
 
-  /** Turtle export (SPEC §10: full export anytime, no lock-in).
+  /** Turtle export of the current semantic graph (SPEC §10 interoperability).
     *
     * The serialization itself lives in `noesis-journal`, which owns reading and writing alike; the
     * CLI's job is only to choose what to export. The prefix block used to be maintained here by

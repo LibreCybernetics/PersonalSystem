@@ -4,12 +4,14 @@ import noesis.logic.*
 
 /** Bounds on justification tracking (SPEC §12.4: explanation is worst-case expensive).
   *
-  * The caps are the mitigation the spec asks for. Exceeding them degrades explanation quality —
-  * fewer alternative justifications are retained — but never correctness of the closure itself,
-  * because a fact stays derived as long as it has at least one justification.
+  * A cap never silently turns incomplete provenance into complete provenance. The fact remains a
+  * sound derivation, but carries [[Justification.incomplete]], making the whole closure explicitly
+  * incomplete for consistency, disclosure and query purposes.
   */
 final case class ReasonerConfig(
-    maxJustifications: Int = 8,
+    // Shipped vocabularies legitimately create more than eight equivalent schema paths. Sixty-four
+    // remains bounded while leaving ordinary PRM capture below the explicit-incompleteness boundary.
+    maxJustifications: Int = 64,
     maxJustificationSize: Int = 12,
     maxIterations: Int = 32
 )
@@ -41,8 +43,9 @@ object Rule:
         x <- a.iterator
         y <- b.iterator
         j = x.merge(y)
-        if j.size <= cfg.maxJustificationSize
-      yield j
+      yield
+        if !j.complete || j.size > cfg.maxJustificationSize then Justification.incomplete
+        else j
     cap(merged.toSet)
 
   def combineAll(sets: Seq[Set[Justification]])(using ReasonerConfig): Set[Justification] =
@@ -52,7 +55,12 @@ object Rule:
 
   /** Keeps only minimal justifications, then the smallest `maxJustifications` of those. */
   def cap(js: Set[Justification])(using cfg: ReasonerConfig): Set[Justification] =
-    Justification.minimal(js).toList.sorted.take(cfg.maxJustifications).toSet
+    val minimal = Justification.minimal(js)
+    val exact = minimal.filter(_.complete).toList.sorted
+    val retained = exact.take(cfg.maxJustifications.max(0)).toSet
+    val incomplete =
+      minimal.exists(!_.complete) || exact.length > cfg.maxJustifications.max(0)
+    retained ++ Option.when(incomplete)(Justification.incomplete)
 
 /** The RDFS-style rule set: transitive class and property hierarchies, domain and range, plus the
   * OWL role constructs the relationship module needs.

@@ -13,9 +13,23 @@ final case class Closure(
     facts: Map[Axiom, Set[Justification]],
     iterations: Int,
     /** False when the iteration cap was hit — the closure is sound but possibly incomplete. */
-    saturated: Boolean
+    saturated: Boolean,
+    /** Incompleteness inherited by a restricted or otherwise projected closure. */
+    inheritedIncompleteReasons: Set[String] = Set.empty
 ):
   def contains(axiom: Axiom): Boolean = facts.contains(axiom)
+
+  /** True only when both the fixpoint and every retained derivation are complete. */
+  def complete: Boolean =
+    saturated && inheritedIncompleteReasons.isEmpty &&
+      facts.values.forall(_.forall(_.complete))
+
+  def incompleteReasons: Set[String] =
+    inheritedIncompleteReasons ++
+      Option.when(!saturated)("iteration limit reached").toSet ++
+      Option.when(facts.values.exists(_.exists(!_.complete)))(
+        "justification tracking limit reached"
+      )
 
   def size: Int = facts.size
 
@@ -24,7 +38,7 @@ final case class Closure(
   def justificationsFor(axiom: Axiom): Set[Justification] = facts.getOrElse(axiom, Set.empty)
 
   def explain(axiom: Axiom): Option[Explanation] =
-    facts.get(axiom).map(js => Explanation(axiom, js))
+    facts.get(axiom).map(js => Explanation(axiom, js.filter(_.complete)))
 
   /** Facts present in the closure but not asserted in `base` — the entailments proper. */
   def entailed(base: Graph): Map[Axiom, Set[Justification]] =

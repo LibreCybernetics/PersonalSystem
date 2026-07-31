@@ -2,9 +2,11 @@ package noesis.lms
 
 import java.time.Instant
 
+import cats.data.NonEmptyList
 import cats.effect.IO
 import munit.CatsEffectSuite
 import noesis.core.Fixtures
+import noesis.core.capture.Intent
 import noesis.core.kb.KnowledgeBase
 import noesis.logic.*
 
@@ -100,6 +102,36 @@ class LearningEngineSuite extends CatsEffectSuite:
         remaining.filter(_.isActive).flatMap(_.axioms.toList),
         List(kept.id),
         "retraction is targeted: unrelated items keep their schedule"
+      )
+
+  test("dispute suspends an item and undispute restores its drafting policy"):
+    val axiom = Axiom.ClassAssertion(Fixtures.lia, Fixtures.Person)
+    for
+      base <- Fixtures.kb()
+      engine <- LearningEngine[IO](base, activating)
+      added <- base.assert(axiom)
+      _ <- engine.handle(added.fold(rejected => fail(rejected.render), _.events))
+      disputed <- base.commit(NonEmptyList.one(Intent.Dispute(axiom.id)))
+      _ <- engine.handle(disputed.fold(rejected => fail(rejected.render), _.events))
+      whileDisputed <- engine.items
+      restored <- base.commit(NonEmptyList.one(Intent.Undispute(axiom.id)))
+      _ <- engine.handle(restored.fold(rejected => fail(rejected.render), _.events))
+      afterRestore <- engine.items
+    yield
+      assert(only(whileDisputed).suspended)
+      assert(!only(afterRestore).suspended)
+
+  test("activation fails safe when the referenced axiom is absent from core state"):
+    val absent = Axiom.ClassAssertion(Fixtures.lia, Fixtures.Person)
+    for
+      engine <- engineOn()
+      drafted <- engine.onAxiomAdded(absent.id, absent)
+      updated <- engine.onAxiomStatusChanged(absent.id, AxiomStatus.Active)
+    yield
+      assert(!only(drafted).suspended, "the fixture starts as an auto-activated draft")
+      assert(
+        only(updated).suspended,
+        "a missing core record cannot prove that reactivation is permitted"
       )
 
   // ── State change (SPEC §3.6, §7.2) ────────────────────────────────────────

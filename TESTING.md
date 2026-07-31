@@ -16,20 +16,21 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | Module | Suites and responsibility |
 |---|---|
 | `logic` | `LogicSuite`: canonical JSON and stable identifiers, codecs, the axiom algebra, triple projection, literals, annotations, and temporal values |
-| `journal` | `JournalSuite`: operation codecs, append ordering, atomic bundles, concurrent appends, JSON Lines persistence, reopening, and corrupt-input failure. `SerializationSuite`: N-Triples reading and writing, and Turtle output |
-| `reasoner` | `ReasonerSuite`, `QuerySuite`: inference, fixpoint behavior, journal-backed justifications, consistency, EL warnings, and graph-pattern queries |
+| `journal` | `JournalSuite`: operation codecs, append ordering, atomic commit frames, cross-handle concurrency, conditional append, coordinated archive snapshots, JSON Lines persistence, permissions, recovery, reopening, and corrupt-input failure. `SerializationSuite`: N-Triples reading and writing, and Turtle output |
+| `reasoner` | `ReasonerSuite`, `QuerySuite`: inference, fixpoint behavior, journal-backed justifications, explicit resource-limit incompleteness, consistency, EL warnings, and graph-pattern queries |
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts |
+| `cli` | `ArchiveSuite`: coordinated archive creation, checksum/replay/projection verification, restore into a fresh workspace, overwrite refusal, and tamper detection |
 | `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
 The `conformance` module answers a different question from the rest and is gated differently, as
 described in [Conformance testing](#conformance-testing).
 
-The CLI currently has no dedicated test suite. It is compiled by the full check, while its domain
-behavior is exercised through core and vocabulary integration tests. Generated-launcher scenarios,
-described below, cover command parsing, workspace persistence, and rendering changes.
+CLI domain behavior is primarily exercised through core and vocabulary integration tests.
+`ArchiveSuite` owns the filesystem archive contract; generated-launcher scenarios, described below,
+cover command parsing, multi-invocation workspace persistence, and rendering changes.
 
 Shared test fixtures belong in a `Fixtures` or module-specific fixture object.
 
@@ -44,6 +45,7 @@ nix develop --command sbt -batch "reasoner/testOnly noesis.reasoner.*"
 nix develop --command sbt -batch "core/testOnly noesis.core.*"
 nix develop --command sbt -batch "lms/testOnly noesis.lms.*"
 nix develop --command sbt -batch "vocab/testOnly noesis.vocab.*"
+nix develop --command sbt -batch "cli/testOnly noesis.cli.*"
 nix develop --command sbt -batch "conformance/testOnly noesis.conformance.*"
 ```
 
@@ -61,6 +63,7 @@ nix develop --command sbt -batch \
   core/testOnly noesis.core.*;
   lms/testOnly noesis.lms.*;
   vocab/testOnly noesis.vocab.*;
+  cli/testOnly noesis.cli.*;
   conformance/testOnly noesis.conformance.*"
 ```
 
@@ -80,6 +83,9 @@ target/out/jvm/scala-3.8.4/noesis-cli/noesis --root <temporary-workspace> init
 Each subsequent command invokes that script once. `sbt cli/run` is unsuitable for a multi-step
 scenario because sbt merges arguments from multiple `run` commands in one session. A disposable
 workspace keeps the user's default `~/.noesis` data outside the scenario.
+
+Archive changes use three disposable paths and exercise create, verify, restore, and verification
+of the restored workspace. At least one tampered payload is expected to fail `archive verify`.
 
 ## Test design
 
@@ -108,6 +114,10 @@ instead of weakening the assertion.
 - **Journal operation:** Evidence includes its JSON round trip in `JournalSuite`, replay effect in
   projection tests, and event reconstruction in core tests. Restart/replay exposes the same behavior
   as the live commit path.
+- **Persistence or archive behavior:** Evidence covers owner-only permissions where POSIX is
+  available, symlink/replacement failure, cross-handle locking, crash-tail behavior, checksum and
+  sequence corruption, coordinated journal/review capture, archive replay/projection verification,
+  and restore into a fresh destination.
 - **Policy or disclosure behavior:** Evidence covers cascade precedence, boundary values, and
   fail-closed behavior. Relevant derived-disclosure cases include competing derivation paths and
   justification sensitivity.
@@ -148,15 +158,15 @@ non-`Unit` statements, and safe-initialization diagnostics. Scapegoat and the cu
 profile in `build.sbt` run during production and test compilation. A local bypass or suppression
 therefore requires documentation of why the exception is safe.
 
-Changes to `flake.nix`, `nix/agent-session.sh`, `nix/agent-run.sh`, or the agent proxy also require:
+The ordinary GitHub `CI` workflow runs:
 
 ```bash
 nix flake check
 ```
 
 The `agent-sandbox-sources` check runs ShellCheck over both shell scripts, compiles
-`nix/agent-proxy.py` as Python, and executes `nix/agent-proxy-test.py`. This check is defined by the
-flake but is not currently part of either GitHub Actions workflow.
+`nix/agent-proxy.py` as Python, and executes `nix/agent-proxy-test.py`. Changes to `flake.nix`,
+`nix/agent-session.sh`, `nix/agent-run.sh`, or the agent proxy must also run this check locally.
 
 ## Mutation testing
 
@@ -197,9 +207,9 @@ evidence of behaviorally redundant code and meaningful boundaries as directly te
 
 ## Continuous integration and reporting
 
-The ordinary `CI` workflow runs the clean compile and all seven explicit suite tasks on every branch
-push. The `Mutation testing` workflow also runs on every branch push and can be started manually;
-its module matrix does not fail fast.
+The ordinary `CI` workflow runs the clean compile, all eight explicit suite tasks and
+`nix flake check` on every branch push. The `Mutation testing` workflow also runs on every branch
+push and can be started manually; its module matrix does not fail fast.
 
 Verification reports contain:
 

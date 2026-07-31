@@ -33,8 +33,12 @@ object Templates:
   * than whatever name was attached when a fact was recorded — and why former names, which default to
   * `sensitive`, never reach this map.
   */
-final case class NamingContext(labels: Map[Iri, String]):
-  def label(iri: Iri): String = labels.getOrElse(iri, fallback(iri))
+final case class NamingContext(
+    labels: Map[Iri, String],
+    private val opaqueFallbacks: Map[Iri, String] = Map.empty
+):
+  def label(iri: Iri): String =
+    labels.getOrElse(iri, opaqueFallbacks.getOrElse(iri, fallback(iri)))
 
   /** Opaque entity IRIs have no readable form, so an unnamed one shows a short handle. */
   private def fallback(iri: Iri): String =
@@ -59,7 +63,8 @@ object Naming:
   def from(
       state: KbState,
       namingProperties: List[Iri] = defaultNamingProperties,
-      schemes: List[Scheme] = Nil
+      schemes: List[Scheme] = Nil,
+      redactUnnamedOpaque: Boolean = false
   ): NamingContext =
     val fromLabels =
       state.activeAxioms.collect:
@@ -134,7 +139,21 @@ object Naming:
     val best = (fromSchemes ++ adjustedLabels)
       .groupMapReduce(_._1)(_._2)(preference.min)
 
-    NamingContext(best.view.mapValues(_._2).toMap)
+    val labels = best.view.mapValues(_._2).toMap
+    val opaqueFallbacks =
+      if redactUnnamedOpaque then
+        state.entities
+          // Labels win in NamingContext.label, so retaining a deterministic fallback for every
+          // opaque entity is simpler than maintaining a redundant second membership condition.
+          .filter(_.isOpaque)
+          .toList
+          .sorted
+          .zipWithIndex
+          .map((iri, index) => iri -> s"⟨entity ${index + 1}⟩")
+          .toMap
+      else Map.empty[Iri, String]
+
+    NamingContext(labels, opaqueFallbacks)
 
   /** `worksAt` → `works at`, `hasName` → `has name`, `falseFriendOf` → `false friend of`. */
   def humanize(camel: String): String =

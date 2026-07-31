@@ -9,13 +9,12 @@ import com.monovore.decline.effect.CommandIOApp
 import com.monovore.decline.{Argument, Opts}
 import fs2.io.file.{Files, Path}
 import noesis.core.capture.Intent
-import noesis.core.kb.CommitResult
+import noesis.core.kb.{CommitResult, ReasoningResult}
 import noesis.core.module.{ExportContext, ExportOptions, ImportBatch}
 import noesis.logic.*
 import noesis.core.policy.DisclosurePolicy
-import noesis.core.verbalize.Naming
 import noesis.reasoner.query.PatternSyntax
-import noesis.reasoner.Support
+import noesis.reasoner.{Consistency, Support}
 import noesis.lms.{ItemId, QueueMode}
 import noesis.vocab.*
 
@@ -115,6 +114,11 @@ enum ContactCommand:
       includeSocialGraph: Boolean
   )
 
+enum ArchiveCommand:
+  case Create(target: Path)
+  case Verify(source: Path)
+  case Restore(source: Path, target: Path)
+
 /** What the CLI was asked to do. */
 enum Command:
   case Init
@@ -144,6 +148,7 @@ enum Command:
   case Export
   case AsOf(date: java.time.LocalDate)
   case Contact(command: ContactCommand)
+  case Archive(command: ArchiveCommand)
 
 object Main
     extends CommandIOApp(
@@ -272,6 +277,30 @@ object Main
 
   private val asOf = Opts.subcommand("as-of", "show the graph as it stood on a past date"):
     Opts.argument[java.time.LocalDate]("date").map(Command.AsOf.apply)
+
+  private val archiveCreate = Opts.subcommand(
+    "create",
+    "capture the journal, reviews, manifest and current Turtle projection"
+  ):
+    Opts.argument[String]("archive-directory").map(path => ArchiveCommand.Create(Path(path)))
+
+  private val archiveVerify = Opts.subcommand(
+    "verify",
+    "verify checksums, formats, replay and the derived projection"
+  ):
+    Opts.argument[String]("archive-directory").map(path => ArchiveCommand.Verify(Path(path)))
+
+  private val archiveRestore = Opts.subcommand(
+    "restore",
+    "restore a verified archive into a new workspace directory"
+  ):
+    (
+      Opts.argument[String]("archive-directory"),
+      Opts.argument[String]("new-workspace-directory")
+    ).mapN((source, target) => ArchiveCommand.Restore(Path(source), Path(target)))
+
+  private val archive = Opts.subcommand("archive", "create, verify or restore a portable archive"):
+    (archiveCreate orElse archiveVerify orElse archiveRestore).map(Command.Archive.apply)
 
   private val contactAdd = Opts.subcommand("add", "add a person or organization contact"):
     (
@@ -441,13 +470,31 @@ object Main
       init orElse assertCmd orElse retract orElse closeState orElse supersede orElse
         show orElse query orElse entails orElse explain orElse check orElse journal orElse
         queue orElse answer orElse items orElse disclose orElse loans orElse exportCmd orElse asOf
-          orElse contact
+          orElse contact orElse archive
     ).mapN(run)
 
   // ── Execution ─────────────────────────────────────────────────────────────
 
   private def run(root: Path, command: Command): IO[ExitCode] =
-    Workspace.open(root).flatMap(execute(_, command))
+    command match
+      case Command.Archive(archiveCommand) => runArchive(root, archiveCommand)
+      case _ => Workspace.open(root).flatMap(execute(_, command))
+
+  private def runArchive(root: Path, command: ArchiveCommand): IO[ExitCode] =
+    val (action, result) = command match
+      case ArchiveCommand.Create(target) => "created and verified" -> Archive.create(root, target)
+      case ArchiveCommand.Verify(source) => "verified" -> Archive.verify(source)
+      case ArchiveCommand.Restore(source, target) =>
+        "restored and verified" -> Archive.restore(source, target)
+
+    result
+      .flatMap(report =>
+        IO.println(
+          s"archive $action: journal sequence ${report.lastJournalSequence}, " +
+            s"${report.reviews} review(s)"
+        )
+      )
+      .as(ExitCode.Success)
 
   private def execute(workspace: Workspace, command: Command): IO[ExitCode] =
     val kb = workspace.kb
@@ -503,45 +550,75 @@ object Main
           case Left(err) => IO.println(s"bad pattern: $err").as(ExitCode.Error)
           case Right(bgp) =>
             for
-              solutions <- kb.query(bgp)
-              verbalizer <- kb.verbalizer
+              view <- kb.disclosureView(DisclosurePolicy.localOwner("owner CLI"))
+              result = view.query(bgp)
               order = bgp.variables.toList.sorted
+              solutions = result match
+                case ReasoningResult.Complete(found)      => found
+                case ReasoningResult.Incomplete(found, _) => found
+              _ <- result match
+                case ReasoningResult.Complete(_) => IO.unit
+                case ReasoningResult.Incomplete(_, reasons) =>
+                  IO.println(
+                    s"warning: reasoning incomplete (${reasons.toList.sorted.mkString(", ")}); " +
+                      "showing sound partial results"
+                  )
               _ <-
                 if solutions.isEmpty then IO.println("no solutions")
                 else
-                  solutions.distinct.traverse_ : solution =>
+                  solutions.traverse_ : solution =>
                     val cells = order.map: variable =>
                       val rendered = solution
                         .get(variable)
                         .map:
-                          case Node.Ref(iri) => verbalizer.label(iri)
+                          case Node.Ref(iri) => view.verbalizer.label(iri)
                           case Node.Lit(lit) => lit.text
                         .getOrElse("-")
                       s"?$variable=$rendered"
                     IO.println("  " + cells.mkString("  "))
-            yield ExitCode.Success
+            yield result match
+              case ReasoningResult.Complete(_)      => ExitCode.Success
+              case ReasoningResult.Incomplete(_, _) => ExitCode.Error
 
       case Command.Entails(subject, property, value) =>
         for
           axiom <- buildAssertion(workspace, subject, property, value)
-          entailed <- kb.entails(axiom)
-          verbalizer <- kb.verbalizer
-          _ <- IO.println(
-            if entailed then s"yes — ${verbalizer.verbalize(axiom)}"
-            else s"no — ${verbalizer.verbalize(axiom)} is not entailed"
-          )
-        yield if entailed then ExitCode.Success else ExitCode(1)
+          view <- kb.disclosureView(DisclosurePolicy.localOwner("owner CLI"))
+          result = view.entails(axiom)
+          _ <- result match
+            case ReasoningResult.Complete(true) =>
+              IO.println(s"yes — ${view.verbalizer.verbalize(axiom)}")
+            case ReasoningResult.Complete(false) =>
+              IO.println(s"no — ${view.verbalizer.verbalize(axiom)} is not entailed")
+            case ReasoningResult.Incomplete(partial, reasons) =>
+              IO.println(
+                s"unknown — reasoning incomplete (${reasons.toList.sorted.mkString(", ")}); " +
+                  s"partial closure ${if partial then "contains" else "does not contain"} the fact"
+              )
+        yield result match
+          case ReasoningResult.Complete(true)  => ExitCode.Success
+          case ReasoningResult.Complete(false) => ExitCode(1)
+          case ReasoningResult.Incomplete(_, _) => ExitCode.Error
 
       case Command.Explain(subject, property, value) =>
         for
           axiom <- buildAssertion(workspace, subject, property, value)
-          explanation <- kb.explain(axiom)
-          verbalizer <- kb.verbalizer
-          state <- kb.state
+          view <- kb.disclosureView(DisclosurePolicy.localOwner("owner CLI"))
+          result = view.explain(axiom)
+          explanation = result match
+            case ReasoningResult.Complete(found)      => found
+            case ReasoningResult.Incomplete(found, _) => found
+          _ <- result match
+            case ReasoningResult.Complete(_) => IO.unit
+            case ReasoningResult.Incomplete(_, reasons) =>
+              IO.println(
+                s"warning: reasoning incomplete (${reasons.toList.sorted.mkString(", ")}); " +
+                  "the explanation may be partial"
+              )
           _ <- explanation match
             case None => IO.println("not entailed; nothing to explain")
             case Some(found) =>
-              IO.println(s"${verbalizer.verbalize(axiom)}") *>
+              IO.println(s"${view.verbalizer.verbalize(axiom)}") *>
                 IO.println(
                   if found.isAsserted then "  asserted directly"
                   else s"  derived, ${found.justifications.size} justification(s):"
@@ -551,21 +628,35 @@ object Main
                     justification.premises.toList.sorted.traverse_ : premise =>
                       val described = premise match
                         case Support.Asserted(id) =>
-                          state.axiom(id).map(r => verbalizer.verbalize(r.axiom)).getOrElse(id.value)
+                          view.state
+                            .axiom(id)
+                            .map(r => view.verbalizer.verbalize(r.axiom))
+                            .getOrElse(id.value)
                         case Support.FromFluent(id) =>
-                          state.fluent(id).map(verbalizer.verbalize).getOrElse(id.value)
+                          view.state
+                            .fluent(id)
+                            .map(view.verbalizer.verbalize)
+                            .getOrElse(id.value)
                       IO.println(s"       - $described")
-        yield ExitCode.Success
+        yield result match
+          case ReasoningResult.Complete(_)      => ExitCode.Success
+          case ReasoningResult.Incomplete(_, _) => ExitCode.Error
 
       case Command.Check =>
         for
-          problems <- kb.inconsistencies
+          closure <- kb.closure
+          problems = Consistency.check(closure)
           violations <- kb.policyViolations
           records <- kb.records
           warnings = Profile.warnings(records.map(_.axiom))
           _ <- IO.println(s"axioms: ${records.length}")
           _ <-
-            if problems.isEmpty then IO.println("consistency: ok")
+            if !closure.complete then
+              IO.println(
+                s"consistency: UNKNOWN — reasoning incomplete " +
+                  s"(${closure.incompleteReasons.toList.sorted.mkString(", ")})"
+              )
+            else if problems.isEmpty then IO.println("consistency: ok")
             else IO.println("consistency: FAILED") *> print(problems.map("  " + _.render))
           _ <-
             if violations.isEmpty then IO.println("annotation policies: ok")
@@ -575,7 +666,10 @@ object Main
             else
               IO.println(s"OWL 2 EL profile: ${warnings.length} axiom(s) outside EL") *>
                 print(warnings.map((a, why) => s"  ${a.manchester} — $why"))
-        yield if problems.isEmpty then ExitCode.Success else ExitCode(1)
+        yield
+          if !closure.complete then ExitCode.Error
+          else if problems.isEmpty && violations.isEmpty then ExitCode.Success
+          else ExitCode(1)
 
       case Command.Journal(limit) =>
         for
@@ -596,7 +690,11 @@ object Main
         yield ExitCode.Success
 
       case Command.Answer(item, grade, latency) =>
-        engine.review(ItemId.unsafe(item), grade, latency).flatMap {
+        if !grade.isFinite || grade < 0.0 || grade > 1.0 then
+          IO.println("grade must be a finite number in [0,1]").as(ExitCode.Error)
+        else if latency < 0L then
+          IO.println("latency must be non-negative").as(ExitCode.Error)
+        else engine.review(ItemId.unsafe(item), grade, latency).flatMap {
           case None => IO.println(s"no such item: $item").as(ExitCode.Error)
           case Some(outcome) =>
             // Persist the review, or the next invocation would rebuild without it.
@@ -618,7 +716,7 @@ object Main
         val policy = DisclosurePolicy(name, level, scopes.map(Workspace.iri).toSet)
         for
           closure <- kb.closure
-          verbalizer <- kb.verbalizer
+          verbalizer <- kb.verbalizer(policy)
           assertions = closure.assertions.toList.sortBy(_.id.value)
           (disclosed, redacted) <- kb.disclosable(assertions, policy)
           _ <- IO.println(
@@ -638,7 +736,13 @@ object Main
             IO.println(s"  ... and ${redacted.length} withheld:") *>
               redacted.traverse_((_, reason) => IO.println(s"  ✗ [redacted] — $reason"))
           )
-        yield ExitCode.Success
+          _ <- IO.whenA(!closure.complete)(
+            IO.println(
+              s"warning: reasoning incomplete (${closure.incompleteReasons.toList.sorted.mkString(", ")}); " +
+                "the disclosure report is partial"
+            )
+          )
+        yield if closure.complete then ExitCode.Success else ExitCode.Error
 
       case Command.Loans =>
         for
@@ -676,6 +780,9 @@ object Main
 
       case Command.Contact(contactCommand) =>
         executeContact(workspace, contactCommand)
+
+      case Command.Archive(archiveCommand) =>
+        runArchive(workspace.root, archiveCommand)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -967,29 +1074,34 @@ object Main
         for
           state <- workspace.kb.state
           closure <- workspace.kb.closure
-          naming = Naming.from(
-            state,
-            Workspace.config.namingProperties,
-            Workspace.config.namingSchemes
-          )
           normalized = format.toLowerCase(Locale.ROOT)
-          rendered = Modules
-            .exporters(Modules.all)
-            .find(_.formats.contains(normalized))
-            .toRight(List(s"unknown contact export format: $normalized"))
-            .flatMap(
-              _.render(
-                ExportContext(
-                  state,
-                  closure,
-                  naming,
-                  Workspace.config.policies,
-                  DisclosurePolicy.personal("contact export")
-                ),
-                target,
-                ExportOptions(includeContactData, includeSocialGraph)
+          rendered =
+            if !closure.complete then
+              Left(
+                List(
+                  s"reasoning incomplete (${closure.incompleteReasons.toList.sorted.mkString(", ")}); " +
+                    "refusing to produce a possibly partial contact export"
+                )
               )
-            )
+            else
+              Modules
+                .exporters(Modules.all)
+                .find(_.formats.contains(normalized))
+                .toRight(List(s"unknown contact export format: $normalized"))
+                .flatMap(
+                  _.render(
+                    ExportContext.restricted(
+                      state,
+                      closure,
+                      Workspace.config.policies,
+                      DisclosurePolicy.personal("contact export"),
+                      Workspace.config.namingProperties,
+                      Workspace.config.namingSchemes
+                    ),
+                    target,
+                    ExportOptions(includeContactData, includeSocialGraph)
+                  )
+                )
           code <- rendered match
             case Left(problems) => print(problems).as(ExitCode.Error)
             case Right(document) => IO.println(document).as(ExitCode.Success)

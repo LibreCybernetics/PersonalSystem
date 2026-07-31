@@ -117,21 +117,48 @@ final class SupportResolver(state: KbState, book: PolicyBook):
   */
 object Disclosure:
 
+  /** Restricts a closure to the derivation paths a policy may receive.
+    *
+    * Keeping only the passing justifications matters as much as filtering conclusions: support
+    * identifiers are provenance, and handing an exporter a permitted fact together with a
+    * non-permitted derivation would violate the same boundary through metadata (DESIGN data
+    * minimization).
+    */
+  def restrict(
+      closure: Closure,
+      resolver: SupportResolver,
+      policy: DisclosurePolicy
+  ): Closure =
+    val facts = closure.facts.flatMap: (axiom, justifications) =>
+      val permitted = justifications.filter(_.complete).filter: justification =>
+        val effective = effectiveFor(justification, resolver)
+        policy.permits(effective.level, effective.scopes)
+      Option.when(permitted.nonEmpty)(axiom -> permitted)
+    closure.copy(
+      facts = facts,
+      inheritedIncompleteReasons = closure.incompleteReasons
+    )
+
   /** The effective level of `axiom` given its justifications, or `None` if it has none. */
   def effectiveLevel(
       justifications: Set[Justification],
       resolver: SupportResolver
   ): Option[EffectiveDisclosure] =
-    val perJustification = justifications.toList.map: justification =>
-      val premises = justification.premises.toList.map(resolver.levelOf)
-      val level = premises.map(_._1).foldLeft(Sensitivity.Public)(Sensitivity.max)
-      // Scopes union only within the chosen justification: an `internal` conclusion is internal to
-      // every org that contributed a premise to *that* derivation.
-      val scopes = premises.filter(_._1 == Sensitivity.Internal).flatMap(_._2).toSet
-      EffectiveDisclosure(level, scopes, justification)
+    val perJustification = justifications.toList.map(effectiveFor(_, resolver))
 
     // min over justifications, preferring the narrower scope set when levels tie
     perJustification.minByOption(d => (d.level.rank, d.scopes.size, d.via.size))
+
+  private def effectiveFor(
+      justification: Justification,
+      resolver: SupportResolver
+  ): EffectiveDisclosure =
+    val premises = justification.premises.toList.map(resolver.levelOf)
+    val level = premises.map(_._1).foldLeft(Sensitivity.Public)(Sensitivity.max)
+    // Scopes union only within the chosen justification: an `internal` conclusion is internal to
+    // every org that contributed a premise to *that* derivation.
+    val scopes = premises.filter(_._1 == Sensitivity.Internal).flatMap(_._2).toSet
+    EffectiveDisclosure(level, scopes, justification)
 
   /** Decides disclosure for one axiom under one policy. */
   def decide(
@@ -141,12 +168,15 @@ object Disclosure:
       policy: DisclosurePolicy
   ): DisclosureDecision =
     val justifications = closure.justificationsFor(axiom)
-    if justifications.isEmpty then DisclosureDecision.Redact("not entailed")
+    val complete = justifications.filter(_.complete)
+    if complete.isEmpty && closure.contains(axiom) then
+      DisclosureDecision.Redact("provenance incomplete")
+    else if complete.isEmpty then DisclosureDecision.Redact("not entailed")
     else
       // "at least one justification is fully disclosable": test every path, not just the minimal
       // one, because a policy's scope grants can make a higher-level path pass where the
       // nominally-minimal one fails.
-      val passing = justifications.toList.flatMap: justification =>
+      val passing = complete.toList.flatMap: justification =>
         effectiveLevel(Set(justification), resolver).filter(d => policy.permits(d.level, d.scopes))
 
       passing.minByOption(d => (d.level.rank, d.scopes.size, d.via.size)) match
@@ -154,7 +184,7 @@ object Disclosure:
         case None =>
           // Guarded by `justifications.nonEmpty` above, so an effective level necessarily exists.
           // Keeping an unreachable fallback here obscures a privacy-sensitive invariant.
-          val actual = effectiveLevel(justifications, resolver).toList
+          val actual = effectiveLevel(complete, resolver).toList
             .map: d =>
               s"requires ${d.level.toString.toLowerCase(Locale.ROOT)}" +
                 (if d.scopes.nonEmpty then

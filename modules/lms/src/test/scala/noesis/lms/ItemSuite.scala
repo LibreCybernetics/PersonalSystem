@@ -42,10 +42,34 @@ class ItemSuite extends FunSuite:
       ItemId.of(ItemKind.Composite, Set(AxiomId.unsafe("ab"), AxiomId.unsafe("c")))
     )
 
+  test("item identity no longer inherits known 32-bit Java hash collisions"):
+    val first = ItemId.of(ItemKind.AtomicFact, Set(AxiomId.unsafe("Aa")))
+    val second = ItemId.of(ItemKind.AtomicFact, Set(AxiomId.unsafe("BB")))
+
+    assertEquals("Aa".hashCode, "BB".hashCode, "the fixture must exercise the former collision")
+    assertNotEquals(first, second)
+    assert(first.value.matches("it_atomicfact_v2_[0-9a-f]{64}"), first.value)
+
+  test("item identity has a stable domain-separated SHA-256 encoding"):
+    assertEquals(
+      ItemId.of(ItemKind.AtomicFact, Set(AxiomId.unsafe("ax_a"))).value,
+      "it_atomicfact_v2_bfea77ce84f753f0c23ebfb4cd0971665ee3a1cf77d03b01801397ab1f99d557"
+    )
+
   test("a source hash separates its axioms for the same reason"):
     assertNotEquals(
       Question.hashOf(Set(AxiomId.unsafe("a"), AxiomId.unsafe("bc"))),
       Question.hashOf(Set(AxiomId.unsafe("ab"), AxiomId.unsafe("c")))
+    )
+
+  test("question source hashes are versioned SHA-256 values"):
+    val hash = Question.hashOf(Set(AxiomId.unsafe("ax_1")))
+    assert(hash.matches("v2_[0-9a-f]{64}"), hash)
+
+  test("question hashes have a stable domain-separated SHA-256 encoding"):
+    assertEquals(
+      Question.hashOf(Set(AxiomId.unsafe("ax_a"))),
+      "v2_52576828ea00c2e0a5a516072f9106dcd886d56b477a7bc6825526e269316826"
     )
 
   test("a question goes stale exactly when the axioms it was built from change"):

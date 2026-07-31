@@ -128,11 +128,32 @@ object DerivedBelief:
       beliefOf: AxiomId => Option[Double],
       config: Config = Config.default
   ): Option[Double] =
+    ofSupports(
+      axiom,
+      closure,
+      {
+        case Support.Asserted(id) => beliefOf(id)
+        case Support.FromFluent(_) => None
+      },
+      config
+    )
+
+  /** Derived belief with a resolver for every journal-backed support kind.
+    *
+    * Fluent materializations are premises too. Ignoring them made conclusions based on current
+    * names, employment and pronouns look untracked even when their projected assertion had an item
+    * (SPEC §3.6, §4.4).
+    */
+  def ofSupports(
+      axiom: Axiom,
+      closure: Closure,
+      beliefOf: Support => Option[Double],
+      config: Config = Config.default
+  ): Option[Double] =
     // An unentailed axiom has no justifications at all, so it needs no branch of its own: the
     // empty-path case below already answers "this says nothing about the owner's memory".
     val perPath = closure.justificationsFor(axiom).toList.flatMap: justification =>
-      val premiseBeliefs = justification.premises.toList.collect:
-        case Support.Asserted(id) => beliefOf(id)
+      val premiseBeliefs = justification.premises.toList.map(beliefOf)
       val known = premiseBeliefs.flatten
       // Nothing in this path is tracked: it tells us nothing about the owner's memory.
       Option.when(known.nonEmpty):

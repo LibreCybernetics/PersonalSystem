@@ -214,6 +214,29 @@ class BeliefSuite extends FunSuite:
     )
     assertEquals(result, Some(0.5))
 
+  test("fluent-backed premises contribute to derived belief"):
+    val fluent = FluentId.unsafe("fl_current_person")
+    val subclass = Axiom.SubClassOf(Person, Agent)
+    val assertion = Axiom.ClassAssertion(alice, Person)
+    val graph = Graph(
+      Map(
+        subclass -> Set[Support](Support.Asserted(subclass.id)),
+        assertion -> Set[Support](Support.FromFluent(fluent))
+      )
+    )
+    val closure = Reasoner.closure(graph)
+    val result = DerivedBelief.ofSupports(
+      Axiom.ClassAssertion(alice, Agent),
+      closure,
+      {
+        case Support.FromFluent(id) if id == fluent => Some(0.65)
+        case _                                      => None
+      },
+      DerivedBelief.Config(inferenceDifficulty = 0.0)
+    )
+
+    assertEquals(result, Some(0.65))
+
   test("noisy-OR across two derivations exceeds either path alone"):
     val marco = Iri("noesis:e/marco")
     val friendOf = Iri("crm:friendOf")

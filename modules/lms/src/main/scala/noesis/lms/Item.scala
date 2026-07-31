@@ -1,7 +1,9 @@
 package noesis.lms
 
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Instant
-import java.util.Locale
+import java.util.{HexFormat, Locale}
 
 import io.circe.derivation.{ConfiguredCodec, ConfiguredEnumCodec}
 import noesis.logic.*
@@ -11,8 +13,8 @@ opaque type ItemId = String
 
 object ItemId:
   def of(kind: ItemKind, axioms: Set[AxiomId]): ItemId =
-    val key = axioms.toList.sorted.map(_.value).mkString(",")
-    s"it_${kind.toString.toLowerCase(Locale.ROOT)}_${Integer.toHexString(key.hashCode)}"
+    val kindName = kind.toString.toLowerCase(Locale.ROOT)
+    s"it_${kindName}_v2_${ContentDigest.sha256(s"item:$kindName", axioms)}"
 
   def unsafe(value: String): ItemId = value
 
@@ -148,7 +150,36 @@ final case class Question(
 object Question:
   /** A content hash over the axioms a question was built from. */
   def hashOf(axioms: Set[AxiomId]): String =
-    Integer.toHexString(axioms.toList.sorted.map(_.value).mkString(",").hashCode)
+    s"v2_${ContentDigest.sha256("question", axioms)}"
+
+/** Collision-resistant, length-delimited identity for learning projections.
+  *
+  * Item ids merge belief and review history, so a 32-bit hash collision is not a cosmetic conflict:
+  * it makes evidence about one fact update another. The domain tag separates item kinds and
+  * question staleness, while byte lengths make concatenation unambiguous (DESIGN deterministic
+  * replay and explicit evidence).
+  */
+private object ContentDigest:
+  def sha256(domain: String, axioms: Set[AxiomId]): String =
+    val digest = MessageDigest.getInstance("SHA-256")
+    add(digest, domain)
+    axioms.toList.sorted.foreach(id => add(digest, id.value))
+    HexFormat.of().formatHex(digest.digest())
+
+  private def add(digest: MessageDigest, value: String): Unit =
+    val bytes = value.getBytes(StandardCharsets.UTF_8)
+    digest.update(ByteBuffer4.encode(bytes.length))
+    digest.update(bytes)
+
+/** Fixed-width length prefix without relying on platform byte order. */
+private object ByteBuffer4:
+  def encode(value: Int): Array[Byte] =
+    Array(
+      ((value >>> 24) & 0xff).toByte,
+      ((value >>> 16) & 0xff).toByte,
+      ((value >>> 8) & 0xff).toByte,
+      (value & 0xff).toByte
+    )
 
 /** A recorded review outcome — the raw data SPEC §12.3 insists be logged from day one so belief
   * parameters can be refit per owner later.

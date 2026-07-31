@@ -23,11 +23,15 @@ object VCardExporter extends DocumentExporter:
   def render(
       context: ExportContext,
       entity: Iri,
-      _options: ExportOptions
+      options: ExportOptions
   ): Either[List[String], String] =
-    if !context.state.entities.contains(entity) then Left(List(s"no such contact: ${entity.display}"))
+    if !context.closure.complete then incompleteExport(context)
+    else if !context.state.entities.contains(entity) then
+      Left(List(s"no such contact: ${entity.display}"))
     else
-      disclosedCard(context, entity).map(card => VCard.write(card, context.naming.label))
+      disclosedCard(context, entity).map: card =>
+        val minimized = if options.includeContactData then card else card.copy(methods = Nil)
+        VCard.write(minimized, context.naming.label)
 
 object FoafExporter extends DocumentExporter:
   val formats = Set("foaf", "rdf")
@@ -37,15 +41,16 @@ object FoafExporter extends DocumentExporter:
       entity: Iri,
       options: ExportOptions
   ): Either[List[String], String] =
-    if !context.state.entities.contains(entity) then Left(List(s"no such contact: ${entity.display}"))
+    if !context.closure.complete then incompleteExport(context)
+    else if !context.state.entities.contains(entity) then
+      Left(List(s"no such contact: ${entity.display}"))
     else
       val people = context.closure.view
         .objectBySubjectProperty
         .getOrElse((entity, RelationshipsModule.knows), Nil)
         .map(_._1)
         .filter(person =>
-          context.closure.contains(Axiom.ClassAssertion(person, RelationshipsModule.Person)) &&
-            context.permits(Axiom.ObjectAssertion(entity, RelationshipsModule.knows, person))
+          context.closure.contains(Axiom.ClassAssertion(person, RelationshipsModule.Person))
         )
       disclosedCard(context, entity).map: card =>
         Foaf.write(
@@ -59,31 +64,13 @@ private def disclosedCard(
     entity: Iri
 ): Either[List[String], ContactCard] =
   val card = Prm.contactCard(context.state, entity)
-  val disclosedMethods = card.methods.filter: method =>
-    context.permits(
-      Axiom.DataAssertion(
-        method.id,
-        RelationshipsModule.contactValue,
-        Literal.string(method.value)
-      )
-    )
-  val disclosedEmployments = card.employments.filter: employment =>
-    context.permits(
-      Axiom.ObjectAssertion(
-        employment.id,
-        RelationshipsModule.employer,
-        employment.organization
-      )
-    )
-  val disclosedBirthday = card.birthday.filter: date =>
-    context.permits(
-      Axiom.DataAssertion(entity, RelationshipsModule.birthday, Literal.date(date))
-    )
-  Right(
-    card.copy(
-      birthday = disclosedBirthday,
-      methods = disclosedMethods,
-      employments = disclosedEmployments
+  Right(card)
+
+private def incompleteExport(context: ExportContext): Left[List[String], Nothing] =
+  Left(
+    List(
+      s"reasoning incomplete (${context.closure.incompleteReasons.toList.sorted.mkString(", ")}); " +
+        "refusing to produce a possibly partial contact export"
     )
   )
 

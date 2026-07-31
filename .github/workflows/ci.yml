@@ -46,4 +46,8 @@ jobs:
           core/testOnly noesis.core.*;
           lms/testOnly noesis.lms.*;
           vocab/testOnly noesis.vocab.*;
+          cli/testOnly noesis.cli.*;
           conformance/testOnly noesis.conformance.*"
+
+      - name: Check Nix and isolated-agent sources
+        run: nix flake check
