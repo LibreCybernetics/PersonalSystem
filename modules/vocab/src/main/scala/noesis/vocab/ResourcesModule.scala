@@ -21,6 +21,19 @@ object ResourcesModule extends Module:
   val version = "0.1.0"
 
   val Agent: Iri = iri("Agent")
+
+  /** A place, as ValueFlows models one: "data that locates something relative to the Earth, usually
+    * a somewhat fixed location", extending `geo:SpatialThing` from W3C Basic Geo.
+    *
+    * Imported rather than invented, for the same reason as `vf:Agent`: §8 already brings this
+    * vocabulary in, and a `crm:Place` would be a second name for a thing that already has one.
+    * Noesis coins no `vf:` term — the naming register makes that a rule rather than a habit — so
+    * the property that *uses* a place lives in `crm:` (see `RelationshipsModule.location`). ValueFlows'
+    * own location properties (`currentLocation`, `primaryLocation`, `toLocation`) attach to
+    * resources and agents rather than to events, and none of them is imported until §8 needs one.
+    */
+  val SpatialThing: Iri = iri("SpatialThing")
+
   val EconomicResource: Iri = iri("EconomicResource")
   val EconomicEvent: Iri = iri("EconomicEvent")
   val ResourceSpecification: Iri = iri("ResourceSpecification")
@@ -56,10 +69,26 @@ object ResourcesModule extends Module:
     val raise = "raise"
     val lower = "lower"
 
+  /** W3C Basic Geo, which `vf:SpatialThing` extends. Only the three coordinate properties are used;
+    * `geo:lat_long` and `geo:location` are not, and are therefore not declared.
+    */
+  object Geo:
+    val SpatialThing: Iri = Iri("geo:SpatialThing")
+    val lat: Iri = Iri("geo:lat")
+    val long: Iri = Iri("geo:long")
+    val alt: Iri = Iri("geo:alt")
+
   val ontology: List[Axiom] = List(
     // The single alignment axiom: vf:Agent ≡ core:Agent, expressed as mutual subsumption.
     Axiom.SubClassOf(Agent, CoreModule.Agent),
     Axiom.SubClassOf(CoreModule.Agent, Agent),
+    // Upstream's own subsumption, restated because Noesis does not fetch the vocabulary at runtime.
+    Axiom.SubClassOf(SpatialThing, Geo.SpatialThing),
+    // Coordinates are data properties on a place. Declared without a range, which is what makes the
+    // CLI type their values as literals rather than as references (see AGENTS.md).
+    Axiom.PropertyDomain(Geo.lat, SpatialThing),
+    Axiom.PropertyDomain(Geo.long, SpatialThing),
+    Axiom.PropertyDomain(Geo.alt, SpatialThing),
     Axiom.PropertyDomain(provider, EconomicEvent),
     Axiom.PropertyRange(provider, Agent),
     Axiom.PropertyDomain(receiver, EconomicEvent),
@@ -83,6 +112,12 @@ object ResourcesModule extends Module:
     // disclosed for exactly this reason.
     .withProperty(balance, TermPolicy(sensitivity = Some(Sensitivity.Sensitive)))
     .withProperty(quantity, TermPolicy(escalateTo = Some(Sensitivity.Sensitive)))
+    // Coordinates are the sharp end of the place model: a named place is what a briefing needs,
+    // and a lat/long is what re-identifies a home. `sensitive` is undisclosable regardless of
+    // grants (§3.3), and derived disclosure carries that to anything justified by one.
+    .withProperty(Geo.lat, TermPolicy(sensitivity = Some(Sensitivity.Sensitive)))
+    .withProperty(Geo.long, TermPolicy(sensitivity = Some(Sensitivity.Sensitive)))
+    .withProperty(Geo.alt, TermPolicy(sensitivity = Some(Sensitivity.Sensitive)))
     // Open loans and open favor claims are the exception: medium utility, because they are the
     // things that matter in daily social life and surface in §7 briefings.
     .withProperty(due, TermPolicy.utility(0.55))

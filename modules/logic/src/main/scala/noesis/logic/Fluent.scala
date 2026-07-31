@@ -79,12 +79,16 @@ final case class Fluent(
   /** Did this state hold on `date`?
     *
     * An absent `validFrom` means the start is unknown, not that the state never started, so it does
-    * not disqualify the fluent. An unplaceable *end*, by contrast, does: if the state is known to
-    * have ended but not when, no date can be claimed to fall inside it.
+    * not disqualify the fluent. An absent *end*, by contrast, disqualifies the fluent whenever an
+    * `endReason` says it ended: a state known to have ended but not dated contains no date.
+    *
+    * Both boundaries are now located whenever they are present at all — a recurring day cannot
+    * bound a state, and since the narrowing it cannot be stored as one either — so absence here
+    * means "not recorded" and nothing else.
     */
   def heldOn(date: LocalDate): Boolean =
-    val startedBy = validFrom.flatMap(_.lowerBound).forall(!_.isAfter(date))
-    val notYetEnded = validTo.flatMap(_.lowerBound) match
+    val startedBy = validFrom.map(_.lowerBound).forall(!_.isAfter(date))
+    val notYetEnded = validTo.map(_.lowerBound) match
       case Some(end) => end.isAfter(date)
       case None      => endReason.isEmpty
     startedBy && notYetEnded

@@ -88,7 +88,7 @@ final case class RelationshipInput(
     participants: List[Iri],
     kind: String,
     description: Option[String] = None,
-    anniversary: Option[PartialDate] = None
+    anniversary: Option[Literal] = None
 )
 
 final case class NoteInput(
@@ -119,7 +119,7 @@ final case class FollowUpInput(
 final case class ReminderInput(
     id: Iri,
     contact: Iri,
-    due: PartialDate,
+    due: Literal,
     occasion: String,
     recurrence: Option[String] = None
 )
@@ -423,13 +423,9 @@ object PrmCapture:
       )
       val optional =
         data(input.id, RelationshipsModule.relationshipDescription, input.description) ++
-          input.anniversary.toList.map(date =>
+          input.anniversary.toList.map(value =>
             Intent.Assert(
-              Axiom.DataAssertion(
-                input.id,
-                RelationshipsModule.anniversary,
-                Literal.date(date)
-              )
+              Axiom.DataAssertion(input.id, RelationshipsModule.anniversary, value)
             )
           )
       Right(NonEmptyList.fromListUnsafe(base ++ people ++ optional))
@@ -530,7 +526,7 @@ object PrmCapture:
           Axiom.ObjectAssertion(input.id, RelationshipsModule.reminderAbout, input.contact)
         ),
         Intent.Assert(
-          Axiom.DataAssertion(input.id, RelationshipsModule.due, Literal.date(input.due))
+          Axiom.DataAssertion(input.id, RelationshipsModule.due, input.due)
         ),
         Intent.Assert(
           Axiom.DataAssertion(

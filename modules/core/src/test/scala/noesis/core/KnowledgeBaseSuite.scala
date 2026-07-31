@@ -531,7 +531,7 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       base <- kb(KbConfig.default.withTemplates(templates))
       _ <- base.assert(Axiom.DataAssertion(lia, Vocab.label, Literal.string("Lía")))
       text <- base.verbalize(
-        Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
+        Axiom.DataAssertion(lia, birthday, Literal.anniversary(5, 12))
       )
     yield assertEquals(text, "Lía's birthday is --05-12")
 
@@ -604,7 +604,7 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
     val book = PolicyBook.empty
       .withProperty(birthday, TermPolicy.utility(0.9))
       .withModule(ModuleDefaults("crm", noesis.logic.Sensitivity.Personal))
-    val axiom = Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
+    val axiom = Axiom.DataAssertion(lia, birthday, Literal.anniversary(5, 12))
 
     for
       base <- kb(KbConfig.default.withPolicies(book))

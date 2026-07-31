@@ -25,7 +25,7 @@ class QuerySuite extends FunSuite:
       Axiom.ObjectAssertion(marco, worksAt, acme),
       Axiom.ObjectAssertion(sarah, worksAt, molina),
       Axiom.ObjectAssertion(sarah, spouseOf, marco),
-      Axiom.DataAssertion(lia, birthday, Literal.date(PartialDate.monthDay(5, 12)))
+      Axiom.DataAssertion(lia, birthday, Literal.anniversary(5, 12))
     ))*
   )
 
@@ -95,7 +95,7 @@ class QuerySuite extends FunSuite:
     val parsed = PatternSyntax.parse("""?p rdf:type crm:Person . ?p crm:birthday "--05-12"""").fold(fail(_), identity)
     assertEquals(parsed.patterns.length, 2)
     assertEquals(parsed.variables, Set("p"))
-    assertEquals(parsed.patterns(1).obj, Term.Lit(Literal.date(PartialDate.monthDay(5, 12))))
+    assertEquals(parsed.patterns(1).obj, Term.Lit(Literal.anniversary(5, 12)))
 
   test("query values render variables, patterns, and missing bindings without ambiguity"):
     val pattern = Pattern(Term.Var("who"), Term.Ref(worksAt), Term.Ref(acme))

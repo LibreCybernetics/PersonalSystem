@@ -59,6 +59,11 @@
 
     { "id": "string-admits-anything", "datatype": "xsd:string", "lexical": "\u0020whatever\u0020", "valid": true, "canonical": "\u0020whatever\u0020" },
     { "id": "unknown-datatype-admits-anything", "datatype": "ex:invented", "lexical": "whatever", "valid": true, "canonical": "whatever" },
-    { "id": "partial-date-admits-the-shapes-xsd-has-no-type-for", "datatype": "core:partialDate", "lexical": "2026---12", "valid": true, "canonical": "2026---12" }
+
+    { "id": "date-with-timezone", "datatype": "xsd:date", "lexical": "2026-05-12+02:00", "valid": true, "canonical": "2026-05-12+02:00" },
+    { "id": "date-with-utc-designator", "datatype": "xsd:date", "lexical": "2026-05-12Z", "valid": true, "canonical": "2026-05-12Z" },
+    { "id": "gmonthday-with-timezone", "datatype": "xsd:gMonthDay", "lexical": "--05-12-05:00", "valid": true, "canonical": "--05-12-05:00" },
+    { "id": "gyear-with-timezone", "datatype": "xsd:gYear", "lexical": "2026Z", "valid": true, "canonical": "2026Z" },
+    { "id": "date-with-out-of-range-timezone", "datatype": "xsd:date", "lexical": "2026-05-12+15:00", "valid": false }
   ]
 }

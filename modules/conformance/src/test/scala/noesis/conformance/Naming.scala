@@ -53,7 +53,6 @@ object Naming:
       Vocab.subClassOf -> Role.Property,
       Vocab.subPropertyOf -> Role.Property,
       Vocab.label -> Role.Property,
-      CoreDatatype.partialDate -> Role.Datatype,
       Rdf.langString -> Role.Datatype,
       Xsd.string -> Role.Datatype,
       Xsd.boolean -> Role.Datatype,

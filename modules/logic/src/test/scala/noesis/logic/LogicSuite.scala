@@ -1,6 +1,6 @@
 package noesis.logic
 
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, MonthDay}
 
 import cats.Order
 import cats.effect.IO
@@ -167,43 +167,120 @@ class LogicSuite extends CatsEffectSuite:
     assertEquals(EndReason.parse("SUPERSEDED"), Right(EndReason.Superseded))
     assertEquals(EndReason.parse("wrong"), Left("unknown end reason: wrong"))
 
-  test("partial dates render, parse, bound, compare, and match occasions without invented values"):
+  test("a partial date is located, renders as an XSD date form, and round-trips"):
     val values = List(
-      PartialDate(Some(2026), Some(5), Some(12)) -> "2026-05-12",
-      PartialDate(Some(2026), Some(5), None) -> "2026-05",
-      PartialDate(Some(2026), None, Some(12)) -> "2026---12",
-      PartialDate(Some(2026), None, None) -> "2026",
-      PartialDate(None, Some(5), Some(12)) -> "--05-12",
-      PartialDate(None, Some(5), None) -> "--05",
-      PartialDate(None, None, Some(12)) -> "---12",
-      PartialDate(None, None, None) -> "unknown"
+      PartialDate.Day(2026, 5, 12) -> "2026-05-12",
+      PartialDate.Month(2026, 5) -> "2026-05",
+      PartialDate.Year(2026) -> "2026"
     )
     values.foreach: (date, rendered) =>
       assertEquals(date.render, rendered)
       assertEquals(PartialDate.parse(rendered), Right(date))
+      // Every shape has an XSD datatype: this is what closed D1, and it is a property of the type
+      // rather than of the mapping, so a fourth shape could not be added without one.
+      assert(Datatypes.dates.contains(Datatypes.of(date)), s"$rendered has no XSD date datatype")
+      assert(Datatypes.isValid(Datatypes.of(date), rendered), s"$rendered is not in its lexical space")
 
+    assertEquals(Datatypes.of(PartialDate.Day(2026, 5, 12)), Xsd.date)
+    assertEquals(Datatypes.of(PartialDate.Month(2026, 5)), Xsd.gYearMonth)
+    assertEquals(Datatypes.of(PartialDate.Year(2026)), Xsd.gYear)
+
+  test("partial-date bounds are total, and its order agrees with equality"):
     val complete = PartialDate.of(2026, 5, 12)
     assert(complete.isComplete)
-    assert(!PartialDate(Some(2026), Some(5), None).isComplete)
-    assert(!PartialDate(None, Some(5), Some(12)).isComplete)
-    assertEquals(complete.lowerBound, Some(LocalDate.of(2026, 5, 12)))
-    assertEquals(complete.upperBound, Some(LocalDate.of(2026, 5, 13)))
-    assertEquals(PartialDate(Some(2026), Some(5), None).upperBound, Some(LocalDate.of(2026, 6, 1)))
-    assertEquals(PartialDate(Some(2026), None, None).upperBound, Some(LocalDate.of(2027, 1, 1)))
-    assertEquals(PartialDate.monthDay(5, 12).lowerBound, None)
-    assert(PartialDate.monthDay(5, 12).sameMonthDay(complete))
-    assert(!PartialDate.monthDay(5, 11).sameMonthDay(complete))
-    assert(!PartialDate(None, None, Some(12)).sameMonthDay(complete))
-    assert(!PartialDate(None, None, Some(12)).sameMonthDay(PartialDate(None, None, Some(12))))
-    assertEquals(PartialDate.parse("5-12"), Right(PartialDate.monthDay(5, 12)))
-    assertEquals(PartialDate.parse("  "), Left("empty date"))
-    assertEquals(PartialDate.parse("--x"), Left("not a number: x"))
-    assertEquals(PartialDate.parse("--1-2-3"), Left("unparseable partial date: --1-2-3"))
-    assertEquals(PartialDate.parse("2026-1-2-3"), Left("unparseable date: 2026-1-2-3"))
+    assert(!PartialDate.Month(2026, 5).isComplete)
+    assert(!PartialDate.Year(2026).isComplete)
+    assertEquals(complete.lowerBound, LocalDate.of(2026, 5, 12))
+    assertEquals(complete.upperBound, LocalDate.of(2026, 5, 13))
+    assertEquals(PartialDate.Month(2026, 5).lowerBound, LocalDate.of(2026, 5, 1))
+    assertEquals(PartialDate.Month(2026, 5).upperBound, LocalDate.of(2026, 6, 1))
+    assertEquals(PartialDate.Year(2026).lowerBound, LocalDate.of(2026, 1, 1))
+    assertEquals(PartialDate.Year(2026).upperBound, LocalDate.of(2027, 1, 1))
+    assertEquals(PartialDate.from(LocalDate.of(2026, 5, 12)), complete)
+
     assert(Order[PartialDate].compare(complete, PartialDate.of(2027, 1, 1)) < 0)
-    assert(Order[PartialDate].compare(complete, PartialDate.monthDay(5, 12)) < 0)
-    assert(Order[PartialDate].compare(PartialDate.monthDay(5, 12), complete) > 0)
-    assertEquals(Order[PartialDate].compare(PartialDate.monthDay(5, 12), PartialDate.monthDay(6, 1)), 0)
+    assert(Order[PartialDate].compare(PartialDate.of(2027, 1, 1), complete) > 0)
+    assertEquals(Order[PartialDate].compare(complete, PartialDate.of(2026, 5, 12)), 0)
+    // Three values share the day 2026-01-01 as a lower bound. The old order called them equal,
+    // which made `Eq` derived from it claim two different dates were one; the precise one sorts
+    // first now, and only equal values compare equal.
+    val year = PartialDate.Year(2026)
+    val month = PartialDate.Month(2026, 1)
+    val day = PartialDate.of(2026, 1, 1)
+    assert(Order[PartialDate].compare(day, month) < 0)
+    assert(Order[PartialDate].compare(month, year) < 0)
+    assert(Order[PartialDate].compare(year, day) > 0)
+    // Where the two bounds disagree, the start decides: 2026 begins before 1 June 2026 even though
+    // it ends after it. Comparing by end alone would sort the year second.
+    assert(Order[PartialDate].compare(year, PartialDate.of(2026, 6, 1)) < 0)
+    assert(Order[PartialDate].compare(PartialDate.of(2026, 6, 1), year) > 0)
+    List(day, month, year).foreach: date =>
+      assertEquals(Order[PartialDate].compare(date, date), 0)
+
+  test("a date carries no timezone, and says so rather than failing on a digit"):
+    // XSD 1.1 admits a timezone on every date datatype and `Datatypes` accepts one, because that
+    // clause is what conformance is claimed against. The value type does not, and the boundary
+    // between the two is stated in the message instead of surfacing as "not a number: 12+02:00".
+    assert(Datatypes.isValid(Xsd.date, "2026-05-12+02:00"))
+    assert(Datatypes.isValid(Xsd.date, "2026-05-12Z"))
+    assertEquals(
+      PartialDate.parse("2026-05-12+02:00"),
+      Left("a date carries no timezone in Noesis: 2026-05-12+02:00")
+    )
+    assertEquals(
+      PartialDate.parse("2026-05-12Z"),
+      Left("a date carries no timezone in Noesis: 2026-05-12Z")
+    )
+    assertEquals(Literal("2026-05-12+02:00", Xsd.date).asDate, None)
+
+  test("partial dates reject what they cannot hold, including the shapes they used to invent"):
+    assertEquals(PartialDate.parse("  "), Left("empty date"))
+    assertEquals(PartialDate.parse("2026-x"), Left("not a number: x"))
+    assertEquals(PartialDate.parse("2026-1-2-3"), Left("unparseable date: 2026-1-2-3"))
+    // The four shapes the narrowing removed. Each was either meaningless as a calendar date or a
+    // second spelling of "not recorded", which `Option` already says. The exact messages are
+    // asserted because the owner reads them at the CLI, where the fix is to write a year.
+    assertEquals(PartialDate.parse("2026---12"), Left("unparseable date: 2026---12"))
+    assertEquals(
+      PartialDate.parse("unknown"),
+      Left("a date that is not known is an absent value, not 'unknown'")
+    )
+    assertEquals(PartialDate.parse("--05"), Left("unparseable date: --05"))
+    assertEquals(PartialDate.parse("---12"), Left("unparseable date: ---12"))
+    assertEquals(PartialDate.parse("-2026"), Left("unparseable date: -2026"))
+    // `05-12` is a recurring day, not year 5 month 12. Requiring four digits is what keeps the
+    // month-day form vCard, FOAF and the CLI all use from being silently mis-dated.
+    assertEquals(PartialDate.parse("05-12"), Left("a date starts with a four-digit year: 05-12"))
+    assertEquals(PartialDate.parse("26"), Left("a date starts with a four-digit year: 26"))
+    assertEquals(PartialDate.parse("2026-05-12"), Right(PartialDate.of(2026, 5, 12)))
+
+  test("a recurring day is a MonthDay, not a date, and keeps the literal a yearless date wrote"):
+    val may12 = MonthDay.of(5, 12)
+    assertEquals(Literal.anniversary(may12), Literal("--05-12", Xsd.gMonthDay))
+    assertEquals(Literal.anniversary(5, 12), Literal.anniversary(may12))
+    // The stored form is unchanged by the narrowing, so no birthday in an existing journal moves
+    // and no `AxiomId` changes.
+    assertEquals(Literal.anniversary(may12).lexical, "--05-12")
+    assert(Datatypes.isValid(Xsd.gMonthDay, Literal.anniversary(may12).lexical))
+
+    // What ties the two types together: a birthday captured with its year and one captured without
+    // must drive the same occasion.
+    assertEquals(Literal.anniversary(may12).asAnniversary, Some(may12))
+    assertEquals(Literal.date(PartialDate.of(1990, 5, 12)).asAnniversary, Some(may12))
+    assertEquals(Literal.date(PartialDate.Month(1990, 5)).asAnniversary, None)
+    assertEquals(Literal.date(PartialDate.Year(1990)).asAnniversary, None)
+    assertEquals(Literal.string("--05-12").asAnniversary, None)
+    assertEquals(Literal("nonsense", Xsd.gMonthDay).asAnniversary, None)
+    // What an import boundary asks once instead of at every call site.
+    assertEquals(Literal.dateOrAnniversary("--05-12"), Some(Literal.anniversary(may12)))
+    assertEquals(Literal.dateOrAnniversary("1990-05-12"), Some(Literal.date(PartialDate.of(1990, 5, 12))))
+    assertEquals(Literal.dateOrAnniversary("1990-05"), Some(Literal.date(PartialDate.Month(1990, 5))))
+    assertEquals(Literal.dateOrAnniversary("--02-31"), None)
+    assertEquals(Literal.dateOrAnniversary("sometime"), None)
+
+    assertEquals(PartialDate.of(1990, 5, 12).anniversary, Some(may12))
+    assertEquals(PartialDate.Month(1990, 5).anniversary, None)
+    assertEquals(PartialDate.Year(1990).anniversary, None)
 
   test("CLI literals retain types, language tags, text, and renderings"):
     val instant = Instant.parse("2026-07-30T12:00:00Z")
@@ -215,8 +292,12 @@ class LogicSuite extends CatsEffectSuite:
       "false" -> Literal.boolean(false),
       "-12.50" -> Literal.decimal(BigDecimal("-12.50")),
       "2026-07-30" -> Literal.date(PartialDate.of(2026, 7, 30)),
-      "--05-12" -> Literal.date(PartialDate.monthDay(5, 12)),
-      "05-12" -> Literal.date(PartialDate.monthDay(5, 12)),
+      "2026-07" -> Literal.date(PartialDate.Month(2026, 7)),
+      "--05-12" -> Literal.anniversary(5, 12),
+      "05-12" -> Literal.anniversary(5, 12),
+      // A month-day that does not exist is text, not a silently corrected date.
+      "--02-31" -> Literal.string("--02-31"),
+      "13-01" -> Literal.string("13-01"),
       // A bare numeral is an integer, not a decimal: they are different datatypes with different
       // canonical forms, and capture must not silently widen one into the other.
       "100" -> Literal.integer(BigInt(100)),
@@ -504,8 +585,12 @@ class LogicSuite extends CatsEffectSuite:
     assert(!Datatypes.isValid(Xsd.dateTime, "2026-07-30 12:00:00"))
     // Unconstrained and unknown datatypes admit anything, per RDF 1.1.
     assert(Datatypes.isValid(Xsd.string, "  anything"))
-    assert(Datatypes.isValid(CoreDatatype.partialDate, "unknown"))
     assert(Datatypes.isValid(Iri("ex:invented"), "whatever"))
+    // XSD 1.1 admits an optional timezone on every date datatype, and that is what conformance is
+    // claimed against — the value types decline these separately, and say why.
+    assert(Datatypes.isValid(Xsd.date, "2026-05-12+02:00"))
+    assert(Datatypes.isValid(Xsd.gMonthDay, "--05-12-05:00"))
+    assert(Datatypes.isValid(Xsd.gYear, "2026Z"))
 
   test("canonical mappings reduce to the form XSD prescribes"):
     assertEquals(Datatypes.canonical(Xsd.boolean, "1"), Right("true"))
@@ -543,19 +628,18 @@ class LogicSuite extends CatsEffectSuite:
 
   test("a partial date carries the datatype its known components determine"):
     assertEquals(Datatypes.of(PartialDate.of(2026, 5, 12)), Xsd.date)
-    assertEquals(Datatypes.of(PartialDate(Some(2026), Some(5), None)), Xsd.gYearMonth)
-    assertEquals(Datatypes.of(PartialDate(Some(2026), None, None)), Xsd.gYear)
-    assertEquals(Datatypes.of(PartialDate.monthDay(5, 12)), Xsd.gMonthDay)
-    assertEquals(Datatypes.of(PartialDate(None, Some(5), None)), Xsd.gMonth)
-    assertEquals(Datatypes.of(PartialDate(None, None, Some(12))), Xsd.gDay)
-    // The two shapes XSD has no datatype for.
-    assertEquals(Datatypes.of(PartialDate(Some(2026), None, Some(12))), CoreDatatype.partialDate)
-    assertEquals(Datatypes.of(PartialDate(None, None, None)), CoreDatatype.partialDate)
-    assert(Datatypes.isDate(Xsd.date) && Datatypes.isDate(CoreDatatype.partialDate))
+    assertEquals(Datatypes.of(PartialDate.Month(2026, 5)), Xsd.gYearMonth)
+    assertEquals(Datatypes.of(PartialDate.Year(2026)), Xsd.gYear)
+    assert(Datatypes.isDate(Xsd.date) && Datatypes.isDate(Xsd.gMonthDay))
+    // `gMonth` and `gDay` remain dates the term layer knows, because an import may carry one —
+    // there is simply no `PartialDate` for them to become.
+    assert(Datatypes.isDate(Xsd.gMonth) && Datatypes.isDate(Xsd.gDay))
+    assertEquals(Literal("--05", Xsd.gMonth).asDate, None)
+    assertEquals(Literal("---12", Xsd.gDay).asDate, None)
     assert(!Datatypes.isDate(Xsd.string))
     // Years pad to four digits because no shorter form is in xsd:gYear's lexical space.
-    assertEquals(PartialDate(Some(26), None, None).render, "0026")
-    assert(Datatypes.isValid(Xsd.gYear, PartialDate(Some(26), None, None).render))
+    assertEquals(PartialDate.Year(26).render, "0026")
+    assert(Datatypes.isValid(Xsd.gYear, PartialDate.Year(26).render))
 
   // ── Typed literals ─────────────────────────────────────────────────────────
 
@@ -612,12 +696,27 @@ class LogicSuite extends CatsEffectSuite:
       """{"type":"Num","value":90000}""" -> Literal.decimal(BigDecimal(90000)),
       """{"type":"Num","value":-12.50}""" -> Literal.decimal(BigDecimal("-12.5")),
       """{"type":"Bool","value":true}""" -> Literal.boolean(true),
-      """{"type":"Date","value":"--05-12"}""" -> Literal.date(PartialDate.monthDay(5, 12)),
+      """{"type":"Date","value":"2026-05-12"}""" -> Literal.date(PartialDate.of(2026, 5, 12)),
+      """{"type":"Date","value":"2026-05"}""" -> Literal.date(PartialDate.Month(2026, 5)),
+      // A yearless date in an old journal is a recurrence, and lands on the same term it always
+      // had. `--05` and `---12` keep the XSD datatype they always denoted.
+      """{"type":"Date","value":"--05-12"}""" -> Literal.anniversary(5, 12),
+      """{"type":"Date","value":"--05"}""" -> Literal("--05", Xsd.gMonth),
+      """{"type":"Date","value":"---12"}""" -> Literal("---12", Xsd.gDay),
       """{"type":"Time","value":"2026-07-30T12:00:00Z"}""" ->
         Literal.instant(Instant.parse("2026-07-30T12:00:00Z"))
     )
     legacy.foreach: (json, expected) =>
       assertEquals(decode[Literal](json), Right(expected), s"decoding $json")
+
+    // The two shapes the narrowing removed. Replay refuses them by name rather than inventing a
+    // value: both meant "not known", which is now an absent value rather than a present one.
+    List("2026---12", "unknown").foreach: dropped =>
+      val failure = decode[Literal](s"""{"type":"Date","value":"$dropped"}""").swap.toOption
+        .map(_.getMessage)
+        .getOrElse(s"$dropped decoded, but it has no representation")
+      assert(failure.contains(s"legacy date '$dropped' has no representation"), failure)
+      assert(failure.contains("narrowed to located dates"), failure)
 
     assertEquals(
       decode[Literal]("""{"lexical":"Alice","datatype":"rdf:langString","language":"en"}"""),

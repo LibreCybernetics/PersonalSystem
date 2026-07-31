@@ -13,7 +13,7 @@ src/test/resources/          corpora, one directory per specification
   jcs/canonicalization.json    RFC 8785      §3.2.2–3.2.3   30 vectors
   json/syntax.json             ISO/IEC 21778 §2, §4–9       61 vectors
   json/ijson.json              RFC 7493      §2.1–2.3       36 vectors
-  xsd/datatypes.json           XSD 1.1 Pt 2  §3.3           49 vectors
+  xsd/datatypes.json           XSD 1.1 Pt 2  §3.3           53 vectors
   iri/syntax.json              RFC 3987      §2.2           26 vectors
   bcp47/tags.json              RFC 5646      §2.1           31 vectors
   mdr/naming.json              ISO/IEC 11179-5 §2.2.2, §9  10 namespaces

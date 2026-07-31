@@ -303,7 +303,7 @@ final class IriConformanceSuite extends ConformanceSuite:
     val stored = List(
       Iri("crm:worksAt"),
       Iri("xsd:string"),
-      Iri("core:partialDate"),
+      Xsd.gMonthDay,
       Xsd.date,
       Rdf.langString,
       Vocab.label,

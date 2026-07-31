@@ -243,7 +243,7 @@ class PrmContractSuite extends FunSuite:
           List(lia, marco, lia),
           "friendship",
           Some("met at school"),
-          Some(PartialDate.monthDay(8, 2))
+          Some(Literal.anniversary(8, 2))
         )
       )
     )
@@ -338,7 +338,7 @@ class PrmContractSuite extends FunSuite:
         ReminderInput(
           Iri("noesis:e/reminder"),
           lia,
-          PartialDate.monthDay(5, 12),
+          Literal.anniversary(5, 12),
           "birthday",
           Some("yearly")
         )
@@ -442,8 +442,8 @@ class PrmContractSuite extends FunSuite:
       "Dr. Lía García",
       List("García", "Lía", "María", "Dr.", "PhD"),
       List("Lili", "Lili"),
-      Some(PartialDate.of(1988, 5, 12)),
-      Some(PartialDate.monthDay(6, 18)),
+      Some(Literal.date(PartialDate.of(1988, 5, 12))),
+      Some(Literal.anniversary(6, 18)),
       List(VCardField("lia@example.com", Some("Primary"), Set("home", "work"))),
       List(VCardField("+52551234", None, Set("work"))),
       List(
@@ -988,7 +988,7 @@ class PrmContractSuite extends FunSuite:
       "Lía",
       None,
       organization = false,
-      Some(PartialDate.of(1988, 5, 12)),
+      Some(Literal.date(PartialDate.of(1988, 5, 12))),
       List(
         ContactMethodView(
           Iri("noesis:e/sms"),
@@ -1201,17 +1201,16 @@ class PrmContractSuite extends FunSuite:
     assertEquals(Prm.normalize("sms", " 55-12 "), "5512")
     assertEquals(Prm.normalize("custom", " value "), "value")
     assertEquals(
-      Prm.nextOccurrence(PartialDate.monthDay(5, 12), java.time.LocalDate.of(2026, 5, 11)),
-      Some(java.time.LocalDate.of(2026, 5, 12))
+      Prm.nextOccurrence(java.time.MonthDay.of(5, 12), java.time.LocalDate.of(2026, 5, 11)),
+      java.time.LocalDate.of(2026, 5, 12)
     )
     assertEquals(
-      Prm.nextOccurrence(PartialDate.monthDay(5, 12), java.time.LocalDate.of(2026, 5, 13)),
-      Some(java.time.LocalDate.of(2027, 5, 12))
+      Prm.nextOccurrence(java.time.MonthDay.of(5, 12), java.time.LocalDate.of(2026, 5, 13)),
+      java.time.LocalDate.of(2027, 5, 12)
     )
+    // A year alone names no recurring day, so it never reaches `nextOccurrence` — the type says so
+    // now, where the old signature returned `None` at runtime.
     assertEquals(
-      Prm.nextOccurrence(
-        PartialDate(Some(2026), None, None),
-        java.time.LocalDate.of(2026, 5, 13)
-      ),
+      Literal.date(PartialDate.Year(2026)).asAnniversary,
       None
     )

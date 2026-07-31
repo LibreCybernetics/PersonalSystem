@@ -125,6 +125,18 @@
       "datatypePattern": "^[a-z][A-Za-z0-9]*$"
     },
     {
+      "prefix": "geo",
+      "kind": "descriptive",
+      "scope": "The W3C Basic Geo (WGS84) terms the place model of SPEC §7 uses. Descriptive: these names are the W3C's, reached through ValueFlows, whose `vf:SpatialThing` extends `geo:SpatialThing`.",
+      "authority": "W3C, WGS84 Geo Positioning: an RDF vocabulary.",
+      "semantic": "As defined by Basic Geo: a `SpatialThing` is anything with spatial extent, and the coordinate properties are decimal degrees and metres.",
+      "syntactic": "As published: one name part per term, except `lat_long`, which joins two.",
+      "lexical": "As published: UpperCamelCase for classes, lowerCamelCase for properties — with an underscore in `lat_long`, which is why the rule below admits one. Recording that is the point of a descriptive convention: the upstream name is correct by definition, and a rule that forbade it would fail the import rather than the typo.",
+      "uniqueness": "One item per name, inherited.",
+      "classPattern": "^[A-Z][A-Za-z0-9]*$",
+      "propertyPattern": "^[a-z][A-Za-z0-9]*(?:_[a-z][A-Za-z0-9]*)*$"
+    },
+    {
       "prefix": "owl",
       "kind": "descriptive",
       "scope": "Bound for OWL-level output. No term is used yet; the binding exists so that Turtle output can declare it when one is.",
