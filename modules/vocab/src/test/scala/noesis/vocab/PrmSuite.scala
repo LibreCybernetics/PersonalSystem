@@ -12,7 +12,6 @@ import noesis.core.kb.{CommitRejected, KbConfig, KnowledgeBase}
 import noesis.core.module.{ExportContext, ExportOptions}
 import noesis.core.policy.{DisclosurePolicy, PolicyCascade}
 import noesis.core.projection.AxiomRecord
-import noesis.core.verbalize.Naming
 import noesis.journal.InMemoryJournal
 import noesis.logic.*
 
@@ -565,12 +564,13 @@ class PrmSuite extends CatsEffectSuite:
       rendered = VCard.write(card, verbalizer.label)
       reparsed = VCard.parse(rendered).fold(problems => fail(problems.mkString(", ")), identity)
       exported = VCardExporter.render(
-        ExportContext(
+        ExportContext.restricted(
           state,
           closure,
-          Naming.from(state, config.namingProperties, config.namingSchemes),
           config.policies,
-          DisclosurePolicy.personal("test export")
+          DisclosurePolicy.personal("test export"),
+          config.namingProperties,
+          config.namingSchemes
         ),
         contact,
         ExportOptions()
@@ -1048,16 +1048,51 @@ class PrmSuite extends CatsEffectSuite:
       _ <- base.assert(Axiom.ObjectAssertion(lia, RelationshipsModule.knows, acme))
       state <- base.state
       closure <- base.closure
-      naming = Naming.from(state, config.namingProperties, config.namingSchemes)
-      local = ExportContext(
+      local = ExportContext.restricted(
         state,
         closure,
-        naming,
         config.policies,
-        DisclosurePolicy.localOwner("owner")
+        DisclosurePolicy.localOwner("owner"),
+        config.namingProperties,
+        config.namingSchemes
       )
-      public = local.copy(disclosure = DisclosurePolicy.publicOnly("public"))
+      public = ExportContext.restricted(
+        state,
+        closure,
+        config.policies,
+        DisclosurePolicy.publicOnly("public"),
+        config.namingProperties,
+        config.namingSchemes
+      )
+      incomplete = ExportContext.restricted(
+        state,
+        closure.copy(
+          inheritedIncompleteReasons = Set("test resource limit", "test round limit")
+        ),
+        config.policies,
+        DisclosurePolicy.localOwner("owner"),
+        config.namingProperties,
+        config.namingSchemes
+      )
     yield
+      assertEquals(
+        VCardExporter.render(incomplete, lia, ExportOptions()),
+        Left(
+          List(
+            "reasoning incomplete (test resource limit, test round limit); " +
+              "refusing to produce a possibly partial contact export"
+          )
+        )
+      )
+      assertEquals(
+        FoafExporter.render(incomplete, lia, ExportOptions()),
+        Left(
+          List(
+            "reasoning incomplete (test resource limit, test round limit); " +
+              "refusing to produce a possibly partial contact export"
+          )
+        )
+      )
       assertEquals(
         VCardExporter.render(local, missing, ExportOptions()),
         Left(List("no such contact: noesis:e/missing"))
@@ -1066,16 +1101,20 @@ class PrmSuite extends CatsEffectSuite:
         FoafExporter.render(local, missing, ExportOptions()),
         Left(List("no such contact: noesis:e/missing"))
       )
-      val localVCard =
+      val minimizedVCard =
         VCardExporter.render(local, lia, ExportOptions()).fold(found => fail(found.mkString), identity)
+      assert(!minimizedVCard.contains("EMAIL"))
+      val localVCard =
+        VCardExporter
+          .render(local, lia, ExportOptions(includeContactData = true))
+          .fold(found => fail(found.mkString), identity)
       assert(localVCard.contains("BDAY:--05-12"))
       assert(localVCard.contains("EMAIL:lia@example.test"))
       assert(localVCard.contains("ORG:Acme"))
-      val publicVCard =
-        VCardExporter.render(public, lia, ExportOptions()).fold(found => fail(found.mkString), identity)
-      assert(!publicVCard.contains("BDAY"))
-      assert(!publicVCard.contains("EMAIL"))
-      assert(!publicVCard.contains("ORG"))
+      assertEquals(
+        VCardExporter.render(public, lia, ExportOptions()),
+        Left(List("no such contact: noesis:e/lia"))
+      )
 
       val localFoaf = FoafExporter
         .render(
@@ -1089,15 +1128,14 @@ class PrmSuite extends CatsEffectSuite:
       assert(triples.contains(Triple(lia, Foaf.knows, Node.Ref(marco))))
       assert(!triples.contains(Triple(lia, Foaf.knows, Node.Ref(acme))))
 
-      val publicFoaf = FoafExporter
-        .render(
+      assertEquals(
+        FoafExporter.render(
           public,
           lia,
           ExportOptions(includeContactData = true, includeSocialGraph = true)
-        )
-        .fold(found => fail(found.mkString), identity)
-      val publicTriples = Foaf.parseRdf(publicFoaf).fold(found => fail(found.mkString), _.toSet)
-      assert(!publicTriples.exists(_.property == Foaf.mbox))
+        ),
+        Left(List("no such contact: noesis:e/lia"))
+      )
 
   test("the PRM agenda maps exact entry kinds, summaries, dates, and overdue boundaries"):
     val plan = Iri("noesis:e/agenda-plan")

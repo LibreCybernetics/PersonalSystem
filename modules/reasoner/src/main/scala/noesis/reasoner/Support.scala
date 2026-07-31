@@ -32,31 +32,42 @@ object Support:
   * filtering (§3.3.1), belief in derived facts (§4.4), and contradiction UX (§3.4). Computing them
   * once, in the reasoner, is why those three stay consistent with each other.
   */
-final case class Justification(premises: Set[Support]) derives ConfiguredCodec:
+final case class Justification(
+    premises: Set[Support],
+    /** False when a configured resource cap prevented exact journal-backed provenance. */
+    complete: Boolean = true
+) derives ConfiguredCodec:
   def size: Int = premises.size
   def isEmpty: Boolean = premises.isEmpty
 
   /** Is this justification strictly weaker (a superset of premises) than `other`? */
   def subsumedBy(other: Justification): Boolean =
-    other.premises.subsetOf(premises) && other.premises.size < premises.size
+    complete && other.complete &&
+      other.premises.subsetOf(premises) && other.premises.size < premises.size
 
-  def merge(other: Justification): Justification = Justification(premises ++ other.premises)
+  def merge(other: Justification): Justification =
+    if complete && other.complete then Justification(premises ++ other.premises)
+    else Justification.incomplete
 
   def axiomIds: Set[AxiomId] = premises.collect { case Support.Asserted(id) => id }
 
 object Justification:
   val empty: Justification = Justification(Set.empty)
+  val incomplete: Justification = Justification(Set.empty, complete = false)
 
   def asserted(id: AxiomId): Justification = Justification(Set(Support.Asserted(id)))
 
   def of(premises: Support*): Justification = Justification(premises.toSet)
 
-  given Order[Justification] = Order.by(j => (j.size, j.premises.toList.sorted.map(_.render)))
+  given Order[Justification] =
+    Order.by(j => (!j.complete, j.size, j.premises.toList.sorted.map(_.render)))
   given Ordering[Justification] = Order[Justification].toOrdering
 
   /** Drops justifications that are supersets of a smaller one, keeping only minimal explanations. */
   def minimal(candidates: Set[Justification]): Set[Justification] =
-    candidates.filterNot(c => candidates.exists(other => c.subsumedBy(other)))
+    val exact = candidates.filter(_.complete)
+    val minimalExact = exact.filterNot(c => exact.exists(other => c.subsumedBy(other)))
+    minimalExact ++ Option.when(candidates.exists(!_.complete))(incomplete)
 
 /** A fact together with every minimal justification the reasoner found for it. */
 final case class Explanation(axiom: Axiom, justifications: Set[Justification])

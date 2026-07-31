@@ -2,13 +2,22 @@ package noesis.core
 
 import cats.data.NonEmptyList
 import cats.effect.IO
+import cats.syntax.all.*
 import munit.CatsEffectSuite
 import noesis.core.Fixtures.*
 import noesis.core.capture.{CaptureProblem, Intent}
 import noesis.core.event.Event
 import noesis.core.kb.*
+import noesis.core.policy.DisclosurePolicy
+import noesis.journal.{InMemoryJournal, Journal, Operation}
 import noesis.logic.*
-import noesis.reasoner.{Inconsistency, InconsistencyKind, Justification, Support}
+import noesis.reasoner.{
+  Inconsistency,
+  InconsistencyKind,
+  Justification,
+  ReasonerConfig,
+  Support
+}
 import noesis.reasoner.query.PatternSyntax
 import noesis.core.verbalize.{Naming, Templates}
 
@@ -48,6 +57,33 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       assertEquals(firstCount, 1)
       assertEquals(secondCount, 2, "a stale cache would still report 1")
 
+  test("concurrent knowledge bases validate against the exact prefix they append to"):
+    val disjoint = Axiom.DisjointClasses(Person, Organization)
+    val person = Axiom.ClassAssertion(alice, Person)
+    val organization = Axiom.ClassAssertion(alice, Organization)
+    for
+      journal <- InMemoryJournal.create[IO]
+      first <- KnowledgeBase[IO](journal)
+      second <- KnowledgeBase[IO](journal)
+      _ <- first.assert(disjoint)
+      _ <- first.state
+      _ <- second.state
+      attempts <- (first.assert(person), second.assert(organization)).parTupled
+      entries <- journal.stream.compile.toList
+    yield
+      val (firstResult, secondResult) = attempts
+      val results: List[Either[CommitRejected, CommitResult]] = List(firstResult, secondResult)
+      assertEquals(results.count(_.isRight), 1)
+      assertEquals(
+        results.count:
+          case Left(CommitRejected.Inconsistent(_)) => true
+          case _                                    => false
+        ,
+        1
+      )
+      val conflicting = Set(person.id, organization.id)
+      assertEquals(entries.count(_.operation.targetAxiom.exists(conflicting)), 1)
+
   test("an inconsistent commit is rejected and leaves the journal untouched"):
     for
       base <- kb()
@@ -84,6 +120,98 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       // marco worksAt alice ⟹ alice : Organization, contradicting alice : Person
       rejected <- base.assert(Axiom.ObjectAssertion(marco, worksAt, alice))
     yield assert(rejected.isLeft, s"expected rejection, got $rejected")
+
+  test("an iteration-limited consistency pre-flight is rejected as incomplete"):
+    val config = KbConfig.default.copy(reasoner = ReasonerConfig.default.copy(maxIterations = 0))
+    for
+      base <- kb(config)
+      result <- base.assert(Axiom.ClassAssertion(alice, Person))
+      entries <- base.journal.stream.compile.toList
+    yield
+      assert(
+        result match
+          case Left(CommitRejected.Incomplete(_)) => true
+          case _                                  => false
+        ,
+        result.toString
+      )
+      assertEquals(entries, Nil)
+
+  test("multiple reasoning limits are reported distinctly and in stable order"):
+    val config = KbConfig.default.copy(
+      reasoner = ReasonerConfig(maxJustifications = 0, maxIterations = 1)
+    )
+    for
+      base <- kb(config)
+      result <- base.commit(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.SubClassOf(Person, Agent)),
+          Intent.Assert(Axiom.ClassAssertion(alice, Person))
+        )
+      )
+    yield assertEquals(
+      result.left.map(_.render),
+      Left(
+        "commit rejected — reasoning incomplete: iteration limit reached, " +
+          "justification tracking limit reached"
+      )
+    )
+
+  test("invalid IRIs and numeric annotations are rejected at the core boundary"):
+    val invalidIri =
+      Axiom.DataAssertion(alice, Iri.absolute("bad:has space"), Literal.string("value"))
+    val invalidConfidence =
+      AxiomAnnotations.ownerConfirmed.copy(truthConfidence = Some(2.0))
+    val invalidUtility =
+      AxiomAnnotations.ownerConfirmed.copy(recallUtility = Some(Double.NaN))
+    for
+      base <- kb()
+      iriResult <- base.assert(invalidIri)
+      confidenceResult <- base.assert(Axiom.ClassAssertion(alice, Person), invalidConfidence)
+      utilityResult <- base.assert(Axiom.ClassAssertion(marco, Person), invalidUtility)
+      entries <- base.journal.stream.compile.toList
+    yield
+      assert(iriResult.left.exists(_.render.contains("invalid IRI")), iriResult.toString)
+      assert(
+        confidenceResult.left.exists(_.render.contains("truthConfidence")),
+        confidenceResult.toString
+      )
+      assert(
+        utilityResult.left.exists(_.render.contains("recallUtility")),
+        utilityResult.toString
+      )
+      assertEquals(entries, Nil)
+
+  test("core numeric validation accepts endpoints and rejects every outside direction"):
+    val cases = List(
+      ("confidence-low", Some(-0.1), None, false),
+      ("confidence-zero", Some(0.0), None, true),
+      ("confidence-one", Some(1.0), None, true),
+      ("confidence-high", Some(1.1), None, false),
+      ("confidence-nan", Some(Double.NaN), None, false),
+      ("utility-low", Some(1.0), Some(-0.1), false),
+      ("utility-zero", Some(1.0), Some(0.0), true),
+      ("utility-one", Some(1.0), Some(1.0), true),
+      ("utility-high", Some(1.0), Some(1.1), false),
+      ("utility-nan", Some(1.0), Some(Double.NaN), false)
+    )
+    cases.traverse_ : entry =>
+      val (name, confidence, utility, accepted) = entry
+      val axiom = Axiom.ClassAssertion(Iri(s"noesis:e/$name"), Person)
+      val annotations = AxiomAnnotations.ownerConfirmed.copy(
+        truthConfidence = confidence,
+        recallUtility = utility
+      )
+      kb().flatMap(_.assert(axiom, annotations)).map: result =>
+        assertEquals(result.isRight, accepted, s"$name: $result")
+        if !accepted then
+          val dimension = if name.startsWith("confidence") then "truthConfidence" else "recallUtility"
+          assertEquals(
+            result.left.map(_.render),
+            Left(
+              s"commit rejected — invalid:\n  ${axiom.id.value} has $dimension outside [0,1]"
+            )
+          )
 
   test("a whole bundle is rejected together, not partially applied"):
     for
@@ -330,6 +458,39 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       solutions <- base.query(bgp)
     yield assertEquals(solutions.flatMap(_.get("whom")), List(Node.Ref(marco)))
 
+  test("a disclosure view reports a sound partial answer as incomplete"):
+    val axiom = Axiom.ClassAssertion(alice, Person)
+    val config = KbConfig.default.copy(reasoner = ReasonerConfig(maxIterations = 0))
+    for
+      journal <- InMemoryJournal.create[IO]
+      _ <- Journal.appendOne(journal)(Operation.Assert(axiom.id, axiom))
+      base <- KnowledgeBase[IO](journal, config)
+      view <- base.disclosureView(DisclosurePolicy.localOwner("test owner"))
+    yield
+      assertEquals(
+        view.entails(axiom),
+        ReasoningResult.Incomplete(true, Set("iteration limit reached"))
+      )
+      assert(view.state.axiom(axiom.id).nonEmpty)
+
+  test("a disclosure view never exposes a retracted record that remains derivable"):
+    val derived = Axiom.ClassAssertion(alice, Agent)
+    for
+      base <- kb()
+      _ <- base.commit(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.SubClassOf(Person, Agent)),
+          Intent.Assert(Axiom.ClassAssertion(alice, Person)),
+          Intent.Assert(derived)
+        )
+      )
+      _ <- base.commit(NonEmptyList.one(Intent.Retract(derived.id)))
+      view <- base.disclosureView(DisclosurePolicy.localOwner("test owner"))
+    yield
+      assert(view.closure.contains(derived))
+      assertEquals(view.state.axiom(derived.id), None)
+      assertEquals(view.entails(derived), ReasoningResult.Complete(true))
+
   test("committing a non-EL axiom succeeds but reports a profile warning"):
     for
       base <- kb()
@@ -404,12 +565,37 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
     yield assertEquals(Naming.from(state, List(hasName, Vocab.label)).label(marco), "Marco")
 
   test("an unnamed opaque entity renders as a short handle rather than a raw UUID"):
+    val opaque = Iri("noesis:e/0123456789abcdef")
     for
       base <- kb()
+      _ <- base.assert(Axiom.ClassAssertion(opaque, Person))
       state <- base.state
     yield
-      val label = Naming.from(state).label(Iri("noesis:e/0123456789abcdef"))
-      assert(label.startsWith("⟨") && label.length < 15, label)
+      val label = Naming.from(state).label(opaque)
+      assertEquals(label, "⟨e/012345⟩")
+
+  test("external verbalization cannot reuse personal names for a public fact"):
+    val relationship = Axiom.ObjectAssertion(alice, knows, marco)
+    val public = AxiomAnnotations.ownerConfirmed.withSensitivity(Sensitivity.Public)
+    val policy = DisclosurePolicy.publicOnly("test")
+    for
+      base <- kb()
+      _ <- base.commit(
+        NonEmptyList.of(
+          Intent.Assert(Axiom.DataAssertion(alice, Vocab.label, Literal.string("Alice"))),
+          Intent.Assert(Axiom.DataAssertion(marco, Vocab.label, Literal.string("Marco"))),
+          Intent.Assert(relationship, public)
+        )
+      )
+      verbalizer <- base.verbalizer(policy)
+      decision <- base.disclosureOf(relationship, policy)
+    yield
+      val rendered = verbalizer.verbalize(relationship)
+      assert(decision.isDisclosed)
+      assert(!rendered.contains("Alice"), rendered)
+      assert(!rendered.contains("Marco"), rendered)
+      assert(rendered.contains("⟨entity 1⟩"), rendered)
+      assert(rendered.contains("⟨entity 2⟩"), rendered)
 
   // ── Annotations through the service ───────────────────────────────────────
 
@@ -429,13 +615,21 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       assertEquals(effective.map(_.sensitivity), Some(noesis.logic.Sensitivity.Personal))
       assertEquals(effective.map(_.truthConfidence), Some(1.0))
 
-  test("policyViolations reports an internal axiom with no knowledge scope"):
+  test("an internal axiom without a knowledge scope is rejected before journaling"):
     val axiom = Axiom.ObjectAssertion(alice, worksAt, acme)
     for
       base <- kb()
-      _ <- base.assert(axiom, AxiomAnnotations.ownerConfirmed.withSensitivity(Sensitivity.Internal))
-      violations <- base.policyViolations
-    yield assert(violations.exists(_.contains("knowledgeScope")), violations.toString)
+      result <- base.assert(
+        axiom,
+        AxiomAnnotations.ownerConfirmed.withSensitivity(Sensitivity.Internal)
+      )
+      entries <- base.journal.stream.compile.toList
+    yield
+      assert(
+        result.left.exists(_.render.contains("knowledgeScope")),
+        result.toString
+      )
+      assertEquals(entries, Nil)
 
   test("every public event variant keeps its stable event-bus name"):
     val axiom = Axiom.ClassAssertion(alice, Person)
@@ -444,6 +638,7 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       Event.AxiomAdded(id, axiom) -> "axiom.added",
       Event.AxiomRetracted(id, axiom) -> "axiom.retracted",
       Event.AnnotationsChanged(id) -> "axiom.annotated",
+      Event.AxiomStatusChanged(id, AxiomStatus.Disputed) -> "axiom.status.changed",
       Event.EntailmentChanged(Set(axiom), Set.empty) -> "entailment.changed",
       Event.StateChanged(FluentId.unsafe("fl_1"), alice, worksAt, None, Some(Node.Ref(acme))) ->
         "state.changed",
@@ -471,6 +666,9 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
       )
       missingDispute <- base.commit(NonEmptyList.one(Intent.Dispute(missing, Some("note"))))
       validDispute <- base.commit(NonEmptyList.one(Intent.Dispute(axiom.id, Some("note"))))
+      missingUndispute <- base.commit(NonEmptyList.one(Intent.Undispute(missing)))
+      validUndispute <- base.commit(NonEmptyList.one(Intent.Undispute(axiom.id)))
+      repeatedUndispute <- base.commit(NonEmptyList.one(Intent.Undispute(axiom.id)))
     yield
       assertEquals(
         emptyPatch.left.map(_.render),
@@ -491,6 +689,15 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
         Left("commit rejected — cannot capture:\n  no such axiom: ax_missing")
       )
       assert(validDispute.isRight)
+      assertEquals(
+        missingUndispute.left.map(_.render),
+        Left("commit rejected — cannot capture:\n  no such axiom: ax_missing")
+      )
+      assert(validUndispute.isRight)
+      assertEquals(
+        repeatedUndispute.left.map(_.render),
+        Left(s"commit rejected — cannot capture:\n  axiom is not disputed: ${axiom.id.value}")
+      )
 
   test("superseding without an open state reports the exact subject and property"):
     for
@@ -530,6 +737,10 @@ class KnowledgeBaseSuite extends CatsEffectSuite:
         Support.Asserted(AxiomId.unsafe("ax_a")),
         Support.Asserted(AxiomId.unsafe("ax_b"))
       )
+    )
+    assertEquals(
+      CommitRejected.Incomplete("iteration limit reached").render,
+      "commit rejected — reasoning incomplete: iteration limit reached"
     )
     assertEquals(
       CommitRejected.Inconsistent(

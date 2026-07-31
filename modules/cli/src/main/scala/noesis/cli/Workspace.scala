@@ -28,7 +28,7 @@ final class Workspace(
 ):
   /** Persists a review so the next invocation sees it. */
   def recordReview(review: Review): IO[Unit] =
-    JsonLines.append(Files[IO], reviewLogPath, List(review))
+    JsonLines.append(reviewLogPath, List(review))
 
 object Workspace:
   val defaultRoot: Path = Path(sys.props.getOrElse("user.home", ".")) / ".noesis"

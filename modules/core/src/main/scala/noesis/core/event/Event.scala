@@ -16,6 +16,7 @@ enum Event:
   case AxiomAdded(id: AxiomId, axiom: Axiom)
   case AxiomRetracted(id: AxiomId, axiom: Axiom)
   case AnnotationsChanged(id: AxiomId)
+  case AxiomStatusChanged(id: AxiomId, status: AxiomStatus)
 
   /** Materialized entailments changed — invalidates derived-belief and disclosure caches. */
   case EntailmentChanged(added: Set[Axiom], removed: Set[Axiom])
@@ -41,6 +42,7 @@ enum Event:
     case _: AxiomAdded          => "axiom.added"
     case _: AxiomRetracted      => "axiom.retracted"
     case _: AnnotationsChanged  => "axiom.annotated"
+    case _: AxiomStatusChanged  => "axiom.status.changed"
     case _: EntailmentChanged   => "entailment.changed"
     case _: StateChanged        => "state.changed"
     case _: BeliefUpdated       => "belief.updated"

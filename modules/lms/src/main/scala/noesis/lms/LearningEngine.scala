@@ -50,7 +50,7 @@ final class LearningStore[F[_]: Sync] private (
     questions: Ref[F, Map[ItemId, List[Question]]],
     reviews: Ref[F, Vector[Review]]
 ):
-  def allItems: F[List[Item]] = items.get.map(_.values.toList)
+  def allItems: F[List[Item]] = items.get.map(_.values.toList.sortBy(_.id.value))
   def item(id: ItemId): F[Option[Item]] = items.get.map(_.get(id))
   def put(item: Item): F[Unit] = items.update(_.updated(item.id, item))
   def putAll(fresh: List[Item]): F[Unit] =
@@ -64,7 +64,7 @@ final class LearningStore[F[_]: Sync] private (
 
   /** Items referencing a given axiom — used to retire and transform on retraction and change. */
   def itemsFor(axiom: AxiomId): F[List[Item]] =
-    items.get.map(_.values.filter(_.axioms.contains(axiom)).toList)
+    items.get.map(_.values.filter(_.axioms.contains(axiom)).toList.sortBy(_.id.value))
 
 object LearningStore:
   def create[F[_]: Sync]: F[LearningStore[F]] =
@@ -119,6 +119,25 @@ final class LearningEngine[F[_]: {Sync, Clock}](
       .flatMap: affected =>
         val retired = affected.map(_.copy(suspended = true))
         store.putAll(retired).as(retired)
+
+  /** Disputed knowledge is excluded from reasoning and therefore from active learning.
+    *
+    * Undisputing restores the module's drafting policy rather than blindly activating an item that
+    * was originally a draft or ignored (SPEC §3.4, §4.1).
+    */
+  def onAxiomStatusChanged(id: AxiomId, status: AxiomStatus): F[List[Item]] =
+    for
+      affected <- store.itemsFor(id)
+      state <- kb.state
+      suspended = status match
+        case AxiomStatus.Disputed | AxiomStatus.Retracted => true
+        case AxiomStatus.Active =>
+          state
+            .axiom(id)
+            .forall(record => itemPolicies.policyFor(record.axiom) != ItemPolicy.AutoActivate)
+      updated = affected.map(_.copy(suspended = suspended))
+      _ <- store.putAll(updated)
+    yield updated
 
   /** Transforms items when a fluent's value changes (SPEC §3.6, §7.2).
     *
@@ -177,6 +196,7 @@ final class LearningEngine[F[_]: {Sync, Clock}](
     events.flatTraverse:
       case Event.AxiomAdded(id, axiom)  => onAxiomAdded(id, axiom)
       case Event.AxiomRetracted(id, _)  => onAxiomRetracted(id)
+      case Event.AxiomStatusChanged(id, status) => onAxiomStatusChanged(id, status)
       case Event.StateChanged(_, subject, property, previous, current) =>
         onStateChanged(subject, property, previous, current)
       case _ => List.empty[Item].pure[F]
@@ -275,12 +295,21 @@ final class LearningEngine[F[_]: {Sync, Clock}](
     for
       now <- Clock[F].realTimeInstant
       closure <- kb.closure
+      state <- kb.state
       items <- store.allItems
       byAxiom = items.flatMap(item => item.axioms.map(_ -> item)).toMap
-    yield DerivedBelief.of(
+    yield DerivedBelief.ofSupports(
       axiom,
       closure,
-      id => byAxiom.get(id).map(Belief.at(_, now)),
+      {
+        case noesis.reasoner.Support.Asserted(id) =>
+          byAxiom.get(id).map(Belief.at(_, now))
+        case noesis.reasoner.Support.FromFluent(id) =>
+          state
+            .fluent(id)
+            .flatMap(fluent => byAxiom.get(fluent.assertion.id))
+            .map(Belief.at(_, now))
+      },
       config
     )
 

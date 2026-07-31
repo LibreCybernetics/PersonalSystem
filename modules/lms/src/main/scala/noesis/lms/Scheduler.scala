@@ -132,7 +132,7 @@ object Scheduler:
         val scheduled = retention.map(_.item.id).toSet
         retention ++ elucidationQueue(items, utilityOf, now).filterNot(e => scheduled(e.item.id))
 
-    val ranked = entries.sortBy(-_.weight).take(limit)
+    val ranked = entries.sortBy(entry => (-entry.weight, entry.item.id.value)).take(limit)
     withExploration(ranked, items, utilityOf, now, limit)
 
   /** Reserves a slice of the session for low-utility items.
@@ -153,7 +153,7 @@ object Scheduler:
     val chosen = ranked.map(_.item.id).toSet
     val explorable = all
       .filter(item => item.isActive && !chosen(item.id) && utilityOf(item) < suspendThreshold)
-      .sortBy(item => Belief.at(item, now))
+      .sortBy(item => (Belief.at(item, now), item.id.value))
       .take(slots)
       .map: item =>
         QueueEntry(

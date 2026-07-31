@@ -51,6 +51,7 @@ enum Intent:
   case Annotate(axiomId: AxiomId, patch: AnnotationPatch)
   case Reclassify(axiomId: AxiomId, sensitivity: Sensitivity, scope: Set[Iri] = Set.empty)
   case Dispute(axiomId: AxiomId, note: Option[String] = None)
+  case Undispute(axiomId: AxiomId)
 
 /** Why an intent could not be turned into operations. Surfaced to the owner, never swallowed. */
 final case class CaptureProblem(intent: Intent, detail: String)
@@ -161,6 +162,14 @@ object Capture:
         val result =
           if state.axioms.contains(id) then Right(List(Operation.Dispute(id, note)))
           else Left(CaptureProblem(intent, s"no such axiom: ${id.value}"))
+        result.pure[F].widen
+
+      case Intent.Undispute(id) =>
+        val result = state.axiom(id) match
+          case Some(record) if record.status == AxiomStatus.Disputed =>
+            Right(List(Operation.Undispute(id)))
+          case Some(_) => Left(CaptureProblem(intent, s"axiom is not disputed: ${id.value}"))
+          case None    => Left(CaptureProblem(intent, s"no such axiom: ${id.value}"))
         result.pure[F].widen
 
   /** The fluent sugar (SPEC §3.6): a plain assertion on a time-varying property opens a fluent.

@@ -26,8 +26,8 @@ object Events:
 
     case Operation.Annotate(id, _)      => List(Event.AnnotationsChanged(id))
     case Operation.Reclassify(id, _, _) => List(Event.AnnotationsChanged(id))
-    case Operation.Dispute(id, _)       => List(Event.AnnotationsChanged(id))
-    case Operation.Undispute(id)        => List(Event.AnnotationsChanged(id))
+    case Operation.Dispute(id, _)       => List(Event.AxiomStatusChanged(id, AxiomStatus.Disputed))
+    case Operation.Undispute(id)        => List(Event.AxiomStatusChanged(id, AxiomStatus.Active))
 
     case Operation.OpenFluent(fluent) =>
       List(

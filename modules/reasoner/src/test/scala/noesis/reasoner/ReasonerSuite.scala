@@ -185,22 +185,31 @@ class ReasonerSuite extends FunSuite:
       s"expected multiple derivations, got ${closure.justificationsFor(target)}"
     )
 
-  test("justification count is capped, keeping the closure bounded"):
+  test("justification count caps retain exact paths and mark the result incomplete"):
     given ReasonerConfig = ReasonerConfig(maxJustifications = 2)
     val capped = Rule.cap(
       (1 to 10)
         .map(i => Justification.asserted(Axiom.ClassAssertion(Iri(s"noesis:e/p$i"), Person).id))
         .toSet
     )
-    assertEquals(capped.size, 2)
+    assertEquals(capped.count(_.complete), 2)
+    assert(capped.contains(Justification.incomplete))
 
-  test("justification size is inclusive at the configured boundary"):
+  test("a justification count exactly at the cap remains complete"):
+    given ReasonerConfig = ReasonerConfig(maxJustifications = 2)
+    val exact = Set(
+      Justification.asserted(Axiom.ClassAssertion(alice, Person).id),
+      Justification.asserted(Axiom.ClassAssertion(marco, Person).id)
+    )
+    assertEquals(Rule.cap(exact), exact)
+
+  test("justification size is inclusive at the boundary and explicit beyond it"):
     given ReasonerConfig = ReasonerConfig(maxJustificationSize = 1)
     val support = Support.Asserted(Axiom.ClassAssertion(alice, Person).id)
     val one = Set(Justification.of(support))
     val other = Set(Justification.of(Support.Asserted(Axiom.ClassAssertion(marco, Person).id)))
     assertEquals(Rule.combine(one, one), one)
-    assertEquals(Rule.combine(one, other), Set.empty)
+    assertEquals(Rule.combine(one, other), Set(Justification.incomplete))
 
   test("minimal() discards justifications that are supersets of smaller ones"):
     val a = Support.Asserted(Axiom.ClassAssertion(alice, Person).id)
@@ -209,6 +218,42 @@ class ReasonerSuite extends FunSuite:
     val large = Justification(Set(a, b))
 
     assertEquals(Justification.minimal(Set(small, large)), Set(small))
+
+  test("incomplete markers neither subsume nor merge into exact provenance"):
+    val a = Support.Asserted(Axiom.ClassAssertion(alice, Person).id)
+    val b = Support.Asserted(Axiom.ClassAssertion(marco, Person).id)
+    val small = Justification(Set(a))
+    val large = Justification(Set(a, b))
+    val incompleteLarge = Justification(Set(a, b), complete = false)
+    val incompleteSmall = Justification(Set(a), complete = false)
+
+    assert(!incompleteLarge.subsumedBy(small))
+    assert(!large.subsumedBy(incompleteSmall))
+    assertEquals(incompleteLarge.merge(small), Justification.incomplete)
+    assertEquals(small.merge(incompleteSmall), Justification.incomplete)
+
+  test("explanations expose exact paths but never an incomplete marker"):
+    val fact = Axiom.ClassAssertion(alice, Person)
+    val exact = Justification.asserted(fact.id)
+    val closure = Closure(
+      Map(fact -> Set(exact, Justification.incomplete)),
+      iterations = 0,
+      saturated = true
+    )
+    assertEquals(
+      closure.explain(fact),
+      Some(Explanation(fact, Set(exact)))
+    )
+
+  test("a projected closure retains inherited incompleteness"):
+    val closure = Closure(
+      Map.empty,
+      iterations = 0,
+      saturated = true,
+      inheritedIncompleteReasons = Set("upstream limit")
+    )
+    assert(!closure.complete)
+    assertEquals(closure.incompleteReasons, Set("upstream limit"))
 
   test("support and explanation helpers distinguish empty, asserted, fluent, and mixed provenance"):
     val assertion = Axiom.ClassAssertion(alice, Person)
@@ -250,7 +295,29 @@ class ReasonerSuite extends FunSuite:
     val capped = Reasoner.closure(graph, cfg = ReasonerConfig(maxIterations = 0))
     assertEquals(capped.iterations, 0)
     assert(!capped.saturated)
+    assert(!capped.complete)
+    assertEquals(capped.incompleteReasons, Set("iteration limit reached"))
     assert(!capped.contains(Axiom.ClassAssertion(alice, Agent)))
+
+  test("a justification cap makes closure incompleteness observable"):
+    val classes = (1 to 3).map(i => Iri(s"noesis:class/path$i"))
+    val paths = classes.map(Axiom.SubClassOf(_, Agent))
+    val assertions = classes.map(Axiom.ClassAssertion(alice, _))
+    val graph = graphOf((paths ++ assertions)*)
+    val capped = Reasoner.closure(
+      graph,
+      cfg = ReasonerConfig(maxJustifications = 1)
+    )
+    val target = Axiom.ClassAssertion(alice, Agent)
+
+    assert(capped.contains(target))
+    assert(!capped.complete)
+    assertEquals(
+      capped.incompleteReasons,
+      Set("justification tracking limit reached")
+    )
+    assertEquals(capped.justificationsFor(target).count(_.complete), 1)
+    assert(capped.justificationsFor(target).contains(Justification.incomplete))
 
   test("entailed() reports derived facts and excludes asserted ones"):
     val assertion = Axiom.ClassAssertion(alice, Person)

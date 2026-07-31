@@ -8,7 +8,7 @@ import noesis.journal.{JournalEntry, Operation}
 import noesis.logic.*
 import noesis.core.policy.*
 import noesis.core.projection.{AxiomRecord, KbState, Projections}
-import noesis.reasoner.{Reasoner, Support}
+import noesis.reasoner.{Closure, Justification, Reasoner, Support}
 
 /** The privacy model (SPEC §3.3, §3.3.1, §9).
   *
@@ -321,6 +321,29 @@ class DisclosureSuite extends FunSuite:
     assert(!decision.isDisclosed)
     assertEquals(decision, DisclosureDecision.Redact("not entailed"))
     assertEquals(decision.marker, "[redacted]")
+
+  test("incomplete provenance is never treated as a disclosure grant"):
+    val fact = Axiom.ClassAssertion(alice, Person)
+    val state = stateOf(fact -> at(Sensitivity.Public))
+    val closure = Closure(
+      Map(fact -> Set(Justification.incomplete)),
+      iterations = 1,
+      saturated = true
+    )
+    val resolver = new SupportResolver(state, PolicyBook.empty)
+    val policy = DisclosurePolicy.localOwner("owner")
+
+    assertEquals(
+      Disclosure.decide(fact, closure, resolver, policy),
+      DisclosureDecision.Redact("provenance incomplete")
+    )
+    val restricted = Disclosure.restrict(closure, resolver, policy)
+    assert(!restricted.contains(fact))
+    assert(!restricted.complete)
+    assertEquals(
+      restricted.incompleteReasons,
+      Set("justification tracking limit reached")
+    )
 
   test("partition reports both what is disclosed and what was withheld"):
     val publicFact = Axiom.ClassAssertion(alice, Person)

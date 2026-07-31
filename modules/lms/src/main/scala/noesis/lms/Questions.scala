@@ -119,7 +119,7 @@ object Questions:
       .map(_._2)
       .filterNot(_ == correct)
 
-    (siblings ++ sameProperty).distinct.take(limit)
+    (siblings ++ sameProperty).distinct.sortBy(_.value).take(limit)
 
   /** Turns a verbalization into a cloze by blanking its last significant word.
     *

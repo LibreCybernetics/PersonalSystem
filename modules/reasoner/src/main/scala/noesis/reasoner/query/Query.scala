@@ -52,13 +52,17 @@ object Solution:
 object Query:
 
   def solve(closure: Closure, bgp: BasicGraphPattern): List[Solution] =
-    val triples = closure.triples.toList
-    bgp.patterns.foldLeft(List(Solution.empty)): (solutions, pattern) =>
+    val triples = closure.triples.toList.sortBy(triple =>
+      (triple.subject.value, triple.property.value, triple.obj.render)
+    )
+    val solved = bgp.patterns.foldLeft(List(Solution.empty)): (solutions, pattern) =>
       for
         solution <- solutions
         triple <- triples
         extended <- matchTriple(pattern, triple, solution).toList
       yield extended
+    val order = bgp.variables.toList.sorted
+    solved.distinct.sortBy(_.render(order))
 
   /** Attempts to match one pattern against one triple, extending `solution`. */
   private def matchTriple(pattern: Pattern, triple: Triple, solution: Solution): Option[Solution] =

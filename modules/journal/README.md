@@ -11,12 +11,21 @@ current graphs, entailments, learning items, and balances are rebuilt from repla
 ## Implementations
 
 - `InMemoryJournal` provides the same ordering/atomic-bundle interface for tests and scratch work.
-- `JsonLinesJournal` appends one JSON object per operation and fails loudly on malformed content.
+- `JsonLinesJournal` appends one checksummed, versioned JSON object per atomic commit and fails
+  loudly on malformed complete content. It still reads legacy one-operation lines.
 - `JsonLines` provides the plain append/read format used by auxiliary logs such as reviews.
+- `JournalArchive` captures journal and review bytes under both files' locks and validates immutable
+  archived journal bytes without modifying them.
 
-The current atomicity guarantee is process-local: a mutex keeps concurrent appends through one
-journal instance contiguous. Cross-process locking, crash-atomic multi-operation framing, and
-`fsync` durability are not currently implemented and must not be implied by callers.
+The file backend coordinates separately opened JVM and process writers with process and OS file
+locks. It validates sequence continuity while holding the lock, writes one frame for the whole
+commit, and fsyncs before returning. A checksum covers the canonical entry list; a non-LF-terminated
+final fragment is truncated on open, while corruption in a complete line is fatal. Conditional
+append lets semantic validation bind to the exact durable prefix it checked.
+
+Persistence files reject symlinks and are tightened to owner-only permissions on POSIX filesystems.
+The review log uses the same locking, fsync and permission boundary, but stays one plain JSON record
+per line.
 
 See [SPEC.md](SPEC.md) for the normative format and replay contract. The root
 [SPEC.md](../../SPEC.md) remains authoritative for system intent.

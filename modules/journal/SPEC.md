@@ -40,7 +40,17 @@ operation must be handled by core state replay and event reconstruction before i
 
 ## 4. JSON Lines format
 
-The file backend stores one `JournalEntry` per non-empty line. The profile is:
+New writes store one atomic `JournalFrame` per non-empty line:
+
+```text
+{ "formatVersion": 1, "entries": [...], "checksum": "<sha256>" }
+```
+
+`entries` is a non-empty, ordered commit bundle. `checksum` is lowercase hexadecimal SHA-256 over
+the canonical JSON encoding of `entries`. The reader also accepts the legacy format of one
+`JournalEntry` per line; this branch is unambiguous because a frame has `formatVersion`.
+
+Both forms use this profile:
 
 1. each record is one JSON object conforming to RFC 8259 and restricted to I-JSON (RFC 7493);
 2. serialized in the canonical form of `noesis.logic.Canonical` — RFC 8785 applied after absent
@@ -53,36 +63,51 @@ IETF alternative, RFC 7464, frames records with a leading RS (0x1E) byte; it is 
 used, because a control byte per record defeats the properties the format was chosen for — a line
 that is greppable, diffable in git, and recoverable by hand.
 
-Framing has one implementation, `JsonLines`, shared by the journal and the plainer logs beside it.
-The journal adds sequencing and locking on top; it does not have its own idea of what a line is.
+JSON-record framing has one implementation, `JsonLines`, shared by the journal and the plainer logs
+beside it. `JournalFrame` adds commit framing, sequencing and checksums; the review log remains one
+plain `Review` per line.
 
 Semantic payload codecs come from `noesis-logic`; their discriminator and default-value behavior are
 part of the compatibility contract.
 
-Malformed non-empty lines are fatal. Silently skipping a line is forbidden because it would build a
-projection from only part of the source of truth.
+Malformed complete non-empty lines are fatal. Silently skipping a line is forbidden because it
+would build a projection from only part of the source of truth. A non-LF-terminated final journal
+fragment is the one recoverable case: opening truncates it to the last LF before replay, because it
+cannot be a complete accepted frame. The review log has no equivalent recovery rule.
 
-## 5. Atomicity and durability
+## 5. Atomicity, concurrency and durability
 
-The implemented guarantee is atomicity with respect to concurrent calls through one opened journal
-instance: a process-local mutex keeps a commit's lines contiguous and assigns its sequence range
-together.
+- A commit is one frame, so no accepted prefix can contain only part of its operations.
+- A JVM path lock and an exclusive OS file lock serialize separately opened handles and processes.
+- Sequence validation and number assignment occur under that lock. Sequence starts at one and must
+  remain contiguous.
+- `appendIfCurrent` writes only if the durable final sequence still equals the caller's expected
+  prefix. A stale semantic pre-flight therefore retries instead of appending against changed facts.
+- The assertion operation's stored identifier must equal the content-derived identifier of its
+  axiom.
+- The frame is flushed with `FileChannel.force(true)` before append returns.
+- A complete frame with a bad checksum, unsupported version, invalid sequence or invalid payload is
+  fatal.
 
-The current backend does not promise:
+Opening creates missing paths and tightens POSIX permissions to `0700` on the containing directory
+and `0600` on the file. Persistence paths must be regular files and may not be symlinks. Replacing
+or deleting a file after a journal handle opens causes that handle to fail closed.
 
-- Coordination between separately opened processes.
-- Recovery from a process or machine failure during a multi-line commit.
-- Persistence to stable storage before `append` returns.
+`JournalArchive.capture` acquires the journal and review locks in canonical path order and copies
+both raw logs before releasing either. This gives archive assembly one coordinated two-log
+snapshot. Archive manifest and restore semantics belong to the CLI rather than this module.
 
-Those stronger guarantees require a versioned framing or transaction protocol, cross-process
-locking, checksums/recovery rules, and an explicit flush policy before the specification can claim
-them.
+The guarantee does not include authenticated tamper evidence, encryption at rest, remote or
+distributed filesystems whose locks/fsync do not honor local filesystem semantics, or crash-tail
+recovery for the plain review log.
 
 ## 6. Compatibility
 
-Readers must replay existing valid journals exactly. A wire-format change requires golden fixtures,
-a version discriminator or unambiguous decoder, and a migration that preserves sequence order,
-operation meaning, and axiom identities.
+Readers must replay existing valid journals exactly. Version-1 commit-frame readers retain the
+legacy one-entry decoder, so an existing valid journal can be appended to without a rewrite; old
+lines and new frames may coexist. A future wire-format change requires golden fixtures, a version
+discriminator or unambiguous decoder, and a migration that preserves sequence order, operation
+meaning, and axiom identities.
 
 Two changes at `0.1.0-SNAPSHOT` exercised this, and only one of them kept axiom identities.
 
