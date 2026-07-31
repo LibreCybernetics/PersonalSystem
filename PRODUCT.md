@@ -144,15 +144,17 @@ them, and that cost is paid at the worst possible moment.
 | # | Must already know | Command | Result | Friction |
 |---|---|---|---|---|
 | 1 | nothing | `noesis queue` | ranked items with weight, belief, utility, and *why each was chosen* | Low — the reason line is a real strength |
-| 2 | that the prompt is the fact, not a question | — | the fact itself is displayed | **High** — F7 |
-| 3 | how to score oneself on a 0–1 scale | `noesis review <itemId> 1.0` | belief and stability updated, review logged | **High** — F7 |
+| 2 | nothing | `noesis quiz` | the question, with the answer withheld; choices when the ontology supplies distractors | Low |
+| 3 | nothing | — | graded against the item's typed answer, belief and stability updated, review logged | Low |
 | 4 | that items can be inspected | `noesis items` | every item with belief, stability, review and lapse counts | Low |
 
-*Verdict:* this is the most serious gap in the product. `modules/lms` contains a complete `Question`
-model — prompt, typed answer, distractors, staleness detection against the source fact — and the CLI
-never reaches it. The owner is shown the answer and asked to grade themselves on whether they knew
-it. A spaced-repetition loop that cannot tell the owner they were wrong cannot produce the review log
-§12.3 depends on. See F7.
+*Verdict:* was the most serious gap in the product, and is closed. `modules/lms` already contained a
+complete `Question` model — prompt, typed answer, ontology-grounded distractors, staleness against
+the source fact — and the CLI reached none of it, so the owner was shown the answer and asked to
+grade themselves on whether they knew it. `noesis quiz` asks, grades against the typed answer, and
+logs the outcome, which is what makes the review log evidence about recall rather than about
+self-assessment. `noesis review <itemId> <grade>` remains, and is now what it should always have
+been: the way to record a judgement no grader can make, not the ordinary path.
 
 ### J4 — Before I see someone
 
@@ -468,7 +470,7 @@ And    a result reaching a resource cap is reported as incomplete, never as a ne
 As the Learner, when I review, I want to be asked something and told whether I was right, so that the
 review log records recall rather than self-assessment.
 
-*Role:* Learner · *Journey:* J3.2, J3.3 · *Spec:* §4.1, §4.3 · *Status:* **not built** — see F7
+*Role:* Learner · *Journey:* J3.2, J3.3 · *Spec:* §4.1, §4.3 · *Status:* **implemented** in 0.2 — closes F7
 
 ```
 Given  a queued item generated from lia crm:birthday 05-12
@@ -1009,7 +1011,7 @@ Every friction identified above, with its root cause and status. **Open** means 
 | **F4** | Unknown handles mint entities silently | J2.3 | `Workspace.iri` maps any bare token to `noesis:e/<token>` with no existence check; §3.5.3's NEW flag is unimplemented | **Open** — US-05 |
 | **F5** | Import commits without per-record confirmation | J9.2 | §12.1's batch-confirmation queue is unbuilt; `--dry-run` is the partial substitute | **Open** — US-16 |
 | **F6** | The cross-module agenda is filed under `contact` | J4.1 | `ContactCommand.Due` calls `Modules.agendaProducers(Modules.all)` — it is already §5.2's shared agenda under a PRM name | **Open** — US-15 |
-| **F7** | The review loop shows the fact and asks for a self-grade | J3.2, J3.3 | `Question`, `AnswerSpec`, distractors and staleness all exist in `lms` with no CLI surface; `queue` renders `item.prompt` | **Open** — US-07. Highest priority |
+| **F7** | The review loop shows the fact and asks for a self-grade | J3.2, J3.3 | `Question`, `AnswerSpec`, distractors and staleness all exist in `lms` with no CLI surface; `queue` renders `item.prompt` | **Closed** in 0.2 — US-07. `noesis quiz` asks the stored question, grades against its `AnswerSpec`, and regenerates one whose source fact has changed rather than asking it |
 | **F8** | Duplicate candidates are detected and unreachable | J9.5 | Detection lives in `vocab`; no command exposes it | **Open** — US-17 |
 | **F9** | No machine-readable output | J4, J7 | `Render` targets a terminal exclusively | **Open** — US-20 |
 | **F10** | Two grammars for one relationship (`assert` vs `relationship-add`) | J10.3 | Reified records and direct assertions both model §7.1 relationships; no stated rule for choosing | **Open** — needs a design decision before a story |
@@ -1054,7 +1056,6 @@ without leaving this block fails the suite.
 ```
 noesis vocab search
 noesis vocab show
-noesis quiz
 noesis undo
 noesis agenda
 noesis contact duplicates

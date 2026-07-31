@@ -8,6 +8,7 @@ import munit.CatsEffectSuite
 import dev.librecybernetics.noesis.core.Fixtures
 import dev.librecybernetics.noesis.core.capture.Intent
 import dev.librecybernetics.noesis.core.kb.KnowledgeBase
+import dev.librecybernetics.noesis.core.policy.PolicyBook
 import dev.librecybernetics.noesis.logic.*
 
 /** The Learning Engine's reaction to core events, and its recovery from the review log
@@ -284,3 +285,80 @@ class LearningEngineSuite extends CatsEffectSuite:
       _ <- engine.restore(Nil)
       restored <- engine.items
     yield assertEquals(only(restored), only(drafted))
+
+  // ── Asking the right question (SPEC §4.1) ─────────────────────────────────
+
+  /** An engine whose store the test can reach, to put a question into a state the API cannot. */
+  private def withStore(
+      policies: ItemPolicyBook = activating
+  ): IO[(LearningEngine[IO], LearningStore[IO], KnowledgeBase[IO])] =
+    for
+      base <- Fixtures.kb()
+      store <- LearningStore.create[IO]
+    yield (new LearningEngine[IO](base, store, policies, PolicyBook.empty), store, base)
+
+  private def birthdayItem(
+      engine: LearningEngine[IO],
+      base: KnowledgeBase[IO]
+  ): IO[(Item, QueueEntry)] =
+    val axiom = Axiom.DataAssertion(Fixtures.lia, Iri("crm:birthday"), Literal.anniversary(5, 12))
+    for
+      _ <- base.assert(Axiom.DataAssertion(Fixtures.lia, Vocab.label, Literal.string("Lía")))
+      _ <- base.assert(axiom)
+      drafted <- engine.onAxiomAdded(axiom.id, axiom)
+      item = only(drafted)
+      queued <- engine.queue(QueueMode.Mixed, limit = 10)
+      entry = queued
+        .find(_.item.id == item.id)
+        .getOrElse(fail(s"the drafted item was not queued: ${queued.map(_.item.prompt)}"))
+    yield (item, entry)
+
+  test("the queued question is asked, and its answer is not the prompt"):
+    for
+      (engine, _, base) <- withStore()
+      (_, entry) <- birthdayItem(engine, base)
+      question <- engine.nextQuestion(entry)
+    yield
+      val asked = question.getOrElse(fail("expected a question"))
+      assert(asked.prompt.contains("birthday"), asked.prompt)
+      assert(!asked.prompt.contains("05-12"), s"the answer leaked into the prompt: ${asked.prompt}")
+      assertEquals(asked.answer.grade("--05-12"), Some(1.0))
+
+  test("a question whose source fact has changed is regenerated, not asked"):
+    // `sourceHash` exists to make this detectable. Asking anyway would test the owner on a fact
+    // that no longer holds and then log the answer as evidence about their memory, which is the
+    // one thing §12.3 needs to be able to trust.
+    for
+      (engine, store, base) <- withStore()
+      (item, entry) <- birthdayItem(engine, base)
+      before <- engine.nextQuestion(entry)
+      original = before.getOrElse(fail("expected a question"))
+      _ <- store.putQuestions(item.id, List(original.copy(sourceHash = "no longer the source")))
+      after <- engine.nextQuestion(entry)
+    yield
+      val fresh = after.getOrElse(fail("a stale question should have been regenerated"))
+      assertEquals(fresh.sourceHash, Question.hashOf(item.axioms))
+      assert(!fresh.isStale(Question.hashOf(item.axioms)))
+
+  test("an item that never had a question does not acquire one by being asked about"):
+    // Regeneration rebuilds what a template could produce. An item whose kind has no template has
+    // nothing to rebuild, and inventing a prompt here would put an unanswerable question in the
+    // loop rather than saying there is none.
+    for
+      (engine, store, base) <- withStore()
+      (item, entry) <- birthdayItem(engine, base)
+      _ <- store.putQuestions(item.id, Nil)
+      question <- engine.nextQuestion(entry)
+    yield assertEquals(question, None)
+
+  test("the least-asked question is the one asked next"):
+    for
+      (engine, store, base) <- withStore()
+      (item, entry) <- birthdayItem(engine, base)
+      original <- engine.nextQuestion(entry).map(_.getOrElse(fail("expected a question")))
+      _ <- store.putQuestions(
+        item.id,
+        List(original.copy(id = "asked-often", asked = 9), original.copy(id = "asked-once", asked = 1))
+      )
+      next <- engine.nextQuestion(entry)
+    yield assertEquals(next.map(_.id), Some("asked-once"))

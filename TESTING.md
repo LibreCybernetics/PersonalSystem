@@ -19,9 +19,9 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `journal` | `JournalSuite`: operation codecs, append ordering, atomic commit frames, cross-handle concurrency, conditional append, coordinated archive snapshots, JSON Lines persistence, permissions, recovery, reopening, and corrupt-input failure. `SerializationSuite`: N-Triples reading and writing, and Turtle output |
 | `reasoner` | `ReasonerSuite`, `QuerySuite`: inference, fixpoint behavior, journal-backed justifications, explicit resource-limit incompleteness, consistency, EL warnings, and graph-pattern queries |
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
-| `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, and the engine's reaction to core events plus review-log recovery |
+| `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, the engine's reaction to core events plus review-log recovery, and that a question whose source fact changed is regenerated rather than asked |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts. `FractionalIndexSuite`: sibling order keys, including that appending and prepending stay constant-size. `OutlineSuite`: the note projection, `as-of` over text, arrangement and nesting, and outlines the axiom language cannot rule out. `NotesCaptureSuite`: writing, paragraph chunking, `[[link]]` resolution against current names, and backlinks. `NoteMarkdownSuite`, `NoteEditorSuite`: the mirror, the editable buffer, and which block an edited line is. `NoteRoundTripSuite`: render, edit, plan and commit against a real knowledge base, including that an untouched buffer writes nothing |
-| `cli` | `ArchiveSuite`: coordinated archive creation, checksum/replay/projection verification, restore into a fresh workspace, overwrite refusal, and tamper detection. `CommandSurfaceSuite`: derivation of the command tree from `Main`'s typed AST. `ProductTraceSuite`: traceability between that surface and [PRODUCT.md](PRODUCT.md). `ProductDocumentSuite`: the traceability rules themselves, against fixtures |
+| `cli` | `ArchiveSuite`: coordinated archive creation, checksum/replay/projection verification, restore into a fresh workspace, overwrite refusal, and tamper detection. `CommandSurfaceSuite`: derivation of the command tree from `Main`'s typed AST. `ProductTraceSuite`: traceability between that surface and [PRODUCT.md](PRODUCT.md). `ProductDocumentSuite`: the traceability rules themselves, against fixtures. `QuizSuite`: what the review loop shows, that the answer is withheld until it is answered, and that an ungradeable question declines rather than guessing |
 | `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
@@ -234,6 +234,26 @@ harness cannot re-evaluate per mutant. `CompileError` mutants do not count eithe
 
 The [mutation-testing design principles](DESIGN.md#mutation-testing) treat an equivalent mutant as
 evidence of behaviorally redundant code and meaningful boundaries as directly testable concepts.
+
+### The traceability suite can pass against a command surface that no longer exists
+
+`ProductTraceSuite` holds the surface in a `val`, and `CommandSurface.ofModule` is a macro, so the
+command tree is baked into the suite's class file when *that file* is compiled. Nothing tells sbt
+that the expansion depends on `Main`. Changing `Main` therefore does not invalidate the suite, and
+sbt 2's build cache will restore the previous class file rather than recompile — so the checks run
+against the surface as it was, and a command that has just shipped is still reported as proposed
+without anyone being told.
+
+This was observed, not theorised: `noesis quiz` shipped while `PRODUCT.md` still listed it as a
+proposal, and the suite passed. It passed after `clean` too, because the cache restored the same
+class. Calling `ProductTrace.staleProposals` from a freshly compiled file reported the failure
+immediately.
+
+CI is unaffected — a fresh checkout has no cache and expands the macro against the current `Main`.
+**Locally, after changing the command surface, make sure the suite is genuinely recompiled** before
+believing a green traceability run: edit `ProductTraceSuite.scala` (a comment is enough — `touch`
+is not, since sbt hashes content), or delete the module's build cache. A traceability run that
+reports nothing after a command was added or removed has probably not looked at it.
 
 ### A mutant that never returns is not a mutant a test caught
 
