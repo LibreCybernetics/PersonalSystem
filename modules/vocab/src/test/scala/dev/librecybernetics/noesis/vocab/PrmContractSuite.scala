@@ -17,10 +17,18 @@ class PrmContractSuite extends FunSuite:
   private val marco = Iri("noesis:e/marco")
   private val acme = Iri("noesis:e/acme")
 
+  private def nonBlank(label: String, value: String): NonBlank =
+    NonBlank.parse(label, value).fold(fail(_), identity)
+
+  private def positiveDays(value: Int): PositiveDays =
+    PositiveDays.from(value).fold(fail(_), identity)
+
   private def intents(
       result: Either[List[String], cats.data.NonEmptyList[Intent]]
   ): List[Intent] =
     result.fold(problems => fail(problems.mkString(", ")), _.toList)
+
+  private def intents(result: cats.data.NonEmptyList[Intent]): List[Intent] = result.toList
 
   private def asserted(found: List[Intent]): List[(Axiom, AxiomAnnotations)] =
     found.collect:
@@ -285,23 +293,23 @@ class PrmContractSuite extends FunSuite:
       )
     )
 
-    List("likes", "dislikes", "allergy", "topic-to-avoid").foreach: polarity =>
+    PreferencePolarity.values.foreach: polarity =>
       val preference = intents(
         PrmCapture.preference(
           PreferenceInput(
-            Iri(s"noesis:e/preference-$polarity"),
+            Iri(s"noesis:e/preference-${polarity.value}"),
             lia,
             polarity,
-            "peanuts",
+            nonBlank("preference text", "peanuts"),
             Some("food"),
             Sensitivity.Public
           )
         )
       )
       assertEquals(
-        dataValues(preference, Iri(s"noesis:e/preference-$polarity")),
+        dataValues(preference, Iri(s"noesis:e/preference-${polarity.value}")),
         Map(
-          RelationshipsModule.preferencePolarity -> polarity,
+          RelationshipsModule.preferencePolarity -> polarity.value,
           RelationshipsModule.preferenceText -> "peanuts",
           RelationshipsModule.preferenceContext -> "food"
         )
@@ -315,12 +323,15 @@ class PrmContractSuite extends FunSuite:
             ).contains(property) =>
           annotations.sensitivity
       val expected =
-        if polarity == "allergy" then Some(Sensitivity.Sensitive) else Some(Sensitivity.Public)
+        if polarity == PreferencePolarity.Allergy then Some(Sensitivity.Sensitive)
+        else Some(Sensitivity.Public)
       assertEquals(sensitivities.distinct, List(expected))
 
   test("plans, reminders, companions, circles, gifts, aliases, and retirement are exact bundles"):
     val followUp = intents(
-      PrmCapture.followUp(FollowUpInput(Iri("noesis:e/follow"), lia, 30, Some("phone")))
+      PrmCapture.followUp(
+        FollowUpInput(Iri("noesis:e/follow"), lia, positiveDays(30), Some("phone"))
+      )
     )
     assertEquals(
       dataValues(followUp, Iri("noesis:e/follow")),
@@ -385,31 +396,30 @@ class PrmContractSuite extends FunSuite:
       List(lia, marco)
     )
 
-    List("idea", "planned", "given", "received").foreach: status =>
+    GiftStatus.values.foreach: status =>
       val gift = intents(
         PrmCapture.gift(
           GiftInput(
-            Iri(s"noesis:e/gift-$status"),
-            "Book",
-            Some(lia),
-            Some(marco),
+            Iri(s"noesis:e/gift-${status.value}"),
+            nonBlank("gift description", "Book"),
+            GiftParties.Between(lia, marco),
             status,
             Some("birthday")
           )
         )
       )
       assertEquals(
-        dataValues(gift, Iri(s"noesis:e/gift-$status")),
+        dataValues(gift, Iri(s"noesis:e/gift-${status.value}")),
         Map(
           RelationshipsModule.giftDescription -> "Book",
-          RelationshipsModule.giftStatus -> status,
+          RelationshipsModule.giftStatus -> status.value,
           RelationshipsModule.giftOccasion -> "birthday"
         )
       )
       assert(asserted(gift).exists(_._1 ==
-        Axiom.ObjectAssertion(Iri(s"noesis:e/gift-$status"), RelationshipsModule.giftTo, lia)))
+        Axiom.ObjectAssertion(Iri(s"noesis:e/gift-${status.value}"), RelationshipsModule.giftTo, lia)))
       assert(asserted(gift).exists(_._1 ==
-        Axiom.ObjectAssertion(Iri(s"noesis:e/gift-$status"), RelationshipsModule.giftFrom, marco)))
+        Axiom.ObjectAssertion(Iri(s"noesis:e/gift-${status.value}"), RelationshipsModule.giftFrom, marco)))
 
     val alias = intents(PrmCapture.alternativeName(lia, "Lili", "nickname"))
     val aliasName = PrmIds.child(lia, "name", "nickname\u0000Lili")
@@ -429,12 +439,28 @@ class PrmContractSuite extends FunSuite:
         )
       )
     )
+    assertEquals(PositiveDays.from(-1), Left("follow-up cadence must be positive"))
+    assertEquals(GiftParties.parse(None, None), Left("a gift needs a recipient or giver"))
     assertEquals(
-      PrmCapture.followUp(FollowUpInput(Iri("noesis:e/negative"), lia, -1)),
-      Left(List("follow-up cadence must be positive"))
+      PrmCapture.gift(
+        GiftInput(
+          Iri("noesis:e/to-only"),
+          nonBlank("gift description", "Book"),
+          GiftParties.To(lia)
+        )
+      ).length,
+      4
     )
-    assert(PrmCapture.gift(GiftInput(Iri("noesis:e/to-only"), "Book", to = Some(lia))).isRight)
-    assert(PrmCapture.gift(GiftInput(Iri("noesis:e/from-only"), "Book", from = Some(lia))).isRight)
+    assertEquals(
+      PrmCapture.gift(
+        GiftInput(
+          Iri("noesis:e/from-only"),
+          nonBlank("gift description", "Book"),
+          GiftParties.From(lia)
+        )
+      ).length,
+      4
+    )
 
   test("vCard conversion maps every supported field and rejects conversion failures"):
     val card = VCardContact(

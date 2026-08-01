@@ -103,8 +103,8 @@ final case class NoteInput(
 final case class PreferenceInput(
     id: Iri,
     contact: Iri,
-    polarity: String,
-    text: String,
+    polarity: PreferencePolarity,
+    text: NonBlank,
     context: Option[String] = None,
     sensitivity: Sensitivity = Sensitivity.Personal
 )
@@ -112,7 +112,7 @@ final case class PreferenceInput(
 final case class FollowUpInput(
     id: Iri,
     contact: Iri,
-    cadenceDays: Int,
+    cadenceDays: PositiveDays,
     channel: Option[String] = None
 )
 
@@ -130,10 +130,9 @@ final case class CircleInput(id: Iri, name: String, members: List[Iri])
 
 final case class GiftInput(
     id: Iri,
-    description: String,
-    to: Option[Iri] = None,
-    from: Option[Iri] = None,
-    status: String = "idea",
+    description: NonBlank,
+    parties: GiftParties,
+    status: GiftStatus = GiftStatus.Idea,
     occasion: Option[String] = None
 )
 
@@ -443,68 +442,59 @@ object PrmCapture:
         )
       )
 
-  def preference(input: PreferenceInput): Either[List[String], NonEmptyList[Intent]] =
-    val allowed = Set("likes", "dislikes", "allergy", "topic-to-avoid")
-    val problems =
-      Option.when(!allowed.contains(input.polarity))(
-        s"preference polarity must be one of ${allowed.toList.sorted.mkString(", ")}"
-      ).toList ++ validateRequired("preference text", input.text)
-    validated(problems):
-      val annotations =
-        ownerConfirmed.copy(
-          sensitivity = Some(
-            if input.polarity == "allergy" then Sensitivity.Sensitive else input.sensitivity
-          )
-        )
-      val base = NonEmptyList.of(
-        Intent.Assert(Axiom.ClassAssertion(input.id, RelationshipsModule.Preference)),
-        Intent.Assert(Axiom.ObjectAssertion(input.id, RelationshipsModule.about, input.contact)),
-        Intent.Assert(
-          Axiom.DataAssertion(
-            input.id,
-            RelationshipsModule.preferencePolarity,
-            Literal.string(input.polarity)
-          ),
-          annotations
-        ),
-        Intent.Assert(
-          Axiom.DataAssertion(
-            input.id,
-            RelationshipsModule.preferenceText,
-            Literal.string(input.text)
-          ),
-          annotations
+  def preference(input: PreferenceInput): NonEmptyList[Intent] =
+    val annotations =
+      ownerConfirmed.copy(
+        sensitivity = Some(
+          if input.polarity == PreferencePolarity.Allergy then Sensitivity.Sensitive
+          else input.sensitivity
         )
       )
-      base.concat(
-        data(input.id, RelationshipsModule.preferenceContext, input.context, annotations)
-      )
-
-  def followUp(input: FollowUpInput): Either[List[String], NonEmptyList[Intent]] =
-    val problems = Option
-      .when(input.cadenceDays <= 0)("follow-up cadence must be positive")
-      .toList
-    validated(problems):
-      val base = NonEmptyList.of(
-        Intent.Assert(Axiom.ClassAssertion(input.id, RelationshipsModule.FollowUpPlan)),
-        Intent.Assert(
-          Axiom.ObjectAssertion(input.id, RelationshipsModule.followUpWith, input.contact)
-        ),
-        Intent.Assert(
-          Axiom.DataAssertion(
-            input.id,
-            RelationshipsModule.cadenceDays,
-            Literal.integer(BigInt(input.cadenceDays))
-          )
-        ),
-        Intent.OpenState(
+    val base = NonEmptyList.of(
+      Intent.Assert(Axiom.ClassAssertion(input.id, RelationshipsModule.Preference)),
+      Intent.Assert(Axiom.ObjectAssertion(input.id, RelationshipsModule.about, input.contact)),
+      Intent.Assert(
+        Axiom.DataAssertion(
           input.id,
-          RelationshipsModule.paused,
-          Node.Lit(Literal.boolean(false))
-        )
+          RelationshipsModule.preferencePolarity,
+          Literal.string(input.polarity.value)
+        ),
+        annotations
+      ),
+      Intent.Assert(
+        Axiom.DataAssertion(
+          input.id,
+          RelationshipsModule.preferenceText,
+          Literal.string(input.text.text)
+        ),
+        annotations
       )
-      val optional = data(input.id, RelationshipsModule.qualifyingChannel, input.channel)
-      base.concat(optional)
+    )
+    base.concat(
+      data(input.id, RelationshipsModule.preferenceContext, input.context, annotations)
+    )
+
+  def followUp(input: FollowUpInput): NonEmptyList[Intent] =
+    val base = NonEmptyList.of(
+      Intent.Assert(Axiom.ClassAssertion(input.id, RelationshipsModule.FollowUpPlan)),
+      Intent.Assert(
+        Axiom.ObjectAssertion(input.id, RelationshipsModule.followUpWith, input.contact)
+      ),
+      Intent.Assert(
+        Axiom.DataAssertion(
+          input.id,
+          RelationshipsModule.cadenceDays,
+          Literal.integer(BigInt(input.cadenceDays.count))
+        )
+      ),
+      Intent.OpenState(
+        input.id,
+        RelationshipsModule.paused,
+        Node.Lit(Literal.boolean(false))
+      )
+    )
+    val optional = data(input.id, RelationshipsModule.qualifyingChannel, input.channel)
+    base.concat(optional)
 
   def reminder(input: ReminderInput): Either[List[String], NonEmptyList[Intent]] =
     val problems = validateRequired("reminder occasion", input.occasion)
@@ -566,42 +556,32 @@ object PrmCapture:
       )
       base.concat(members)
 
-  def gift(input: GiftInput): Either[List[String], NonEmptyList[Intent]] =
-    val allowed = Set("idea", "planned", "given", "received")
-    val problems =
-      validateRequired("gift description", input.description) ++
-        Option.when(input.to.isEmpty && input.from.isEmpty)(
-          "a gift needs a recipient or giver"
-        ).toList ++
-        Option.when(!allowed.contains(input.status))(
-          s"gift status must be one of ${allowed.toList.sorted.mkString(", ")}"
-        ).toList
-    validated(problems):
-      val base = NonEmptyList.of(
-        Intent.Assert(Axiom.ClassAssertion(input.id, RelationshipsModule.Gift)),
-        Intent.Assert(
-          Axiom.DataAssertion(
-            input.id,
-            RelationshipsModule.giftDescription,
-            Literal.string(input.description)
-          )
-        ),
-        Intent.Assert(
-          Axiom.DataAssertion(
-            input.id,
-            RelationshipsModule.giftStatus,
-            Literal.string(input.status)
-          )
+  def gift(input: GiftInput): NonEmptyList[Intent] =
+    val base = NonEmptyList.of(
+      Intent.Assert(Axiom.ClassAssertion(input.id, RelationshipsModule.Gift)),
+      Intent.Assert(
+        Axiom.DataAssertion(
+          input.id,
+          RelationshipsModule.giftDescription,
+          Literal.string(input.description.text)
+        )
+      ),
+      Intent.Assert(
+        Axiom.DataAssertion(
+          input.id,
+          RelationshipsModule.giftStatus,
+          Literal.string(input.status.value)
         )
       )
-      val people =
-        input.to.toList.map(contact =>
-          Intent.Assert(Axiom.ObjectAssertion(input.id, RelationshipsModule.giftTo, contact))
-        ) ++ input.from.toList.map(contact =>
-          Intent.Assert(Axiom.ObjectAssertion(input.id, RelationshipsModule.giftFrom, contact))
-        )
-      val occasion = data(input.id, RelationshipsModule.giftOccasion, input.occasion)
-      base.concat(people ++ occasion)
+    )
+    val people =
+      input.parties.recipients.map(contact =>
+        Intent.Assert(Axiom.ObjectAssertion(input.id, RelationshipsModule.giftTo, contact))
+      ) ++ input.parties.givers.map(contact =>
+        Intent.Assert(Axiom.ObjectAssertion(input.id, RelationshipsModule.giftFrom, contact))
+      )
+    val occasion = data(input.id, RelationshipsModule.giftOccasion, input.occasion)
+    base.concat(people ++ occasion)
 
   def retire(record: Iri): NonEmptyList[Intent] =
     NonEmptyList.one(

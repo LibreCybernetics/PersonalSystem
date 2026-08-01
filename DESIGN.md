@@ -128,6 +128,37 @@ to make the code look more advanced.
   indices when construction depends on another value. A refactor is not an improvement until the
   owning tests show that the clearer form preserves the observable contract.
 
+### Type-driven boundaries
+
+Apply [“Parse, don't validate”](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/)
+at every boundary where less-structured input becomes domain data. A successful check should return
+a type that preserves what was learned; a validator returning `Unit`, or a processor that accepts
+the original broad type and repeats the check, throws that information away.
+
+- **Separate boundary input from trusted domain values.** CLI arguments, imported text, JSON and raw
+  axioms may be strings and integers. Parse them once into enums, opaque refinements, non-empty
+  collections or domain records before planning journal operations. Functions below that boundary
+  accept the refined type and should be total with respect to the discharged invariant.
+- **Strengthen arguments before weakening results.** If a function can fail only because a cadence
+  might be non-positive, accept `PositiveDays` instead of returning an `Either` from an `Int`.
+  Reserve `Either` for failures that remain genuinely possible with the strongest practical input
+  type. Do not wrap a total result in `Right` merely to preserve an obsolete signature.
+- **Use products for “and” and sums for “or”.** Independent `Option` or `Boolean` fields often admit
+  combinations with no domain meaning. Replace them with an enum whose cases carry exactly the data
+  needed by each legal alternative. `GiftParties`, for example, represents recipient-only,
+  giver-only and two-party gifts without representing a gift with nobody involved.
+- **Hide scalar refinements behind smart constructors.** An opaque type such as `NonBlank` or
+  `PositiveDays` keeps runtime representation and codecs simple while preventing unchecked values
+  from being constructed elsewhere. Its companion owns parsing, error vocabulary and the minimal
+  extensions required to consume it; it must not expose a public unchecked constructor.
+- **Keep validation at genuinely untyped boundaries.** Structured PRM capture consumes refined
+  values, but the state validator still checks raw axioms because generic assertions and imported
+  ontology data can bypass that capture API. Duplicate-looking checks are justified only when they
+  defend distinct trust boundaries, not when processing code has forgotten the proof it received.
+- **Prefer one source of truth.** Derive projections and indexes from authoritative values rather
+  than storing a second flag or normalized copy that can disagree. If a denormalized form is needed
+  for performance, keep it private to the abstraction that updates both forms atomically.
+
 ## System design principles
 
 1. **Local-first software.** Noesis treats the owner's local data as primary, rather than as a cache
@@ -174,6 +205,13 @@ to make the code look more advanced.
    no LLM calls or API key; a rubric-graded answer returns `None` instead of a guessed grade because
    a fabricated grade would corrupt the review log used by §12.3. Future model-backed judgments
    must preserve that distinction rather than presenting generated confidence as evidence.
+8. **Correctness is type-driven.** Less-structured data is parsed at trust boundaries into the most
+   precise practical representation before the system acts on it. Enums express closed choices,
+   opaque types retain scalar refinements, non-empty collections retain cardinality proofs, and sum
+   types encode legal alternatives without admitting meaningless combinations. Processing below a
+   boundary is total with respect to those proofs; validation remains only at independent untyped
+   boundaries such as generic raw-axiom assertion. This makes invalid state transitions harder to
+   express and turns a weakened invariant into a compile-time failure at its consumers.
 
 ## Implementation invariants
 

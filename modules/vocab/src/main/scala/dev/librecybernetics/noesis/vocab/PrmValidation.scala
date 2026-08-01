@@ -115,7 +115,7 @@ object PrmValidation extends StateValidator:
         exactlyOneData(view, record, RelationshipsModule.noteKind, "note kind")
 
   private def validatePreferences(view: ClosureView): List[String] =
-    val allowed = Set("likes", "dislikes", "allergy", "topic-to-avoid")
+    val allowed = PreferencePolarity.values.map(_.value).toSet
     instances(view, RelationshipsModule.Preference).flatMap: record =>
       exactlyOneObject(view, record, RelationshipsModule.about, "preference subject") ++
         exactlyOneData(view, record, RelationshipsModule.preferencePolarity, "preference polarity") ++
@@ -140,7 +140,7 @@ object PrmValidation extends StateValidator:
         exactlyOneObject(view, record, RelationshipsModule.hasName, "current name")
 
   private def validateGifts(view: ClosureView): List[String] =
-    val allowed = Set("idea", "planned", "given", "received")
+    val allowed = GiftStatus.values.map(_.value).toSet
     instances(view, RelationshipsModule.Gift).flatMap: record =>
       val people =
         view.objectValues(record, RelationshipsModule.giftTo) ++

@@ -79,14 +79,14 @@ enum ContactCommand:
   )
   case PreferenceAdd(
       contact: String,
-      polarity: String,
-      text: String,
+      polarity: PreferencePolarity,
+      text: NonBlank,
       id: Option[String],
       context: Option[String]
   )
   case FollowUpSet(
       contact: String,
-      days: Int,
+      days: PositiveDays,
       id: Option[String],
       channel: Option[String]
   )
@@ -101,8 +101,8 @@ enum ContactCommand:
   case CircleAdd(name: String, member: String, others: List[String], id: Option[String])
   case GiftAdd(
       contact: String,
-      description: String,
-      status: String,
+      description: NonBlank,
+      status: GiftStatus,
       id: Option[String],
       occasion: Option[String]
   )
@@ -213,6 +213,17 @@ object Main
     "email|phone|sms|whatsapp|signal|telegram|matrix|website|social|other"
   ): raw =>
     ContactKind.parse(raw).fold(Validated.invalidNel, Validated.valid)
+
+  private given Argument[PreferencePolarity] = Argument.from(
+    "likes|dislikes|allergy|topic-to-avoid"
+  ): raw =>
+    PreferencePolarity.parse(raw).fold(Validated.invalidNel, Validated.valid)
+
+  private given Argument[GiftStatus] = Argument.from("idea|planned|given|received"): raw =>
+    GiftStatus.parse(raw).fold(Validated.invalidNel, Validated.valid)
+
+  private given Argument[PositiveDays] = Argument.from("positive integer"): raw =>
+    PositiveDays.parse(raw).fold(Validated.invalidNel, Validated.valid)
 
   private val rootOpt: Opts[Path] = Opts
     .option[String]("root", "workspace directory (default ~/.noesis)")
@@ -479,8 +490,8 @@ object Main
   private val contactPreferenceAdd = Opts.subcommand("preference-add", "add a preference"):
     (
       Opts.argument[String]("contact"),
-      Opts.argument[String]("polarity"),
-      Opts.argument[String]("text"),
+      Opts.argument[PreferencePolarity]("polarity"),
+      nonBlankArgument("text", "preference text"),
       Opts.option[String]("id", "preference record handle").orNone,
       Opts.option[String]("context", "optional context").orNone
     ).mapN(ContactCommand.PreferenceAdd.apply)
@@ -488,7 +499,7 @@ object Main
   private val contactFollowUp = Opts.subcommand("follow-up-set", "set a keep-in-touch cadence"):
     (
       Opts.argument[String]("contact"),
-      Opts.option[Int]("every", "cadence in days"),
+      Opts.option[PositiveDays]("every", "cadence in days"),
       Opts.option[String]("id", "follow-up plan handle").orNone,
       Opts.option[String]("channel", "only count this interaction channel").orNone
     ).mapN(ContactCommand.FollowUpSet.apply)
@@ -521,8 +532,9 @@ object Main
   private val contactGiftAdd = Opts.subcommand("gift-add", "record a gift idea or gift"):
     (
       Opts.argument[String]("contact"),
-      Opts.argument[String]("description"),
-      Opts.option[String]("status", "idea, planned, given, or received").withDefault("idea"),
+      nonBlankArgument("description", "gift description"),
+      Opts.option[GiftStatus]("status", "idea, planned, given, or received")
+        .withDefault(GiftStatus.Idea),
       Opts.option[String]("id", "gift record handle").orNone,
       Opts.option[String]("occasion", "occasion").orNone
     ).mapN(ContactCommand.GiftAdd.apply)
@@ -1379,23 +1391,23 @@ object Main
         val owner = Workspace.iri(contact)
         val record = id
           .map(Workspace.iri)
-          .getOrElse(PrmIds.child(owner, "preference", s"$polarity\u0000$text"))
-        commitStructured(
-          workspace,
-          PrmCapture.preference(
-            PreferenceInput(record, owner, polarity, text, context)
+          .getOrElse(PrmIds.child(owner, "preference", s"${polarity.value}\u0000${text.text}"))
+        workspace.kb
+          .commit(
+            PrmCapture.preference(
+              PreferenceInput(record, owner, polarity, text, context)
+            )
           )
-        )
+          .flatMap(reportCommit(workspace, _))
 
       case ContactCommand.FollowUpSet(contact, days, id, channel) =>
         val owner = Workspace.iri(contact)
         val record = id
           .map(Workspace.iri)
           .getOrElse(PrmIds.child(owner, "follow-up", channel.getOrElse("all")))
-        commitStructured(
-          workspace,
-          PrmCapture.followUp(FollowUpInput(record, owner, days, channel))
-        )
+        workspace.kb
+          .commit(PrmCapture.followUp(FollowUpInput(record, owner, days, channel)))
+          .flatMap(reportCommit(workspace, _))
 
       case ContactCommand.ReminderAdd(contact, due, occasion, id, recurrence) =>
         val owner = Workspace.iri(contact)
@@ -1426,13 +1438,14 @@ object Main
         val recipient = Workspace.iri(contact)
         val record = id
           .map(Workspace.iri)
-          .getOrElse(PrmIds.child(recipient, "gift", s"$status\u0000$description"))
-        commitStructured(
-          workspace,
-          PrmCapture.gift(
-            GiftInput(record, description, to = Some(recipient), status = status, occasion = occasion)
+          .getOrElse(PrmIds.child(recipient, "gift", s"${status.value}\u0000${description.text}"))
+        workspace.kb
+          .commit(
+            PrmCapture.gift(
+              GiftInput(record, description, GiftParties.To(recipient), status, occasion)
+            )
           )
-        )
+          .flatMap(reportCommit(workspace, _))
 
       case ContactCommand.Show(contact) =>
         val target = Workspace.iri(contact)
@@ -1527,6 +1540,10 @@ object Main
       case Left(problems) => print(problems.map("invalid contact input: " + _)).as(ExitCode.Error)
       case Right(intents) =>
         workspace.kb.commit(intents).flatMap(reportCommit(workspace, _))
+
+  private def nonBlankArgument(name: String, label: String): Opts[NonBlank] =
+    Opts.argument[String](name).mapValidated: raw =>
+      NonBlank.parse(label, raw).fold(Validated.invalidNel, Validated.valid)
 
   private def commitBatches(
       workspace: Workspace,

@@ -28,6 +28,12 @@ class PrmSuite extends CatsEffectSuite:
   private val marco = Iri("noesis:e/marco")
   private val acme = Iri("noesis:e/acme")
 
+  private def nonBlank(label: String, value: String): NonBlank =
+    NonBlank.parse(label, value).fold(fail(_), identity)
+
+  private def positiveDays(value: Int): PositiveDays =
+    PositiveDays.from(value).fold(fail(_), identity)
+
   private def installed: IO[KnowledgeBase[IO]] =
     for
       journal <- InMemoryJournal.create[IO]
@@ -49,6 +55,11 @@ class PrmSuite extends CatsEffectSuite:
         base.commit(found).flatMap(result =>
           IO.raiseWhen(result.isLeft)(new AssertionError(result.left.toOption.map(_.render).getOrElse("")))
         )
+
+  private def commit(base: KnowledgeBase[IO], intents: NonEmptyList[Intent]): IO[Unit] =
+    base.commit(intents).flatMap(result =>
+      IO.raiseWhen(result.isLeft)(new AssertionError(result.left.toOption.map(_.render).getOrElse("")))
+    )
 
   test("structured contact capture supports concurrent methods and current-name verbalization"):
     val phone = Iri("noesis:e/lia-phone")
@@ -86,6 +97,22 @@ class PrmSuite extends CatsEffectSuite:
       ContactKind.values.toList.map(Right(_))
     )
     assertEquals(ContactKind.parse("unknown"), Left("unknown contact kind: unknown"))
+    assertEquals(
+      PreferencePolarity.values.toList.map(value => PreferencePolarity.parse(value.value)),
+      PreferencePolarity.values.toList.map(Right(_))
+    )
+    assertEquals(
+      GiftStatus.values.toList.map(value => GiftStatus.parse(value.value)),
+      GiftStatus.values.toList.map(Right(_))
+    )
+    assertEquals(NonBlank.parse("label", " value ").map(_.text), Right(" value "))
+    assertEquals(PositiveDays.parse("30").map(_.count), Right(30))
+    assertEquals(GiftParties.parse(Some(lia), None), Right(GiftParties.To(lia)))
+    assertEquals(GiftParties.parse(None, Some(marco)), Right(GiftParties.From(marco)))
+    assertEquals(
+      GiftParties.parse(Some(lia), Some(marco)),
+      Right(GiftParties.Between(lia, marco))
+    )
     assertEquals(
       PrmIds.record("contact", "seed"),
       Iri("noesis:e/prm-contact-19b25856e1c150ca834c")
@@ -155,19 +182,17 @@ class PrmSuite extends CatsEffectSuite:
     )
     assertEquals(problems(PrmCapture.note(NoteInput(Iri("noesis:e/n"), lia, ""))), List("note body must not be blank"))
     assertEquals(
-      problems(
-        PrmCapture.preference(
-          PreferenceInput(Iri("noesis:e/p"), lia, "maybe", "")
-        )
-      ),
-      List(
-        "preference polarity must be one of allergy, dislikes, likes, topic-to-avoid",
-        "preference text must not be blank"
-      )
+      PreferencePolarity.parse("maybe"),
+      Left("preference polarity must be one of allergy, dislikes, likes, topic-to-avoid")
     )
     assertEquals(
-      problems(PrmCapture.followUp(FollowUpInput(Iri("noesis:e/f"), lia, 0))),
-      List("follow-up cadence must be positive")
+      NonBlank.parse("preference text", ""),
+      Left("preference text must not be blank")
+    )
+    assertEquals(PositiveDays.from(0), Left("follow-up cadence must be positive"))
+    assertEquals(
+      PositiveDays.parse("often"),
+      Left("follow-up cadence must be an integer: often")
     )
     assertEquals(
       problems(
@@ -192,13 +217,11 @@ class PrmSuite extends CatsEffectSuite:
       problems(PrmCapture.circle(CircleInput(Iri("noesis:e/circle"), "", Nil))),
       List("circle name must not be blank")
     )
+    assertEquals(NonBlank.parse("gift description", ""), Left("gift description must not be blank"))
+    assertEquals(GiftParties.parse(None, None), Left("a gift needs a recipient or giver"))
     assertEquals(
-      problems(PrmCapture.gift(GiftInput(Iri("noesis:e/gift"), "", status = "lost"))),
-      List(
-        "gift description must not be blank",
-        "a gift needs a recipient or giver",
-        "gift status must be one of given, idea, planned, received"
-      )
+      GiftStatus.parse("lost"),
+      Left("gift status must be one of given, idea, planned, received")
     )
 
   test("an incomplete contact-method record is rejected before journal append"):
@@ -454,8 +477,14 @@ class PrmSuite extends CatsEffectSuite:
           )
         )
       )
-      _ <- commit(base, PrmCapture.followUp(FollowUpInput(plan, lia, 30, Some("message"))))
-      _ <- commit(base, PrmCapture.followUp(FollowUpInput(anyChannelPlan, lia, 30)))
+      _ <- commit(
+        base,
+        PrmCapture.followUp(FollowUpInput(plan, lia, positiveDays(30), Some("message")))
+      )
+      _ <- commit(
+        base,
+        PrmCapture.followUp(FollowUpInput(anyChannelPlan, lia, positiveDays(30)))
+      )
       state <- base.state
     yield
       val due = Prm.dueFollowUps(state, LocalDate.of(2026, 8, 15))
@@ -1161,7 +1190,7 @@ class PrmSuite extends CatsEffectSuite:
           Literal.anniversary(7, 30)
         )
       )
-      _ <- commit(base, PrmCapture.followUp(FollowUpInput(plan, lia, 30)))
+      _ <- commit(base, PrmCapture.followUp(FollowUpInput(plan, lia, positiveDays(30))))
       _ <- commit(
         base,
         PrmCapture.reminder(
@@ -1281,22 +1310,32 @@ class PrmSuite extends CatsEffectSuite:
         )
       )
       _ = assert(endedRelationship.isRight, endedRelationship)
-      _ <- List("likes", "dislikes", "allergy", "topic-to-avoid").zipWithIndex.traverse_ {
+      _ <- PreferencePolarity.values.toList.zipWithIndex.traverse_ {
         entry =>
           val (polarity, index) = entry
           commit(
             base,
             PrmCapture.preference(
-              PreferenceInput(Iri(s"noesis:e/valid-preference-$index"), lia, polarity, "value")
+              PreferenceInput(
+                Iri(s"noesis:e/valid-preference-$index"),
+                lia,
+                polarity,
+                nonBlank("preference text", "value")
+              )
             )
           )
       }
-      _ <- List("idea", "planned", "given", "received").zipWithIndex.traverse_ { entry =>
+      _ <- GiftStatus.values.toList.zipWithIndex.traverse_ { entry =>
         val (status, index) = entry
         commit(
           base,
           PrmCapture.gift(
-            GiftInput(Iri(s"noesis:e/valid-gift-$index"), "Book", Some(lia), status = status)
+            GiftInput(
+              Iri(s"noesis:e/valid-gift-$index"),
+              nonBlank("gift description", "Book"),
+              GiftParties.To(lia),
+              status = status
+            )
           )
         )
       }
