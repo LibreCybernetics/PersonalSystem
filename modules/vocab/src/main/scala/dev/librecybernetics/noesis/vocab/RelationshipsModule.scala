@@ -355,7 +355,7 @@ object RelationshipsModule extends Module:
 
     def derive(view: ClosureView)(using ReasonerConfig) =
       val partners = view.objectByProperty.getOrElse(partnerOf, Nil)
-      val partnerPairs = partners.map((subject, obj, _) => (subject, obj)).toSet
+      val partnerPairs = partners.map(row => (row.subject, row.obj)).toSet
 
       for
         (person, middle, firstSupport) <- partners.iterator

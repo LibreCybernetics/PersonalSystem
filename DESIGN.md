@@ -72,6 +72,62 @@ Key implementation points:
   architectural rule with an experience consequence, and [UX.md](UX.md) §1 depends on it: no surface
   may render a display name it derived itself.
 
+## Scala 3 implementation style
+
+Noesis targets Scala 3.8.4 with `-source:3.8`. The
+[Scala 3 Reference](https://docs.scala-lang.org/scala3/reference/) is the language authority; use
+stable features from that source level when they make an invariant or data flow clearer, not merely
+to make the code look more advanced.
+
+- **Model distinctions in types.** Use
+  [enums and algebraic data types](https://docs.scala-lang.org/scala3/reference/enums/adts.html) for
+  closed alternatives, and
+  [opaque type aliases](https://docs.scala-lang.org/scala3/reference/other-new-features/opaques.html)
+  for identifiers and scalar domains that must not be mixed. Put construction, validation, codecs
+  and focused extension methods in the companion so the representation cannot leak by accident.
+- **Make capabilities explicit.** Use `given`/`using` for canonical contextual capabilities, not as
+  a general dependency-hiding mechanism. Prefer a context bound when the witness is only forwarded;
+  use a [named context bound](https://docs.scala-lang.org/scala3/reference/contextual/context-bounds.html)
+  or an explicit `using` parameter when its value is referenced. Keep givens near the type or
+  assembly boundary that owns them.
+- **Use the indentation and control syntax consistently.** Prefer `:` blocks, `if … then`,
+  `while … do`, and multiline `for` expressions. Braces remain appropriate when they delimit an
+  expression more clearly than indentation; optional braces are a readability tool, not a target
+  metric. See [optional braces](https://docs.scala-lang.org/scala3/reference/other-new-features/indentation.html)
+  and [control syntax](https://docs.scala-lang.org/scala3/reference/other-new-features/control-syntax.html).
+- **Name structural data before it becomes cryptic.** A
+  [named tuple](https://docs.scala-lang.org/scala3/reference/other-new-features/named-tuples.html) is
+  a good fit for a private, short-lived row passed through a collection pipeline; use field access
+  instead of nested `_1`/`_2`. Use a case class for a public, persisted, domain-level or
+  behavior-bearing record. Keep a named-tuple type consistent through collection signatures:
+  forgetting names is not automatically lifted through containers such as `List`.
+- **Keep transformations linear.** Use a `for` comprehension when later steps depend on earlier
+  values, and bind a meaningful intermediate value once rather than repeating a lookup or
+  calculation. Scala 3.8's
+  [better `for` comprehensions](https://docs.scala-lang.org/scala3/reference/other-new-features/better-fors.html)
+  permit aliases at the start. For independent collection work, choose the combinator that states
+  the intent (`collect`, `flatMap`, `groupMap`, `Option.when`) and build an index once when several
+  operations query the same source.
+- **Expose intention-revealing views.** If callers need only values, give them a value-only lookup
+  rather than making them unpack an internal tuple that also carries provenance. Conversely, do not
+  discard provenance in reasoning and policy code: use the supported index row there. This keeps
+  call sites concise without weakening the provenance invariant.
+- **Use concise construction where it stays obvious.** Scala's
+  [universal apply methods](https://docs.scala-lang.org/scala3/reference/other-new-features/creator-applications.html)
+  make `Workspace(...)` sufficient for an ordinary Scala class. Retain `new` for Java constructors,
+  anonymous implementations and places where it communicates something useful. Rely on
+  [automatic eta expansion](https://docs.scala-lang.org/scala3/reference/changed-features/eta-expansion.html)
+  instead of adding adapter lambdas that only forward their arguments.
+- **Be explicit at boundaries, infer inside them.** Public methods, recursive definitions,
+  persistence codecs and non-obvious intermediate structures get result types. Straightforward
+  local values and lambdas may be inferred. Exhaustive matches over enums are preferable to
+  wildcard cases because adding a case should make every affected policy visible to the compiler.
+- **Let the compiler enforce the style's safety claims.** Keep warnings as errors, unused/value
+  checks and [`-Wsafe-init`](https://docs.scala-lang.org/scala3/reference/other-new-features/safe-initialization.html)
+  enabled. Avoid initialization-order dependencies between module objects; prefer methods or lazy
+  indices when construction depends on another value. A refactor is not an improvement until the
+  owning tests show that the clearer form preserves the observable contract.
+
 ## System design principles
 
 1. **Local-first software.** Noesis treats the owner's local data as primary, rather than as a cache

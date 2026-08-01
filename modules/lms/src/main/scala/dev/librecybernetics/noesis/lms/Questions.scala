@@ -108,15 +108,15 @@ object Questions:
       view: ClosureView,
       limit: Int = 3
   ): List[Iri] =
-    val classes = view.classesOf.getOrElse(correct, Nil).map(_._1).toSet
+    val classes = view.classes(correct).toSet
 
     val siblings = classes.toList
-      .flatMap(cls => view.instancesOf.getOrElse(cls, Nil).map(_._1))
+      .flatMap(view.instances)
       .filterNot(_ == correct)
 
     val sameProperty = view.objectByProperty
       .getOrElse(property, Nil)
-      .map(_._2)
+      .map(_.obj)
       .filterNot(_ == correct)
 
     (siblings ++ sameProperty).distinct.sortBy(_.value).take(limit)

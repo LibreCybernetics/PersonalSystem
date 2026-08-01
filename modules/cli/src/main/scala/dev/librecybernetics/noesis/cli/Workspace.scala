@@ -56,7 +56,7 @@ object Workspace:
       _ <- engine.handle(Events.replay(entries))
       reviews <- JsonLines.read[IO, Review](Files[IO], reviewsPath(root))
       _ <- engine.restore(reviews)
-    yield new Workspace(root, kb, engine, reviewsPath(root))
+    yield Workspace(root, kb, engine, reviewsPath(root))
 
   /** Installs every module's ontology into a fresh workspace (SPEC §5.1). */
   def install(workspace: Workspace): IO[List[String]] =
@@ -68,7 +68,7 @@ object Workspace:
       result <- NonEmptyList.fromList(missing.map(Intent.Assert(_))) match
         case None => List("ontology already installed; nothing to do").pure[IO]
         case Some(intents) =>
-          workspace.kb.commit(intents).map {
+          workspace.kb.commit(intents).map:
             case Left(rejected) => List(rejected.render)
             case Right(commit) =>
               val warnings = commit.profileWarnings.map((axiom, why) =>
@@ -76,7 +76,6 @@ object Workspace:
               )
               s"installed ${missing.length} ontology axioms from ${modules.length} modules" ::
                 warnings
-          }
     yield result
 
   /** Resolves a user-supplied token to an IRI, accepting module-prefixed and entity forms.

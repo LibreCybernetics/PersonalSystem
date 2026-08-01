@@ -12,6 +12,7 @@ import dev.librecybernetics.noesis.core.projection.KbState
   * only sound because the same function produced the events the first time round.
   */
 object Events:
+  private type FoldResult = (state: KbState, emitted: Vector[Event])
 
   /** Axiom and state events for one operation, given the state *before* it applied.
     *
@@ -68,22 +69,29 @@ object Events:
 
   /** Events for a bundle, threading the state forward so each operation sees its predecessors. */
   def forOperations(before: KbState, operations: List[Operation]): List[Event] =
-    operations
-      .foldLeft((before, List.empty[Event])):
-        case ((state, emitted), operation) =>
-          val events = forOperation(state, operation)
-          val advanced = KbState.step(
-            state,
-            JournalEntry(state.seq + 1, java.time.Instant.EPOCH, operation)
-          )
-          (advanced, emitted ++ events)
-      ._2
+    accumulate(before, operations)(identity): (state, operation) =>
+      KbState.step(
+        state,
+        JournalEntry(state.seq + 1, java.time.Instant.EPOCH, operation)
+      )
 
   /** Every axiom and state event the journal implies, in order — used to rebuild projections. */
   def replay(entries: List[JournalEntry]): List[Event] =
-    entries
-      .foldLeft((KbState.empty, List.empty[Event])):
-        case ((state, emitted), entry) =>
-          val events = forOperation(state, entry.operation)
-          (KbState.step(state, entry), emitted ++ events)
-      ._2
+    accumulate(KbState.empty, entries)(_.operation)(KbState.step)
+
+  /** One state-threading fold backs both live bundles and journal replay.
+    *
+    * A vector is used only as an immutable append buffer; returning a list keeps the event API
+    * unchanged. Appending to a list in the fold made long replays repeatedly copy the prefix.
+    */
+  private def accumulate[A](before: KbState, values: List[A])(operationOf: A => Operation)(
+      advance: (KbState, A) => KbState
+  ): List[Event] =
+    val result: FoldResult = values.foldLeft((state = before, emitted = Vector.empty[Event])):
+      (acc, value) =>
+        val operation = operationOf(value)
+        (
+          state = advance(acc.state, value),
+          emitted = acc.emitted ++ forOperation(acc.state, operation)
+        )
+    result.emitted.toList

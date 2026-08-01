@@ -61,11 +61,9 @@ object PrmValidation extends StateValidator:
 
   private def validateRelationships(view: ClosureView): List[String] =
     instances(view, RelationshipsModule.Relationship).flatMap: record =>
-      val participants =
-        view.objectBySubjectProperty
-          .getOrElse((record, RelationshipsModule.relationshipParticipant), Nil)
-          .map(_._1)
-          .distinct
+      val participants = view
+        .objectValues(record, RelationshipsModule.relationshipParticipant)
+        .distinct
       Option
         .when(participants.size < 2)(
           s"${record.display} needs at least two distinct relationship participants"
@@ -88,21 +86,14 @@ object PrmValidation extends StateValidator:
 
   private def validateInteractions(view: ClosureView): List[String] =
     instances(view, RelationshipsModule.Interaction).flatMap: record =>
-      val participants =
-        view.objectBySubjectProperty
-          .getOrElse((record, RelationshipsModule.participant), Nil)
-          .map(_._1)
-          .distinct
+      val participants = view.objectValues(record, RelationshipsModule.participant).distinct
       Option.when(participants.isEmpty)(s"${record.display} needs an interaction participant").toList ++
         exactlyOneData(view, record, RelationshipsModule.occurredAt, "interaction date") ++
         exactlyOneData(view, record, RelationshipsModule.interactionChannel, "interaction channel")
 
   private def validateFollowUps(view: ClosureView): List[String] =
     instances(view, RelationshipsModule.FollowUpPlan).flatMap: record =>
-      val cadence =
-        view.dataBySubjectProperty
-          .getOrElse((record, RelationshipsModule.cadenceDays), Nil)
-          .map(_._1)
+      val cadence = view.dataValues(record, RelationshipsModule.cadenceDays)
       exactlyOneObject(view, record, RelationshipsModule.followUpWith, "follow-up contact") ++
         exactlyOneData(view, record, RelationshipsModule.cadenceDays, "follow-up cadence") ++
         exactlyOneData(view, record, RelationshipsModule.paused, "follow-up pause state") ++
@@ -152,12 +143,8 @@ object PrmValidation extends StateValidator:
     val allowed = Set("idea", "planned", "given", "received")
     instances(view, RelationshipsModule.Gift).flatMap: record =>
       val people =
-        view.objectBySubjectProperty
-          .getOrElse((record, RelationshipsModule.giftTo), Nil)
-          .map(_._1) ++
-          view.objectBySubjectProperty
-            .getOrElse((record, RelationshipsModule.giftFrom), Nil)
-            .map(_._1)
+        view.objectValues(record, RelationshipsModule.giftTo) ++
+          view.objectValues(record, RelationshipsModule.giftFrom)
       Option.when(people.distinct.isEmpty)(s"${record.display} needs a gift recipient or giver").toList ++
         exactlyOneData(view, record, RelationshipsModule.giftDescription, "gift description") ++
         exactlyOneData(view, record, RelationshipsModule.giftStatus, "gift status") ++
@@ -170,7 +157,7 @@ object PrmValidation extends StateValidator:
         )
 
   private def instances(view: ClosureView, cls: Iri): List[Iri] =
-    view.instancesOf.getOrElse(cls, Nil).map(_._1).distinct.sorted
+    view.instances(cls).distinct.sorted
 
   private def exactlyOneObject(
       view: ClosureView,
@@ -178,8 +165,7 @@ object PrmValidation extends StateValidator:
       property: Iri,
       label: String
   ): List[String] =
-    val count =
-      view.objectBySubjectProperty.getOrElse((subject, property), Nil).map(_._1).distinct.size
+    val count = view.objectValues(subject, property).distinct.size
     Option
       .when(count != 1)(s"${subject.display} needs exactly one $label; found $count")
       .toList
@@ -190,8 +176,7 @@ object PrmValidation extends StateValidator:
       property: Iri,
       label: String
   ): List[String] =
-    val count =
-      view.dataBySubjectProperty.getOrElse((subject, property), Nil).map(_._1).distinct.size
+    val count = view.dataValues(subject, property).distinct.size
     Option
       .when(count != 1)(s"${subject.display} needs exactly one $label; found $count")
       .toList
@@ -202,8 +187,7 @@ object PrmValidation extends StateValidator:
       property: Iri,
       label: String
   ): List[String] =
-    val count =
-      view.objectBySubjectProperty.getOrElse((subject, property), Nil).map(_._1).distinct.size
+    val count = view.objectValues(subject, property).distinct.size
     Option.when(count < 1)(s"${subject.display} needs at least one $label").toList
 
   private def enumValue(
@@ -213,9 +197,8 @@ object PrmValidation extends StateValidator:
       allowed: Set[String],
       label: String
   ): List[String] =
-    view.dataBySubjectProperty
-      .getOrElse((subject, property), Nil)
-      .map(_._1.text)
+    view.dataValues(subject, property)
+      .map(_.text)
       .distinct
       .flatMap(value =>
         Option.when(!allowed.contains(value))(

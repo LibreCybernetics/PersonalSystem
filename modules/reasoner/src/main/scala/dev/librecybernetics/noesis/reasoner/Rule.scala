@@ -57,9 +57,9 @@ object Rule:
   def cap(js: Set[Justification])(using cfg: ReasonerConfig): Set[Justification] =
     val minimal = Justification.minimal(js)
     val exact = minimal.filter(_.complete).toList.sorted
-    val retained = exact.take(cfg.maxJustifications.max(0)).toSet
-    val incomplete =
-      minimal.exists(!_.complete) || exact.length > cfg.maxJustifications.max(0)
+    val limit = cfg.maxJustifications.max(0)
+    val retained = exact.take(limit).toSet
+    val incomplete = minimal.exists(!_.complete) || exact.length > limit
     retained ++ Option.when(incomplete)(Justification.incomplete)
 
 /** The RDFS-style rule set: transitive class and property hierarchies, domain and range, plus the
@@ -194,15 +194,21 @@ object RdfsRules:
     /** Left-to-right relational composition of the chain's steps. */
     private def composed(view: ClosureView, steps: List[ChainStep])(using
         ReasonerConfig
-    ): List[(Iri, Iri, Set[Justification])] =
+    ): List[ClosureView.Relation] =
       steps match
         case first :: rest =>
           rest.foldLeft(view.relationFor(first)): (acc, step) =>
-            val next = view.relationFor(step).groupMap(_._1)(e => (e._2, e._3))
+            val next = view
+              .relationFor(step)
+              .groupMap(_.from)(entry => (entry.to, entry.justifications))
             for
               (x, mid, jLeft) <- acc
               (z, jRight) <- next.getOrElse(mid, Nil)
-            yield (x, z, Rule.combine(jLeft, jRight))
+            yield (
+              from = x,
+              to = z,
+              justifications = Rule.combine(jLeft, jRight)
+            )
         case Nil => Nil
 
   /** The default rule set. */
