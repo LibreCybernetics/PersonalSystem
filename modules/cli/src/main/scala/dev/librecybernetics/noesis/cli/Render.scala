@@ -9,7 +9,7 @@ import dev.librecybernetics.noesis.core.policy.DisclosureDecision
 import dev.librecybernetics.noesis.core.projection.KbState
 import dev.librecybernetics.noesis.core.verbalize.Verbalizer
 import dev.librecybernetics.noesis.lms.{Item, QueueEntry}
-import dev.librecybernetics.noesis.vocab.{ContactCard, FollowUpDue, ReminderDue}
+import dev.librecybernetics.noesis.vocab.{ContactCard, FollowUpDue, ReminderDue, Vocabulary}
 
 /** Terminal rendering.
   *
@@ -140,3 +140,49 @@ object Render:
         val marker = if entry.overdue then "!" else " "
         s"  $marker ${entry.due}  ${entry.summary} — ${verbalizer.label(entry.subject)}"
       "agenda:\n" + lines.mkString("\n")
+
+  // ── The vocabulary browser (SPEC §5.1, PRODUCT.md F1) ─────────────────────
+
+  /** Each match with the shape US-04 asks for: how it reads, what it relates, and what to type. */
+  def vocabMatches(query: String, found: List[Vocabulary.Term]): List[String] =
+    if found.isEmpty then
+      List(
+        s"""no term matches "$query"""",
+        "  terms are searched by name and by how they read, e.g. `noesis vocab search birthday`"
+      )
+    else
+      s"${found.length} term(s) matching \"$query\":" ::
+        found.flatMap: term =>
+          val kind = term.role.toString.toLowerCase(Locale.ROOT)
+          List(
+            Some(s"  ${term.iri.display}  ($kind)"),
+            term.template.map(reads => s"      reads as  $reads"),
+            Some(s"      domain    ${shape(term.domain)}"),
+            Some(s"      range     ${shape(term.range)}"),
+            Some(s"      e.g.      ${Vocabulary.example(term)}")
+          ).flatten
+
+  /** Says "none declared" rather than omitting the line.
+    *
+    * An absent range is the difference between a value being typed as a reference and being stored
+    * as a string, so the owner should be able to see that the vocabulary does not say, instead of
+    * concluding that this tool does not show it.
+    */
+  private def shape(terms: List[Iri]): String =
+    if terms.isEmpty then "(none declared)" else terms.map(_.display).mkString(", ")
+
+  /** What a term is, and what to type to use it. */
+  def vocabTerm(term: Vocabulary.Term): List[String] =
+    val lines = List(
+      Some(s"${term.iri.display}  (${term.role.toString.toLowerCase(Locale.ROOT)}, ${term.module})"),
+      Some(s"  domain:      ${shape(term.domain)}"),
+      Some(s"  range:       ${shape(term.range)}"),
+      term.template.map(t => s"  reads as:    $t"),
+      Some(s"  sensitivity: ${term.sensitivity}"),
+      term.escalatesTo.map(level => s"  escalates:   to $level when it touches a person"),
+      Some(f"  utility:     ${term.utility}%.2f"),
+      // §3.6's sugar means the plain assertion opens a state, so this changes what `assert` does.
+      Option.when(term.timeVarying)("  time-varying: asserting it opens a state, and can be superseded"),
+      Some(s"  example:     ${Vocabulary.example(term)}")
+    )
+    lines.flatten
