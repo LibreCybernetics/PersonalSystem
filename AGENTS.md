@@ -74,6 +74,30 @@ sbt cli/launcher                            # writes an executable launcher, pri
   justification because you need *all* its premises; `min` across because you need only *one*". Match
   that density — do not add narration of what the code plainly does, and do not strip the rationale.
 
+### Type-driven design
+
+- **Parse at the boundary; do not validate and discard the proof.** CLI arguments, imports, JSON and
+  raw axioms may begin as broad strings, integers or collections. Parse them into the strongest
+  practical domain type before planning intents or changing state. A successful check returns the
+  refined value; it does not return `Unit` and leave downstream code accepting the original type.
+- **Make illegal states unrepresentable.** Use enums for closed vocabularies, opaque types with smart
+  constructors for scalar refinements, `NonEmptyList` for required collections, and sum types when
+  several optional or boolean fields describe mutually exclusive legal shapes. See `NonBlank`,
+  `PositiveDays` and `GiftParties` in
+  `modules/vocab/src/main/scala/dev/librecybernetics/noesis/vocab/PrmTypes.scala`.
+- **Make trusted processing total.** Once a boundary parser has discharged an invariant, downstream
+  functions accept the refined type and return their real result directly. Do not retain an
+  `Either` branch for a failure the argument type excludes, and do not add unchecked constructors
+  merely to make tests or call sites shorter.
+- **Distinguish trust boundaries from duplicate validation.** The structured capture API can trust
+  its refined inputs while `StateValidator` must still reject malformed raw axioms that bypass that
+  API. Keep checks only where untyped data can actually enter, and derive duplicated allowed-value
+  sets from the authoritative enum or companion so the boundaries cannot drift.
+- **Test both halves of the contract.** Boundary tests cover every successful parser case and exact
+  rejection, while consumer tests construct only refined values and verify total behavior. Retain
+  generic-assertion tests for the independent raw-axiom boundary. See [DESIGN.md](DESIGN.md),
+  “Type-driven boundaries,” for the rationale.
+
 ## Traps hit in this codebase
 
 These cost real time. Check here before debugging from scratch.

@@ -53,7 +53,7 @@ object Scheduler:
       utilityOf: Item => Double,
       now: Instant
   ): List[QueueEntry] =
-    items.filter(_.isActive).flatMap { item =>
+    items.filter(_.isActive).flatMap: item =>
       val utility = utilityOf(item)
       val belief = Belief.at(item, now)
       val target = retentionTarget(utility)
@@ -74,7 +74,6 @@ object Scheduler:
             reason = f"belief $belief%.2f below target $target%.2f"
           )
         )
-    }
 
   /** Items where a single question is most informative: `w = H(b) · u · recencyBoost` (SPEC §4.3). */
   def elucidationQueue(
@@ -82,7 +81,7 @@ object Scheduler:
       utilityOf: Item => Double,
       now: Instant
   ): List[QueueEntry] =
-    items.filter(_.isActive).flatMap { item =>
+    items.filter(_.isActive).flatMap: item =>
       val utility = utilityOf(item)
       val belief = Belief.at(item, now)
       val entropy = Belief.entropy(belief)
@@ -100,7 +99,6 @@ object Scheduler:
             reason = f"belief $belief%.2f is uncertain (entropy $entropy%.2f)"
           )
         )
-    }
 
   /** Never-reviewed and recently-changed items are worth probing sooner. */
   private def recencyBoost(item: Item): Double =
@@ -152,16 +150,21 @@ object Scheduler:
     val slots = (limit * explorationFraction).toInt.max(0)
     val chosen = ranked.map(_.item.id).toSet
     val explorable = all
-      .filter(item => item.isActive && !chosen(item.id) && utilityOf(item) < suspendThreshold)
-      .sortBy(item => (Belief.at(item, now), item.id.value))
+      .filter(item => item.isActive && !chosen(item.id))
+      .map(item =>
+        (item = item, utility = utilityOf(item), belief = Belief.at(item, now))
+      )
+      .filter(_.utility < suspendThreshold)
+      .sortBy(candidate => (candidate.belief, candidate.item.id.value))
       .take(slots)
-      .map: item =>
+      .map: candidate =>
+        val item = candidate.item
         QueueEntry(
           item,
           QueueMode.Elucidation,
           weight = 0.0,
-          belief = Belief.at(item, now),
-          utility = utilityOf(item),
+          belief = candidate.belief,
+          utility = candidate.utility,
           reason = "exploration sample: checking a low-utility score is right"
         )
     ranked.dropRight(explorable.length) ++ explorable

@@ -46,9 +46,7 @@ object FoafExporter extends DocumentExporter:
       Left(List(s"no such contact: ${entity.display}"))
     else
       val people = context.closure.view
-        .objectBySubjectProperty
-        .getOrElse((entity, RelationshipsModule.knows), Nil)
-        .map(_._1)
+        .objectValues(entity, RelationshipsModule.knows)
         .filter(person =>
           context.closure.contains(Axiom.ClassAssertion(person, RelationshipsModule.Person))
         )

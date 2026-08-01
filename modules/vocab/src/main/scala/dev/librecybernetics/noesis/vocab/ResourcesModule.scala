@@ -203,7 +203,9 @@ object Ledger:
 
   /** Reads the economic events out of a state. */
   def transfers(state: KbState): List[Transfer] =
-    val facts = new Facts(state)
+    transfers(Facts(state))
+
+  private def transfers(facts: Facts): List[Transfer] =
     facts.events.map: event =>
       Transfer(
         event = event,
@@ -226,25 +228,34 @@ object Ledger:
     * (`primaryAccountable = me ∧ custodian ≠ me`) instead of a flag someone must remember to flip.
     */
   def custody(state: KbState): Map[Iri, Iri] =
-    transfers(state)
+    custody(Facts(state))
+
+  private def custody(facts: Facts): Map[Iri, Iri] =
+    transfers(facts)
       .filter(t => custodyActions.contains(t.action))
       .foldLeft(Map.empty[Iri, Iri]): (holders, transfer) =>
         transfer.to.fold(holders)(to => holders.updated(transfer.resource, to))
 
   /** Resources the owner is accountable for but does not hold — "out on loan" (SPEC §8). */
   def outOnLoan(state: KbState, owner: Iri): List[(Iri, Iri)] =
-    val holders = custody(state)
-    new Facts(state).accountable.collect:
-      case (resource, accountable) if accountable == owner =>
-        holders.get(resource).filter(_ != owner).map(resource -> _)
-    .flatten
+    val facts = Facts(state)
+    val holders = custody(facts)
+    for
+      (resource, accountable) <- facts.accountable
+      if accountable == owner
+      holder <- holders.get(resource).toList
+      if holder != owner
+    yield resource -> holder
 
   /** Resources held by the owner but accounted to someone else — borrowed (SPEC §8). */
   def borrowed(state: KbState, owner: Iri): List[(Iri, Iri)] =
-    val holders = custody(state)
-    new Facts(state).accountable.collect:
-      case (resource, accountable) if accountable != owner && holders.get(resource).contains(owner) =>
-        resource -> accountable
+    val facts = Facts(state)
+    val holders = custody(facts)
+    for
+      (resource, accountable) <- facts.accountable
+      if accountable != owner
+      if holders.get(resource).contains(owner)
+    yield resource -> accountable
 
   /** A resource's quantity as a fold over its raise, lower, produce and consume events (SPEC §8).
     *
@@ -252,8 +263,8 @@ object Ledger:
     * stored total can drift out of agreement with the events.
     */
   def quantityOf(state: KbState, resource: Iri): BigDecimal =
-    val facts = new Facts(state)
-    transfers(state)
+    val facts = Facts(state)
+    transfers(facts)
       .filter(_.resource == resource)
       .foldLeft(BigDecimal(0)): (total, transfer) =>
         val amount = facts.number(transfer.event, ResourcesModule.quantity).getOrElse(BigDecimal(0))
