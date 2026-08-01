@@ -104,19 +104,21 @@ overwrite an existing path.
 
 ### Built but not reachable
 
-Two finished, tested subsystems have no owner-facing surface. [PRODUCT.md](PRODUCT.md) ranks these
-above new capability, because exposing them is cheaper than building anything and they sit on the
-journeys used most.
+One finished, tested subsystem still has no owner-facing surface. [PRODUCT.md](PRODUCT.md) ranks
+this kind of gap above new capability, because exposing what exists is cheaper than building
+anything and it sits on the journeys used most.
 
-- **The shared agenda answers to a PRM name.** `noesis contact due` runs *every* module's agenda
-  producer — it is already §5.2's cross-module agenda — but is reachable only through the `contact`
-  namespace (friction F6).
 - **Duplicate candidates are detected and unreachable.** The PRM module computes them; no command
   shows them, so §12.11's owner-confirmed merge has no surface (friction F8).
 
-Two further gaps belong to the structured-capture path that exists because the LLM does not: the
-vocabulary cannot be browsed from inside the tool (F1), and `assert` reports a commit rather than
-confirming it beforehand, which §1.3 and §3.5.5 require (F2).
+The structured-capture path that exists because the LLM does not is now navigable. `noesis vocab
+search` finds a term by name *or by how it reads*, so "married" reaches `crm:spouseOf`; `noesis
+vocab show` gives its domain, range, cascade defaults and an example invocation; and `noesis assert`
+shows the verbalization, identifier, Manchester rendering and resolved annotations, writing nothing
+until the owner accepts (`--yes` is the only way past it). What the vocabulary still cannot state is
+the datatype a data property takes: `PropertyRange` puts its object in the *class* role, so
+declaring `xsd:gMonthDay` there would pun it against its datatype role, which ISO/IEC 11179-5 §8.1.2
+forbids and the conformance suite enforces (friction F20).
 
 ### Not implemented
 

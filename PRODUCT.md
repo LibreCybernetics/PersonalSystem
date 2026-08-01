@@ -109,13 +109,16 @@ Journeys are written against the launcher (`sbt cli/launcher`), which is what th
 |---|---|---|---|---|
 | 1 | that a workspace exists and must be created | `noesis init` | workspace at `~/.noesis`; module ontologies installed | Low |
 | 2 | nothing | `noesis contact add 'Lía García' --id lia` | a person entity; the handle is optional and derived from the name otherwise | Low |
-| 3 | the term `crm:birthday`, and that a yearless date is legal | `noesis assert lia crm:birthday 05-12` | committed, then reported | **High** — F1, F2 |
-| 4 | nothing | `noesis show lia` | facts and states, belief-tinted | Low |
-| 5 | that consistency is checkable at all | `noesis check` | consistency, annotation policy, profile warnings | Medium — F11 |
+| 3 | that a term can be looked up | `noesis vocab search birthday` | the term, how it reads, what it relates and what to type | Low |
+| 4 | nothing | `noesis assert lia crm:birthday 05-12` | the representation and its annotations are shown, and nothing is written until accepted | Low — F20 leaves the datatype unstated |
+| 5 | nothing | `noesis show lia` | facts and states, belief-tinted | Low |
+| 6 | that consistency is checkable at all | `noesis check` | consistency, annotation policy, profile warnings | Medium — F11 |
 
-*Verdict:* the shape is right and step 3 is where new owners stop. The system asks them to know a
-vocabulary it will not show them (F1), and then reports the commit rather than confirming it (F2),
-so the one moment designed to teach the formal representation teaches nothing.
+*Verdict:* closed. Step 3 was where new owners stopped: the system asked them to know a vocabulary
+it would not show them (F1), then reported the commit rather than confirming it (F2), so the one
+moment designed to teach the formal representation taught nothing. The term is now findable and the
+representation is shown before anything is durable. What the vocabulary still cannot say is the
+datatype a data property takes (F20).
 
 ### J2 — Capturing something just heard
 
@@ -124,8 +127,8 @@ so the one moment designed to teach the formal representation teaches nothing.
 
 | # | Must already know | Command | Result | Friction |
 |---|---|---|---|---|
-| 1 | that `crm:spouseOf` is the term | `noesis assert sarah crm:spouseOf marco` | commit | **High** — F1 |
-| 2 | that no confirmation is coming | — | the axiom is printed after it is durable | **High** — F2 |
+| 1 | that a term can be looked up | `noesis vocab search married` | `crm:spouseOf`, found by how it reads rather than by its name | Low |
+| 2 | nothing | `noesis assert sarah crm:spouseOf marco` | shown before it is durable, and written only on acceptance | Low |
 | 3 | that bare handles mint entities | — | `sara` and `sarah` are two different people, silently | **High** — F4 |
 | 4 | that entailment is worth checking | `noesis entails sarah crm:knows marco` | yes | Low |
 | 5 | that explanation exists | `noesis explain sarah crm:knows marco` | the premises used | Low — the system's best moment |
@@ -133,8 +136,9 @@ so the one moment designed to teach the formal representation teaches nothing.
 | 7 | that free text has a home | `noesis contact note-add sarah 'prefers mornings'` | note, `personal` by default | Low |
 
 *Verdict:* steps 4 and 5 are the product working exactly as intended — the owner asserts one fact and
-is shown a second one they did not state, with its provenance. Steps 1–3 are the cost of reaching
-them, and that cost is paid at the worst possible moment.
+is shown a second one they did not state, with its provenance. Reaching them no longer costs what it
+did: the term is findable and the representation is confirmed before it is durable. Step 3 remains,
+and bare handles still mint entities silently (F4).
 
 ### J3 — The daily review
 
@@ -163,15 +167,15 @@ been: the way to record a judgement no grader can make, not the ordinary path.
 
 | # | Must already know | Command | Result | Friction |
 |---|---|---|---|---|
-| 1 | that the agenda lives under `contact` | `noesis contact due` | *all modules'* dated obligations | Medium — F6 |
+| 1 | nothing | `noesis agenda` | *all modules'* dated obligations, in one queue | Low |
 | 2 | nothing | `noesis contact show lia` | current card: methods, employment, recent interactions | Low |
 | 3 | nothing | `noesis show lia` | the belief-tinted fact view | Low — two "show" verbs, two answers |
 | 4 | that loans are derived, not stored | `noesis loans` | what is out and what is borrowed | Low |
-| 5 | basic graph-pattern syntax | `noesis query "?p crm:parentOf noesis:e/lia"` | matching bindings | Medium — F1 again, in query form |
+| 5 | basic graph-pattern syntax | `noesis query "?p crm:parentOf noesis:e/lia"` | matching bindings | Medium — the query language is still untaught |
 
-*Verdict:* step 1 is misfiled. `contact due` runs every module's agenda producer, which is exactly
-§5.2's shared agenda — but it is reachable only through the PRM namespace, so the cross-module
-promise is invisible and `README.md` describes it as a PRM feature.
+*Verdict:* step 1 is now filed where it belongs. `noesis agenda` is the cross-module surface and
+`noesis contact due` is an alias onto the same implementation, so the two cannot report different
+answers. Step 5 still needs graph-pattern syntax the tool will not teach (F1, in query form).
 
 ### J5 — Something changed
 
@@ -410,7 +414,7 @@ And    it is stored as xsd:gMonthDay, with no year invented
 As the Capturer, when I assert something, I want to approve the formal representation first, so that
 the knowledge base contains what I meant and I learn the vocabulary by seeing it.
 
-*Role:* Capturer · *Journey:* J1.3, J2.2 · *Spec:* §1.3, §3.5.5 · *Status:* **not built** — see F2
+*Role:* Capturer · *Journey:* J1.3, J2.2 · *Spec:* §1.3, §3.5.5 · *Status:* **implemented** in 0.2 — closes F2
 
 ```
 Given  an initialized workspace
@@ -425,7 +429,7 @@ And    --yes skips the prompt for scripted use, and is the only way to skip it
 As the Capturer, when I do not know the term for what I want to say, I want to find it without
 leaving the terminal, so that I do not have to read the specification to record a birthday.
 
-*Role:* Capturer · *Journey:* J1.3, J2.1, J4.5 · *Spec:* §5.1 · *Status:* **not built** — see F1
+*Role:* Capturer · *Journey:* J1.3, J2.1, J4.5 · *Spec:* §5.1 · *Status:* **partial** in 0.2 — search and show ship; a data property has no declarable datatype, see F20
 
 ```
 Given  the module ontologies are installed
@@ -591,7 +595,7 @@ And    EL profile departures are reported as warnings, never as failures
 As the Learner, when I ask what is due, I want everything dated from every module, so that I do not
 have to remember which module owns which obligation.
 
-*Role:* Learner · *Journey:* J4.1 · *Spec:* §5.2 · *Status:* **partial** — implemented, misfiled; see F6
+*Role:* Learner · *Journey:* J4.1 · *Spec:* §5.2 · *Status:* **implemented** in 0.2 — closes F6
 
 ```
 Given  a due follow-up and a due obligation from another module
@@ -1005,12 +1009,12 @@ Every friction identified above, with its root cause and status. **Open** means 
 
 | id | Friction | Journeys | Root cause | Status |
 |---|---|---|---|---|
-| **F1** | The vocabulary is undiscoverable from inside the tool | J1.3, J2.1, J4.5 | §1.2 assumed an LLM would translate natural language, so no term-browsing surface was ever specified for the structured path | **Open** — US-04 |
-| **F2** | Commits are reported, not confirmed | J1.3, J2.2 | `Main.reportCommit` prints the axiom after `commit` returns; there is no interactive prompt anywhere in the CLI | **Open** — US-03. Contradicts §1.3 and §3.5.5; recorded as a specification/implementation disagreement, not silently reconciled |
+| **F1** | The vocabulary is undiscoverable from inside the tool | J1.3, J2.1, J4.5 | §1.2 assumed an LLM would translate natural language, so no term-browsing surface was ever specified for the structured path | **Mostly closed** in 0.2 — US-04. `noesis vocab search` matches on name and on how a term reads; `noesis vocab show` gives domain, range, defaults and an example. What remains is F20 |
+| **F2** | Commits are reported, not confirmed | J1.3, J2.2 | `Main.reportCommit` prints the axiom after `commit` returns; there is no interactive prompt anywhere in the CLI | **Closed** in 0.2 — US-03. `assert` shows the verbalization, identifier, Manchester rendering and resolved annotations, and writes nothing until the owner accepts; `--yes` is the only way past it |
 | **F3** | Correcting a fact requires a journal dump and a copied id | J6.1, J6.2 | `retract` takes an axiom id; no view that displays a fact also displays its id | **Open** — US-09 |
 | **F4** | Unknown handles mint entities silently | J2.3 | `Workspace.iri` maps any bare token to `noesis:e/<token>` with no existence check; §3.5.3's NEW flag is unimplemented | **Open** — US-05 |
 | **F5** | Import commits without per-record confirmation | J9.2 | §12.1's batch-confirmation queue is unbuilt; `--dry-run` is the partial substitute | **Open** — US-16 |
-| **F6** | The cross-module agenda is filed under `contact` | J4.1 | `ContactCommand.Due` calls `Modules.agendaProducers(Modules.all)` — it is already §5.2's shared agenda under a PRM name | **Open** — US-15 |
+| **F6** | The cross-module agenda is filed under `contact` | J4.1 | `ContactCommand.Due` calls `Modules.agendaProducers(Modules.all)` — it is already §5.2's shared agenda under a PRM name | **Closed** in 0.2 — US-15. `noesis agenda` is the shared surface and `noesis contact due` is an alias onto the same implementation, so the two cannot disagree |
 | **F7** | The review loop shows the fact and asks for a self-grade | J3.2, J3.3 | `Question`, `AnswerSpec`, distractors and staleness all exist in `lms` with no CLI surface; `queue` renders `item.prompt` | **Closed** in 0.2 — US-07. `noesis quiz` asks the stored question, grades against its `AnswerSpec`, and regenerates one whose source fact has changed rather than asking it |
 | **F8** | Duplicate candidates are detected and unreachable | J9.5 | Detection lives in `vocab`; no command exposes it | **Open** — US-17 |
 | **F9** | No machine-readable output | J4, J7 | `Render` targets a terminal exclusively | **Open** — US-20 |
@@ -1024,6 +1028,7 @@ Every friction identified above, with its root cause and status. **Open** means 
 | **F17** | Extraction volume is unbounded | J12.2, J14.3 | A model proposes as much as the text supports; §12.1's batch queue is the only control | **Open** — US-29. This is the one that decides whether the module is usable, and it cannot be judged until real text meets a real model |
 | **F18** | Pruning writes a whole new generation, so it needs room for two | J15.4 | §3.2.1 forbids editing a journal in place, and a generation is only immutable if it is never touched | **Accepted** — the alternative is compaction that rewrites the log, which makes the log's own history unverifiable. Disk is the cheapest thing this system spends |
 | **F19** | After a prune, `as-of` is approximate for the pruned properties | J15.6 | The states that answered the question are the ones removed | **Accepted** — the direct and only cost of pruning, which is why §3.2.1 makes the choice per property and why US-39 requires the output to say so rather than render silently |
+| **F20** | A data property cannot declare its datatype, so the browser cannot show one | J1.3, J2.1 | The axiom language has one `PropertyRange`, and the naming register puts its object in the *class* role. `PropertyRange(crm:birthday, xsd:gMonthDay)` would therefore declare `xsd:gMonthDay` as both a class and a datatype, which ISO/IEC 11179-5 §8.1.2 forbids and `NamingConformanceSuite` enforces | **Open** — needs a `DataPropertyRange` distinct from `PropertyRange`, or a naming register that reads the two positions differently. Until then `noesis vocab show crm:birthday` reports `(none declared)` rather than inventing a datatype, which is the honest answer and still leaves the owner guessing between `05-12` and `--05-12` |
 
 ---
 
@@ -1054,10 +1059,7 @@ document is either a command the CLI ships or one of these, and never both. A pr
 without leaving this block fails the suite.
 
 ```
-noesis vocab search
-noesis vocab show
 noesis undo
-noesis agenda
 noesis contact duplicates
 noesis contact merge
 noesis note extract

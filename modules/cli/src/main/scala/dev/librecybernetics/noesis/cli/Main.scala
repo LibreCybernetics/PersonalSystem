@@ -13,7 +13,8 @@ import dev.librecybernetics.noesis.core.capture.Intent
 import dev.librecybernetics.noesis.core.kb.{CommitResult, ReasoningResult}
 import dev.librecybernetics.noesis.core.module.{ExportContext, ExportOptions, ImportBatch}
 import dev.librecybernetics.noesis.logic.*
-import dev.librecybernetics.noesis.core.policy.DisclosurePolicy
+import dev.librecybernetics.noesis.core.policy.{DisclosurePolicy, PolicyCascade}
+import dev.librecybernetics.noesis.core.projection.AxiomRecord
 import dev.librecybernetics.noesis.reasoner.query.PatternSyntax
 import dev.librecybernetics.noesis.reasoner.{Consistency, Support}
 import dev.librecybernetics.noesis.lms.{ItemId, QueueEntry, QueueMode}
@@ -140,7 +141,8 @@ enum Command:
       sensitivity: Option[Sensitivity],
       scope: List[String],
       utility: Option[Double],
-      confidence: Option[Double]
+      confidence: Option[Double],
+      yes: Boolean
   )
   case Retract(axiomId: String)
   case CloseState(subject: String, property: String, on: Option[PartialDate])
@@ -160,6 +162,9 @@ enum Command:
   case AsOf(date: java.time.LocalDate)
   case Contact(command: ContactCommand)
   case Archive(command: ArchiveCommand)
+  case Agenda(on: java.time.LocalDate)
+  case VocabSearch(query: String)
+  case VocabShow(term: String)
   case Quiz(mode: QueueMode, limit: Int)
   case Note(command: NoteCommand)
   case Backlinks(target: String)
@@ -259,7 +264,10 @@ object Main
       Opts.option[Sensitivity]("sensitivity", "override the cascade's sensitivity").orNone,
       Opts.options[String]("scope", "knowledge scope, required for internal").orEmpty,
       Opts.option[Double]("utility", "override recall utility [0,1]").orNone,
-      Opts.option[Double]("confidence", "truth confidence [0,1]; defaults to 1.0").orNone
+      Opts.option[Double]("confidence", "truth confidence [0,1]; defaults to 1.0").orNone,
+      // The only way past the prompt (US-03). A confirmation that anything else can suppress is
+      // not a confirmation, and the prompt is where §1.3 says the owner learns the representation.
+      Opts.flag("yes", "skip the confirmation prompt, for scripted use").orFalse
     ).mapN(Command.Assert.apply)
 
   private val retract = Opts.subcommand("retract", "retract an axiom by id"):
@@ -313,6 +321,27 @@ object Main
       Opts.option[QueueMode]("mode", "selection policy").withDefault(QueueMode.Mixed),
       Opts.option[Int]("limit", "queue length").withDefault(10)
     ).mapN(Command.Queue.apply)
+
+  /** Every module's dated obligations, not the PRM module's (SPEC §5.2).
+    *
+    * `contact due` runs the same producers and stays as an alias, because it is what is in fingers
+    * and in the journeys. What changes is that finding the agenda no longer requires knowing which
+    * module happens to own the obligation you are looking for.
+    */
+  private val agenda = Opts.subcommand("agenda", "show everything due, from every module"):
+    Opts
+      .option[java.time.LocalDate]("on", "agenda date")
+      .withDefault(java.time.LocalDate.now())
+      .map(Command.Agenda.apply)
+
+  private val vocabSearch = Opts.subcommand("search", "find a term by name or by how it reads"):
+    Opts.argument[String]("query").map(Command.VocabSearch.apply)
+
+  private val vocabShow = Opts.subcommand("show", "show a term's domain, range and defaults"):
+    Opts.argument[String]("term").map(Command.VocabShow.apply)
+
+  private val vocab = Opts.subcommand("vocab", "browse the vocabulary the modules declare"):
+    vocabSearch orElse vocabShow
 
   private val quiz = Opts.subcommand("quiz", "be asked the queued questions, and graded"):
     (
@@ -585,7 +614,7 @@ object Main
       zoneOpt,
       init orElse assertCmd orElse retract orElse closeState orElse supersede orElse
         show orElse query orElse entails orElse explain orElse check orElse journal orElse
-        queue orElse quiz orElse answer orElse items orElse disclose orElse loans orElse
+        vocab orElse agenda orElse queue orElse quiz orElse answer orElse items orElse disclose orElse loans orElse
         exportCmd orElse asOf
           orElse contact orElse archive orElse note orElse backlinks orElse search
     ).mapN(run)
@@ -621,7 +650,7 @@ object Main
       case Command.Init =>
         Workspace.install(workspace).flatMap(lines => print(lines).as(ExitCode.Success))
 
-      case Command.Assert(subject, property, value, sensitivity, scope, utility, confidence) =>
+      case Command.Assert(subject, property, value, sensitivity, scope, utility, confidence, yes) =>
         val annotations = AxiomAnnotations(
           truthConfidence = confidence.orElse(Some(1.0)),
           sensitivity = sensitivity,
@@ -630,8 +659,12 @@ object Main
         )
         for
           axiom <- buildAssertion(workspace, subject, property, value)
-          result <- kb.commit(NonEmptyList.one(Intent.Assert(axiom, annotations)))
-          code <- reportCommit(workspace, result)
+          accepted <- confirmAssertion(workspace, axiom, annotations, skip = yes)
+          code <-
+            if !accepted then IO.println("not committed").as(ExitCode.Success)
+            else
+              kb.commit(NonEmptyList.one(Intent.Assert(axiom, annotations)))
+                .flatMap(reportCommit(workspace, _))
         yield code
 
       case Command.Retract(id) =>
@@ -903,6 +936,25 @@ object Main
       case Command.Archive(archiveCommand) =>
         runArchive(workspace.root, archiveCommand)
 
+      case Command.Agenda(on) =>
+        agendaFor(workspace, on)
+
+      // Read from the module contract, so no workspace is consulted: the vocabulary is the same
+      // before the first fact as after the thousandth, which is when it is most needed.
+      case Command.VocabSearch(query) =>
+        print(Render.vocabMatches(query, Vocabulary.search(vocabulary, query))).as(ExitCode.Success)
+
+      case Command.VocabShow(name) =>
+        Vocabulary.find(vocabulary, name) match
+          case Some(term) => print(Render.vocabTerm(term)).as(ExitCode.Success)
+          case None =>
+            print(
+              List(
+                s"no such term: $name",
+                s"  `noesis vocab search $name` looks for one by name and by how it reads"
+              )
+            ).as(ExitCode.Error)
+
       case Command.Quiz(mode, limit) =>
         executeQuiz(workspace, mode, limit)
 
@@ -919,6 +971,63 @@ object Main
 
       case Command.Search(term) =>
         kb.state.flatMap(state => print(Notes.search(state, term))).as(ExitCode.Success)
+
+  /** Shows what would be written and waits for the owner to accept it (SPEC §1.3, §3.5.5).
+    *
+    * Nothing reaches the journal until this returns true. The three views §3.5.5 requires are all
+    * shown — the verbalization, the identifier, the Manchester rendering — together with the
+    * annotations the cascade resolved, because the annotations are what the owner cannot otherwise
+    * see and are what decides whether the fact may ever leave the machine.
+    *
+    * This is also the moment §1.3 relies on to teach the vocabulary: the owner types a term and is
+    * shown what the system understood by it, which is why reporting the commit afterwards was not
+    * a smaller version of the same thing.
+    */
+  private def confirmAssertion(
+      workspace: Workspace,
+      axiom: Axiom,
+      annotations: AxiomAnnotations,
+      skip: Boolean
+  ): IO[Boolean] =
+    if skip then IO.pure(true)
+    else
+      val record = AxiomRecord(axiom.id, axiom, annotations, AxiomStatus.Active, 0L)
+      val policies = Workspace.config.policies
+
+      for
+        verbalizer <- workspace.kb.verbalizer
+        _ <- IO.println("about to assert:")
+        _ <- IO.println(Render.confirmable(verbalizer, axiom))
+        _ <- IO.println(
+          f"    sensitivity: ${PolicyCascade.sensitivity(record, policies)}" +
+            annotations.sensitivity.fold(" (from the cascade)")(_ => " (yours)")
+        )
+        _ <- IO.println(
+          f"    utility:     ${PolicyCascade.recallUtility(record, policies)}%.2f" +
+            annotations.recallUtility.fold(" (from the cascade)")(_ => " (yours)")
+        )
+        _ <- IO.println(f"    confidence:  ${annotations.truthConfidence.getOrElse(1.0)}%.2f")
+        _ <- IO.print("commit? [y/N] ")
+        typed <- IO.readLine
+      yield accepted(typed)
+
+  /** Only an explicit yes commits. An empty line, a closed stdin or anything else does not, because
+    * the fail-closed default here is "do not write".
+    */
+  private def accepted(response: String): Boolean =
+    Option(response).map(_.trim.toLowerCase(Locale.ROOT)).exists(Set("y", "yes").contains)
+
+  /** The shipped terms, derived once from the module contract. */
+  private lazy val vocabulary: List[Vocabulary.Term] = Vocabulary.of(Modules.all)
+
+  /** Every module's dated obligations for one day, in one queue (SPEC §5.2). */
+  private def agendaFor(workspace: Workspace, on: java.time.LocalDate): IO[ExitCode] =
+    for
+      state <- workspace.kb.state
+      verbalizer <- workspace.kb.verbalizer
+      entries = Modules.agendaProducers(Modules.all).flatMap(_.entries(state, on))
+      _ <- IO.println(Render.agenda(entries, verbalizer))
+    yield ExitCode.Success
 
   // ── The review loop (SPEC §4.1, §4.3) ─────────────────────────────────────
 
@@ -1338,13 +1447,8 @@ object Main
                 .as(ExitCode.Success)
         yield code
 
-      case ContactCommand.Due(on) =>
-        for
-          state <- workspace.kb.state
-          verbalizer <- workspace.kb.verbalizer
-          entries = Modules.agendaProducers(Modules.all).flatMap(_.entries(state, on))
-          _ <- IO.println(Render.agenda(entries, verbalizer))
-        yield ExitCode.Success
+      // The alias kept by US-15. One implementation, so the two can never disagree about what is due.
+      case ContactCommand.Due(on) => agendaFor(workspace, on)
 
       case ContactCommand.Import(path, format, dryRun) =>
         Files[IO].readUtf8(Path(path)).compile.string.flatMap: document =>

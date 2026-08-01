@@ -35,7 +35,7 @@ object Repository:
   */
 class ProductTraceSuite extends FunSuite:
 
-  // Baked in when this file is compiled — see TESTING.md, "the traceability suite can pass against
+  // Baked in when this file is compiled (F1/F2/F6 pass) — see TESTING.md, "the traceability suite can pass against
   // a command surface that no longer exists". Recompile this file after changing `Main`.
   private val surface = CommandSurface.ofModule("dev.librecybernetics.noesis.cli.Main", "main")
   private val product = ProductDocument.parse(Repository.read("PRODUCT.md"))
