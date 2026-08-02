@@ -43,11 +43,11 @@ meaning), so that correcting what an entity *is* never invalidates its identifie
 therefore also forbids vocabulary terms there — a class named in the entity namespace would tie the
 ontology to identifiers chosen to be arbitrary.
 
-`ref:` and `note:` are bound but empty. SPEC §3.7 and §8.5 are not implemented, and settling a
-convention before the first term exists is cheaper than renaming afterwards — which is also why the
-register carries the one distinction that costs most to get wrong: `note:Daily` is the dated page,
-and the append-only log of §3.2 is the journal. A namespace that used either word for the other
-would make both unreadable.
+`note:` is populated by the implemented notes module; `ref:` remains bound but empty because the
+reference model of SPEC §3.7 is not implemented. Settling both conventions before their first term
+was cheaper than renaming afterwards, and the distinction that cost most to get wrong remains:
+`note:Daily` is the dated page, while the append-only log of §3.2 is the journal. A namespace that
+used either word for the other would make both unreadable.
 
 `core:` carries the only cross-namespace agreement: `vf:Agent ≡ core:Agent`. That is an equivalence
 axiom rather than a shared name, which is what the uniqueness rules mean by "one name per item" — two

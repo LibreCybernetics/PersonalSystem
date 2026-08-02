@@ -21,7 +21,9 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, the engine's reaction to core events plus review-log recovery, and that a question whose source fact changed is regenerated rather than asked |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts. `FractionalIndexSuite`: sibling order keys, including that appending and prepending stay constant-size. `OutlineSuite`: the note projection, `as-of` over text, arrangement and nesting, and outlines the axiom language cannot rule out. `NotesCaptureSuite`: writing, paragraph chunking, `[[link]]` resolution against current names, and backlinks. `NoteMarkdownSuite`, `NoteEditorSuite`: the mirror, the editable buffer, and which block an edited line is. `NoteRoundTripSuite`: render, edit, plan and commit against a real knowledge base, including that an untouched buffer writes nothing. `VocabularySuite`: the browser's view of the module contract, including terms declared only in a policy or a template, and roles the shipped modules never exercise alone |
+| `app` | `OwnerSessionSuite`: workspace initialization, reviewed fact commit, durable reopen/search/entity projection and failure rendering at the shared CLI/GUI use-case boundary |
 | `cli` | `ArchiveSuite`: coordinated archive creation, checksum/replay/projection verification, restore into a fresh workspace, overwrite refusal, and tamper detection. `CommandSurfaceSuite`: derivation of the command tree from `Main`'s typed AST. `ProductTraceSuite`: traceability between that surface and [PRODUCT.md](PRODUCT.md). `ProductDocumentSuite`: the traceability rules themselves, against fixtures. `ConfirmSuite`: the vocabulary browser's rendering, including that an undeclared range is reported rather than omitted. `QuizSuite`: what the review loop shows, that the answer is withheld until it is answered, and that an ungradeable question declines rather than guessing |
+| `gui` | `UpdateSuite`: display-independent J16 interaction transitions, fail-closed confirmation and duplicate durable-action suppression. `GuiProductTraceSuite`: every finite GUI surface is named by the product journey and no shipped surface remains proposed. `DesktopSmoke`: GTK/libadwaita construction and first render under Xvfb |
 | `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
@@ -45,12 +47,14 @@ nix develop --command sbt -batch "reasoner/testOnly dev.librecybernetics.noesis.
 nix develop --command sbt -batch "core/testOnly dev.librecybernetics.noesis.core.*"
 nix develop --command sbt -batch "lms/testOnly dev.librecybernetics.noesis.lms.*"
 nix develop --command sbt -batch "vocab/testOnly dev.librecybernetics.noesis.vocab.*"
+nix develop --command sbt -batch "app/testOnly dev.librecybernetics.noesis.app.*"
 nix develop --command sbt -batch "cli/testOnly dev.librecybernetics.noesis.cli.*"
+nix develop --command sbt -batch "gui/testOnly dev.librecybernetics.noesis.gui.*"
 nix develop --command sbt -batch "conformance/testOnly dev.librecybernetics.noesis.conformance.*"
 ```
 
 Inside `nix develop`, the `nix develop --command` prefix is unnecessary. The ordinary CI gate is
-reproduced by starting clean, compiling all eight modules, and explicitly executing every
+reproduced by starting clean, compiling all ten modules, and explicitly executing every
 test-bearing module:
 
 ```bash
@@ -63,7 +67,9 @@ nix develop --command sbt -batch \
   core/testOnly dev.librecybernetics.noesis.core.*;
   lms/testOnly dev.librecybernetics.noesis.lms.*;
   vocab/testOnly dev.librecybernetics.noesis.vocab.*;
+  app/testOnly dev.librecybernetics.noesis.app.*;
   cli/testOnly dev.librecybernetics.noesis.cli.*;
+  gui/testOnly dev.librecybernetics.noesis.gui.*;
   conformance/testOnly dev.librecybernetics.noesis.conformance.*"
 ```
 
@@ -86,6 +92,22 @@ workspace keeps the user's default `~/.noesis` data outside the scenario.
 
 Archive changes use three disposable paths and exercise create, verify, restore, and verification
 of the restored workspace. At least one tampered payload is expected to fail `archive verify`.
+
+### GUI scenarios
+
+Graphical owner-facing evidence is a deterministic interaction transcript, not a screenshot. A GUI
+scenario records stable surface id, owner action, accessible announcement, journal sequence and
+review count after each step. The transcript is checked against the J16/US-41–US-43 acceptance
+criteria exactly as a launcher transcript is checked against a CLI story.
+
+Pure Model–View–Update and application-service suites run without a display. GTK lifecycle and
+accessibility smoke cases run under Xvfb from the Nix development shell. Pixel goldens are not an
+acceptance boundary: fonts, scale and theme are environment inputs, while widget roles, names,
+enabled states, navigation and durable effects are the contract.
+
+```bash
+nix develop --command xvfb-run -a nix run .#gui -- --smoke
+```
 
 ## Test design
 
@@ -135,6 +157,11 @@ instead of weakening the assertion.
   above. A change that removes friction updates its ledger row; a change that adds friction adds one
   and names the principle that makes the trade acceptable. A new command additionally needs a
   journey step, which `ProductTraceSuite` enforces — see [Product traceability](#product-traceability).
+- **GUI behavior:** Evidence includes reducer transitions for every changed event, a headless GTK
+  smoke case for affected widgets and the interaction/accessibility transcript of the affected J16
+  step. Cancellation before confirmation leaves both logs unchanged; once a durable action starts,
+  the scenario observes its terminal result. A changed stable GUI surface id updates PRODUCT.md and
+  `GuiProductTraceSuite` in the same change.
 - **RDF serialization:** Reading and writing belong to `noesis-journal`, with unit claims in
   `SerializationSuite` and grammar conformance in `modules/conformance`. Writer evidence uses an
   independently written transcription of the grammar rather than the writer's own interpretation
@@ -290,7 +317,8 @@ the mutation score has quietly stopped measuring that function.
 
 ## Continuous integration and reporting
 
-The ordinary `CI` workflow runs the clean compile, all eight explicit suite tasks and
+The ordinary `CI` workflow runs the clean compile, all ten explicit suite tasks, the Xvfb desktop
+smoke, and
 `nix flake check` on every branch push. The `Mutation testing` workflow also runs on every branch
 push and can be started manually; its module matrix does not fail fast.
 

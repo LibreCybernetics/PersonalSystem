@@ -43,6 +43,9 @@ You cannot run usability tests, so use the deterministic substitutes:
 - **Produce the transcript.** Evidence for owner-facing behavior is the launcher output of the
   affected journey step, checked against the story's acceptance criteria — not a reading of the
   source. [TESTING.md](TESTING.md) states the rule and the disposable-workspace procedure.
+- **For the GUI, produce the interaction transcript.** Record stable surface ids, actions,
+  accessible announcements and resulting journal/review positions under the headless procedure in
+  [TESTING.md](TESTING.md). A screenshot is supplementary evidence, not the behavioral contract.
 - **Check every new failure path against the rubric** in [UX.md](UX.md) §4. A refusal that omits
   which rule refused it is incomplete work, not a terse message.
 - **Report friction you hit.** If a step cost you more than the journey suggests it should, add a
@@ -54,8 +57,9 @@ You cannot run usability tests, so use the deterministic substitutes:
 
 ```bash
 nix develop --command sbt -batch <task>     # everything runs inside the flake devshell
-sbt compile                                 # all seven modules + CLI
+sbt compile                                 # all ten modules, including CLI and GUI
 sbt cli/launcher                            # writes an executable launcher, prints its path
+sbt gui/guiLauncher                         # writes the GTK/libadwaita launcher, prints its path
 ```
 
 - Testing commands, suite responsibilities, change-specific evidence, CI gates, and reporting rules
