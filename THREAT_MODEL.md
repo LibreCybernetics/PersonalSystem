@@ -1,7 +1,7 @@
 # Noesis threat model
 
-**Scope:** the current single-user CLI, local workspace, archive workflow, interchange exporters and
-isolated coding-agent tooling. HTTP, MCP, synchronization, hosted inference and calendar
+**Scope:** the current single-user CLI and GNOME client, local workspace, archive workflow,
+interchange exporters and isolated coding-agent tooling. HTTP, MCP, synchronization, hosted inference and calendar
 integration are not implemented; adding any of them changes the trust boundaries and requires this
 model to be revised before release.
 
@@ -16,6 +16,7 @@ model to be revised before release.
 | Archives | Complete, inspectable, tamper-detectable copies; verified restoration without overwriting live data |
 | Owner and agent credentials | Isolation from unrelated processes and tasks; least authority; revocability where the external provider supports it |
 | Source tree and build inputs | Integrity and reproducibility; no unreviewed agent changes or undeclared dependencies |
+| Desktop drafts and rendered knowledge | Remain process-local; no telemetry, automatic clipboard copy, notification body or desktop-search indexing |
 
 Loss of confidentiality can expose relationships, contact methods, notes, beliefs and other
 sensitive personal data. Loss of integrity can be equally harmful: a forged assertion, review,
@@ -27,8 +28,8 @@ annotation or truncated provenance can change what Noesis discloses, believes or
 - Ordinary local applications running as other OS users are untrusted.
 - Other processes running as the owner are not contained by filesystem permissions; malware or a
   compromised same-user process can read and modify the workspace.
-- Import documents, journal/archive bytes, CLI arguments and future model output are untrusted
-  input.
+- Import documents, journal/archive bytes, CLI arguments, GTK text input and future model output are
+  untrusted input.
 - Export recipients and coding agents are untrusted beyond their explicitly granted data and
   capabilities.
 - The OS kernel, JVM, Nix store and pinned build toolchain are trusted dependencies. A hostile
@@ -81,6 +82,20 @@ Structured capture validates IRIs, annotation ranges, module constraints and con
 atomic append. Import identity matches remain candidates rather than automatic identity merges.
 Review grades must be finite and within `[0,1]`, and latency cannot be negative.
 
+### GNOME owner surface
+
+The GTK/libadwaita process is another local-owner adapter over `OwnerSession`; it neither invokes
+the CLI nor opens a listener. Typed GUI events reach the same parsing, consistency, policy and
+append boundaries as CLI actions. The first-run page creates nothing until explicit activation,
+durable controls are suppressed while work is in flight, and the window refuses close until that
+operation reaches a terminal result. Search text, drafts and selection are held only in the
+in-memory Model–View–Update state. The application registers no search provider or notifications,
+sends no telemetry and never copies knowledge to the clipboard automatically.
+
+Java-GI, GTK and libadwaita join the trusted local runtime. They do not protect visible content from
+screen capture, accessibility clients or another process running as the owner; the local-owner
+policy is an authorization boundary for disclosure, not a desktop sandbox.
+
 Learning and question identifiers use versioned, length-delimited SHA-256 inputs, avoiding JVM hash
 collisions and ambiguous concatenation. This is identity stability, not a secret or authorization
 mechanism.
@@ -112,6 +127,7 @@ package endpoint is an intentional egress path. See
 | Hash collisions merge unrelated learning items | Versioned length-delimited SHA-256 identifiers |
 | Malicious import creates identity or semantic corruption | Candidate-based identity matching and pre-commit validation |
 | Coding agent reads host secrets or arbitrary network | Mount isolation, separate credentials and destination allowlist |
+| Desktop integration leaks a query, draft or fact | No network, telemetry, search-provider, notification-content or automatic clipboard integration |
 
 ## Residual risks and required follow-up
 
@@ -127,8 +143,8 @@ package endpoint is an intentional egress path. See
 - The naive reasoner has bounded resources and does not meet the production performance target.
   Incompleteness is explicit, but denial of service through adversarially expensive valid input
   remains possible.
-- CLI owner access is inherited from the OS account; there is no application login, audit trail for
-  reads, or protection from shoulder surfing and terminal history.
+- CLI and GUI owner access is inherited from the OS account; there is no application login, audit
+  trail for reads, or protection from shoulder surfing, screen capture and terminal history.
 - Scala visibility and restricted context types constrain ordinary integrations but are not a
   sandbox. Arbitrary code loaded into the same JVM, reflection, or code deliberately placed in the
   `dev.librecybernetics.noesis` package must be treated as trusted application code.

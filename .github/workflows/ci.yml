@@ -46,8 +46,14 @@ jobs:
           core/testOnly dev.librecybernetics.noesis.core.*;
           lms/testOnly dev.librecybernetics.noesis.lms.*;
           vocab/testOnly dev.librecybernetics.noesis.vocab.*;
+          app/testOnly dev.librecybernetics.noesis.app.*;
           cli/testOnly dev.librecybernetics.noesis.cli.*;
+          gui/testOnly dev.librecybernetics.noesis.gui.*;
           conformance/testOnly dev.librecybernetics.noesis.conformance.*"
+
+      - name: Smoke test GNOME widget lifecycle
+        run: >-
+          nix develop --command xvfb-run -a nix run .#gui -- --smoke
 
       - name: Check Nix and isolated-agent sources
         run: nix flake check

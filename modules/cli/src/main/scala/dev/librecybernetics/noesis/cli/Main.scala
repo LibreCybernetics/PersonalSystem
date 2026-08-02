@@ -9,6 +9,7 @@ import cats.syntax.all.*
 import com.monovore.decline.effect.CommandIOApp
 import com.monovore.decline.{Argument, Opts}
 import fs2.io.file.{Files, Path}
+import dev.librecybernetics.noesis.app.Assertions
 import dev.librecybernetics.noesis.core.capture.Intent
 import dev.librecybernetics.noesis.core.kb.{CommitResult, ReasoningResult}
 import dev.librecybernetics.noesis.core.module.{ExportContext, ExportOptions, ImportBatch}
@@ -660,7 +661,9 @@ object Main
 
     command match
       case Command.Init =>
-        Workspace.install(workspace).flatMap(lines => print(lines).as(ExitCode.Success))
+        Workspace.install(workspace).flatMap:
+          case Left(rejected) => IO.println(rejected.render).as(ExitCode.Error)
+          case Right(lines)    => print(lines).as(ExitCode.Success)
 
       case Command.Assert(subject, property, value, sensitivity, scope, utility, confidence, yes) =>
         val annotations = AxiomAnnotations(
@@ -1217,7 +1220,8 @@ object Main
 
   /** Builds an assertion, deciding from the ontology whether the value is a reference or a literal.
     *
-    * This is the CLI's stand-in for §3.5's entity-resolution step. The property's declared range
+    * This delegates to the shared structured-surface stand-in for §3.5's entity-resolution step.
+    * The property's declared range
     * decides first, because that is what the ontology is for: guessing from the value alone turns
     * `label drill` into a self-referential object assertion the moment an entity named `drill`
     * exists. Only an undeclared property falls back to inspecting the value, and the resulting axiom
@@ -1230,24 +1234,7 @@ object Main
       value: String
   ): IO[Axiom] =
     workspace.kb.closure.map: closure =>
-      val s = Workspace.iri(subject)
-      val p = Workspace.iri(property)
-      val candidate = Workspace.iri(value)
-      val view = closure.view
-
-      def objectAssertion = Axiom.ObjectAssertion(s, p, candidate)
-      def dataAssertion = Axiom.DataAssertion(s, p, Literal.parse(value))
-
-      if p == Vocab.rdfType then Axiom.ClassAssertion(s, candidate)
-      // A declared range makes this an object property, whatever the value looks like.
-      else if view.ranges.contains(p) then objectAssertion
-      // Labels are literals by definition, and are the case the value heuristic gets wrong most.
-      else if p == Vocab.label then dataAssertion
-      // Otherwise follow how the property is already used, then fall back to the value's shape.
-      else if view.objectByProperty.contains(p) then objectAssertion
-      else if view.dataByProperty.contains(p) then dataAssertion
-      else if value.contains(':') then objectAssertion
-      else dataAssertion
+      Assertions.build(closure, Workspace.iri(subject), Workspace.iri(property), value)
 
   private def node(value: String): Node =
     if value.contains(':') then Node.Ref(Iri(value)) else Node.Lit(Literal.parse(value))

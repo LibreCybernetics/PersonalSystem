@@ -23,7 +23,7 @@ Noesis unifies *knowing* and *learning* for one person. Knowledge is stored as a
 ## 2. Architecture
 
 ```
-Clients: Web / Mobile / CLI UI          MCP agents (external LLM apps)
+Clients: GNOME/GTK desktop / CLI UI     MCP agents (external LLM apps)
         │ REST + WebSocket                      │ MCP (stdio | HTTP+OAuth)
 ┌───────▼────────────────────────────────────────▼─────────────────────┐
 │ Application layer                                                    │
@@ -50,6 +50,32 @@ Clients: Web / Mobile / CLI UI          MCP agents (external LLM apps)
 | Shared services | Verbalizer, Agenda, Search, LLM Gateway — used by core and modules alike (§5.2) |
 | MCP Gateway | The only surface for external LLM agents; scoped, filtered, propose-only (§9) |
 | Event bus | `axiom.*`, `entailment.changed`, `state.changed`, `belief.updated`, `review.completed`, `agenda.due` |
+
+---
+
+### 2.1 GNOME desktop client
+
+The first graphical client is a local GNOME application built with GTK 4 and libadwaita. It covers
+the daily owner loop — initialization, agenda, structured fact capture and confirmation, quick
+notes, search/entity views and quizzes — while specialist curation, audit and exit operations remain
+available through the CLI. It is another owner surface over the same application services, never a
+process that invokes CLI commands or keeps a second store.
+
+The client follows a functional-reactive Model–View–Update architecture. GTK signals become typed
+events; a pure update function produces the next immutable model and declared effects; effects run
+through the shared Cats Effect runtime; and model snapshots render on GTK's main context. GTK
+objects never enter the model or application service. Durable actions begin only after the owner's
+explicit submit/commit action, become non-cancellable once journal append begins, and end by
+refreshing from the append-only sources of truth.
+
+The GUI is a local-owner boundary under §3.3.1: it may render `sensitive` knowledge because nothing
+leaves the device. It adds no network listener, telemetry, notification content, search-provider
+integration or automatic clipboard writes. Window geometry may be ordinary desktop configuration;
+queries, drafts, selected entities and knowledge content are not desktop settings and are not
+persisted outside the journal and review log.
+
+The initial delivery target is GNOME/Linux through the pinned Nix package. Flatpak, mobile and web
+clients remain future surfaces.
 
 ---
 
@@ -303,7 +329,7 @@ GET /ll/mastery/summary?targetLang · POST /ll/import · GET /ll/reader/gloss
 
 **Goals.** Traditional contact management (names, addresses, email, phone, online accounts and employment) joins people, organizations, relationships, life events, interactions, gifts, preferences and follow-up in one semantic model. Reasoning operates over the social graph, while the learning engine keeps the owner *fluent* in relationships (names, dates, kids, preferences) rather than treating lookup data such as phone numbers as memory material.
 
-[Monica](https://www.monicahq.com/features), an open-source Personal Relationship Management system, is informative product-design inspiration. Its [published feature set](https://github.com/monicahq/monica#features) and [API resource model](https://www.monicahq.com/api) motivate typed contact methods, addresses, relationships, activities, notes, reminders, tasks, gifts, pets and labels. Noesis does not adopt Monica's storage schema or API: these features remain ordinary journaled axioms and projections, with no parallel contact store. The implementation plan and detailed mapping are recorded in [PRM_PROPOSAL.md](PRM_PROPOSAL.md).
+[Monica](https://www.monicahq.com/features), an open-source Personal Relationship Management system, is informative product-design inspiration. Its [published feature set](https://github.com/monicahq/monica#features) and [API resource model](https://www.monicahq.com/api) motivate typed contact methods, addresses, relationships, activities, notes, reminders, tasks, gifts, pets and labels. Noesis does not adopt Monica's storage schema or API: these features remain ordinary journaled axioms and projections, with no parallel contact store. The implemented field mapping and privacy constraints are stated in §7.3; [PRODUCT.md](PRODUCT.md) J9–J10 records the owner journeys they serve.
 
 ### 7.1 Ontology
 
@@ -383,7 +409,7 @@ Contact methods, addresses and employments are reified because each Agent may ha
 
 Structured contact commands cover contact creation, typed methods, addresses, employment, interactions and follow-up plans. Each command produces one atomic intent bundle and passes through ordinary pre-commit consistency and policy validation. vCard 4.0 is the interchange target: `FN`/`N`/`NICKNAME` map to Name objects; `EMAIL`/`TEL`/`IMPP`/`URL` to ContactMethod; `ADR` to PostalAddress; `ORG`/`TITLE`/`ROLE` to Employment; `RELATED` to relationship candidates; and `UID` to ExternalIdentifier. Import matches yield reviewable identity candidates, never automatic `SameIndividual` assertions. Export is disclosure-filtered and uses current values.
 
-FOAF is the linked-data alignment and mapped RDF boundary, not the canonical contact model. FOAF imports translate `Person`, `Organization`, names, mailboxes, phones, online accounts, groups, membership, birthdays and person-to-person `knows` statements into reviewable PRM candidates with source provenance and lowered confidence. Subject IRIs and inverse-functional FOAF properties are match evidence, never automatic identity merges. Disclosure-filtered export maps current names and allowed contact methods; social edges are opt-in. `crm:knows` is not a subproperty of `foaf:knows`: the former admits Organizations, while FOAF's domain and range are Person. The full FOAF ontology is not imported; stable one-way class and membership alignments are installed, while `testing` or `unstable` contact terms remain adapter mappings. [PRM_PROPOSAL.md](PRM_PROPOSAL.md) records the field-level mapping and privacy constraints.
+FOAF is the linked-data alignment and mapped RDF boundary, not the canonical contact model. FOAF imports translate `Person`, `Organization`, names, mailboxes, phones, online accounts, groups, membership, birthdays and person-to-person `knows` statements into reviewable PRM candidates with source provenance and lowered confidence. Subject IRIs and inverse-functional FOAF properties are match evidence, never automatic identity merges. Disclosure-filtered export maps current names and allowed contact methods; social edges are opt-in. `crm:knows` is not a subproperty of `foaf:knows`: the former admits Organizations, while FOAF's domain and range are Person. The full FOAF ontology is not imported; stable one-way class and membership alignments are installed, while `testing` or `unstable` contact terms remain adapter mappings. The field-level mapping and privacy constraints stay here so they cannot drift into a separate proposal document.
 
 ### 7.4 Learning, Agenda & Views
 
@@ -719,7 +745,7 @@ honest.
 
 ## 11. Reference Stack (non-normative)
 
-RDF quad store with RDF-star (Jena TDB2 / Oxigraph); ELK (EL) with HermiT/Openllet escalation; OWL API for explanations. Services in Kotlin/JVM or Python (owlready2 + rdflib); PostgreSQL for operational state; pgvector/Qdrant; in-process event bus. LLM via provider-agnostic gateway (Anthropic API + Ollama local); MCP official SDK. ValueFlows RDF vocabulary imported as-is. Local-first client (web/PWA, optional Tauri shell); Cytoscape.js graph view.
+RDF quad store with RDF-star (Jena TDB2 / Oxigraph); ELK (EL) with HermiT/Openllet escalation; OWL API for explanations. Services in Kotlin/JVM or Python (owlready2 + rdflib); PostgreSQL for operational state; pgvector/Qdrant; in-process event bus. LLM via provider-agnostic gateway (Anthropic API + Ollama local); MCP official SDK. ValueFlows RDF vocabulary imported as-is. Local-first GNOME client through GTK 4, libadwaita and Java-GI, with Cats Effect/fs2 Model–View–Update; Cytoscape.js remains a candidate for a future graph view rather than the desktop shell.
 
 ## 12. Risks & Open Questions
 

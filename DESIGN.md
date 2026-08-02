@@ -16,20 +16,25 @@ logic  ← journal
   ↑
 reasoner
 
-logic + journal + reasoner  ← core  ← lms  ← vocab  ← cli
+logic + journal + reasoner  ← core  ← lms  ← vocab  ← app  ← cli
+                                                        ↖ gui
 ```
 
 Dependencies point one way:
 
 - `logic` is the persisted semantic language and depends on no Noesis module.
 - `journal` and `reasoner` depend only on `logic`; neither knows about application policy.
-- `core` composes those foundations. It knows nothing about learning, vocabulary modules or the CLI
+- `core` composes those foundations. It knows nothing about learning, vocabulary modules or an owner
+  surface
   and never imports from them.
 - `lms` reads the Knowledge Core and reacts to its events; it never writes to the KB.
 - `lms` remains independent of domain vocabularies.
 - `vocab` declares vocabulary as data. A module is a value implementing `Module`, not a plugin with
   lifecycle hooks.
-- `cli` assembles and exposes the system without becoming a dependency of any other module.
+- `app` assembles workspace replay, learning restoration and presentation-neutral owner use cases.
+  It depends on the full domain but on no toolkit or command parser.
+- `cli` and `gui` are sibling adapters. The CLI retains specialist/audit operations; the GUI covers
+  J16's daily loop. Neither invokes the other or owns a second persistence lifecycle.
 
 Modules extend the system through declarative seams: `Rule` for inference; `PolicyBook` and
 `ItemPolicyBook` for annotation and item defaults; `Templates` and `Naming.Scheme` for
@@ -56,6 +61,9 @@ Key implementation points:
 | Pre-commit validation | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/kb/Validation.scala` |
 | Interchange and agenda seams | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/module/Extensions.scala` |
 | Service surface | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/kb/KnowledgeBase.scala` |
+| Shared owner session | `modules/app/src/main/scala/dev/librecybernetics/noesis/app/OwnerSession.scala`, `Workspace.scala` |
+| Desktop reducer and effect loop | `modules/gui/src/main/scala/dev/librecybernetics/noesis/gui/Model.scala`, `ReactiveController.scala` |
+| GTK/libadwaita renderer | `modules/gui/src/main/scala/dev/librecybernetics/noesis/gui/DesktopView.scala` |
 | Portable archive workflow | `modules/cli/src/main/scala/dev/librecybernetics/noesis/cli/Archive.scala` |
 | Command-surface derivation | `modules/cli/src/main/scala/dev/librecybernetics/noesis/cli/meta/CommandSurface.scala` |
 | Belief, derived belief | `modules/lms/src/main/scala/dev/librecybernetics/noesis/lms/Belief.scala` |
@@ -64,6 +72,21 @@ Key implementation points:
 | Naming convention register | `modules/vocab/NAMING.md` (rules in `modules/conformance/src/test/resources/mdr/naming.json`) |
 | PRM capture and projections | `modules/vocab/src/main/scala/dev/librecybernetics/noesis/vocab/PrmCapture.scala`, `Prm.scala` |
 | PRM interchange | `modules/vocab/src/main/scala/dev/librecybernetics/noesis/vocab/VCard.scala`, `Foaf.scala` |
+
+### Desktop reactive boundary
+
+The desktop is a Model–View–Update adapter, not another service layer. `Model` contains immutable
+presentation data and no GTK object; `Update` is total and pure over `(Model, Event)` and declares
+effects as values. `ReactiveController` consumes one fs2 queue, applies transitions serially and
+interprets those effects through `OwnerSession`. Completed snapshots are scheduled onto GLib's main
+context for rendering. This makes button duplication, stale feedback and cancellation behavior
+properties of the reducer rather than timing assumptions in callbacks.
+
+`OwnerSession` reopens the two logs for each effect. That preserves the CLI's cold-replay semantics
+inside a long-lived window and makes a specialist CLI write visible without shared mutable caches;
+its lightweight position stream refreshes the current Today/Learn projection after an external
+sequence or review-log change. Journal commits and review writes are uncancellable once begun, and
+the window refuses close while an owner action is in flight.
 
 ### Architectural ownership rules
 

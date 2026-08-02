@@ -18,12 +18,26 @@
         lib = nixpkgs.lib;
         pkgs = import nixpkgs {
           inherit system;
-          config.allowUnfreePredicate =
-            package: builtins.elem (lib.getName package) [ "claude-code" ];
+          config.allowUnfreePredicate = package: builtins.elem (lib.getName package) [ "claude-code" ];
         };
 
         # The JDK the build, CI and produced launcher run on.
-        jdk = pkgs.jdk25;
+        # The headless output still contains javac and the FFM API. Unlike the full output it does
+        # not put GTK 3 on the JVM RUNPATH, which would make GTK 4 refuse to initialize in Java-GI.
+        jdk = pkgs.jdk25_headless;
+
+        # Java-GI opens each introspected namespace by SONAME, so every directly bound native
+        # library must be discoverable rather than only reachable as GTK's transitive dependency.
+        gtkLibraries = with pkgs; [
+          cairo
+          gdk-pixbuf
+          glib
+          graphene
+          gtk4
+          harfbuzz
+          libadwaita
+          pango
+        ];
 
         # nixpkgs currently ships sbt 1.x. The sbt 2.x distribution has an
         # identical layout, so overriding version + src is enough to keep nix
@@ -140,6 +154,54 @@
             exec noesis-agent-run shell "$@"
           '';
         };
+
+        # Development package for the native GNOME surface. sbt owns the JVM classpath while Nix
+        # owns the JDK and native GTK/libadwaita closure; the generated launcher is uncached and is
+        # therefore always materialized before execution.
+        guiRunner = pkgs.writeShellApplication {
+          name = "noesis-gui";
+          runtimeInputs = [
+            jdk
+            sbt2
+            pkgs.coreutils
+            pkgs.findutils
+            pkgs.xvfb-run
+          ]
+          ++ gtkLibraries;
+          text = ''
+            export LD_LIBRARY_PATH=${lib.makeLibraryPath gtkLibraries}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+            cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/noesis-gui"
+            build_root="$cache_root/${builtins.baseNameOf self.outPath}"
+            if [ ! -f "$build_root/.source-ready" ]; then
+              mkdir -p "$build_root"
+              cp -R ${self.outPath}/. "$build_root/"
+              chmod -R u+w "$build_root"
+              touch "$build_root/.source-ready"
+            fi
+            cd "$build_root"
+            sbt -batch gui/guiLauncher
+            launcher="$(find target/out -type f -name noesis-gui -perm -u+x -print -quit)"
+            if [ -z "$launcher" ]; then
+              echo "Noesis did not start" >&2
+              echo "the GUI launcher was not produced" >&2
+              echo "run nix develop --command sbt -batch gui/guiLauncher" >&2
+              exit 1
+            fi
+            exec "$launcher" "$@"
+          '';
+        };
+
+        gui = pkgs.runCommand "noesis-gui" { } ''
+          mkdir -p "$out/bin" "$out/share/applications" "$out/share/metainfo"
+          mkdir -p "$out/share/icons/hicolor/scalable/apps"
+          ln -s ${guiRunner}/bin/noesis-gui "$out/bin/noesis-gui"
+          cp ${./modules/gui/src/main/resources/dev.librecybernetics.Noesis.desktop} \
+            "$out/share/applications/dev.librecybernetics.Noesis.desktop"
+          cp ${./modules/gui/src/main/resources/dev.librecybernetics.Noesis.metainfo.xml} \
+            "$out/share/metainfo/dev.librecybernetics.Noesis.metainfo.xml"
+          cp ${./modules/gui/src/main/resources/dev.librecybernetics.Noesis.svg} \
+            "$out/share/icons/hicolor/scalable/apps/dev.librecybernetics.Noesis.svg"
+        '';
       in
       {
         packages = {
@@ -149,6 +211,7 @@
           codex-agent = codexAgent;
           claude-agent = claudeAgent;
           agent-shell = agentShell;
+          inherit gui;
         };
 
         apps = {
@@ -168,19 +231,26 @@
             type = "app";
             program = "${agentShell}/bin/noesis-agent-shell";
           };
+          gui = {
+            type = "app";
+            program = "${gui}/bin/noesis-gui";
+          };
         };
 
-        checks.agent-sandbox-sources = pkgs.runCommand "agent-sandbox-sources" {
-          nativeBuildInputs = [
-            pkgs.python3
-            pkgs.shellcheck
-          ];
-        } ''
-          shellcheck -s bash ${./nix/agent-session.sh} ${./nix/agent-run.sh}
-          python3 -m py_compile ${./nix/agent-proxy.py}
-          python3 ${./nix/agent-proxy-test.py} ${./nix/agent-proxy.py}
-          touch "$out"
-        '';
+        checks.agent-sandbox-sources =
+          pkgs.runCommand "agent-sandbox-sources"
+            {
+              nativeBuildInputs = [
+                pkgs.python3
+                pkgs.shellcheck
+              ];
+            }
+            ''
+              shellcheck -s bash ${./nix/agent-session.sh} ${./nix/agent-run.sh}
+              python3 -m py_compile ${./nix/agent-proxy.py}
+              python3 ${./nix/agent-proxy-test.py} ${./nix/agent-proxy.py}
+              touch "$out"
+            '';
 
         devShells.default = pkgs.mkShell {
           packages = [
@@ -190,14 +260,19 @@
             pkgs.scala-cli
             pkgs.metals
             pkgs.nixfmt
+            pkgs.gtk4
+            pkgs.libadwaita
+            pkgs.xvfb-run
           ];
 
           JAVA_HOME = "${jdk}";
+          LD_LIBRARY_PATH = lib.makeLibraryPath gtkLibraries;
 
           shellHook = ''
             echo "Noesis dev shell — sbt $(sbt --script-version 2>/dev/null || echo 2.0.4), JDK ${jdk.version}"
             echo "  see TESTING.md    run explicit test suites and verification"
             echo "  sbt cli/run --help  exercise the CLI"
+            echo "  nix run .#gui       launch the GNOME application"
           '';
         };
 

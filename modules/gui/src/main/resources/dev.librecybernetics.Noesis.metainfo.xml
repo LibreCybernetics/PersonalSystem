@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.librecybernetics.Noesis</id>
+  <name>Noesis</name>
+  <summary>Personal knowledge and learning workspace</summary>
+  <metadata_license>LicenseRef-proprietary</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <description>
+    <p>Noesis captures structured facts and notes, shows today's obligations, and schedules review from a local append-only workspace.</p>
+  </description>
+  <launchable type="desktop-id">dev.librecybernetics.Noesis.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+</component>

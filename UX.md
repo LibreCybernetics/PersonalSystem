@@ -207,3 +207,56 @@ For any change to the owner-facing surface:
    friction, add one and say which principle makes the trade acceptable.
 5. Produce the launcher transcript required by [TESTING.md](TESTING.md), and check it against the
    story's acceptance criteria rather than against your intent.
+
+## 10. GNOME desktop surface
+
+The desktop client follows every principle above and adds no second vocabulary for the same state.
+Its first release is the J16 daily loop in [PRODUCT.md](PRODUCT.md); CLI-only specialist operations
+remain explicit routes rather than controls that look present but do nothing.
+
+### 10.1 Window and navigation
+
+- One adaptive libadwaita window contains Today, Capture, Learn and Search. Entity detail is reached
+  from Search and returns through ordinary navigation. The split view collapses into page navigation
+  at narrow widths; it does not open a stack of secondary windows.
+- First run is a page, not a background side effect. It states the exact workspace path and privacy
+  guarantee; only **Start Noesis** creates anything.
+- Every surface has a stable id (`gui:today`, `gui:capture-fact`, and so on) used by product
+  traceability and deterministic interaction transcripts. These ids are not displayed to the owner.
+
+### 10.2 Reactive behavior
+
+- GTK signals become typed events. Rendering is a function of one immutable model; widget-local
+  state is never another authority on whether a commit happened or which search result is current.
+- Work in flight is named and visible. Controls that would start the same durable action are disabled
+  until it finishes. Closing after **Commit fact**, **Save note** or **Start Noesis** waits for the
+  atomic result rather than cancelling between journal append and projection refresh.
+- Explicit search requests are serialized through the event loop. An empty query has an explicit
+  empty state and never reuses the last result invisibly.
+- A success toast may summarize an already-visible result. It never carries the only copy of an id,
+  warning or next step. Failures remain until dismissed or resolved and obey §4 in full.
+
+### 10.3 Capture and learning
+
+- Fact capture selects an existing entity or an explicitly marked new one, a vocabulary term and a
+  value parsed according to that term. A bare typo cannot mint an entity as a side effect of focus
+  or autocomplete.
+- The Review step shows verbalization and resolved annotations first. Axiom id and Manchester form
+  are one disclosure level deeper but present before commit. **Cancel** is the default; one
+  **Commit fact** action confirms the whole intention.
+- Note mode is for the owner's text when it is not yet a formal claim. **Save note** is the explicit
+  durable action; it does not run extraction.
+- Learn always shows why the item was selected, withholds the answer until submission and uses text
+  as well as color for belief/outcome. A grader that cannot judge produces the §4 refusal, not an
+  enabled Submit button that silently does nothing.
+
+### 10.4 Accessibility and local privacy
+
+- Controls have programmatic names, keyboard focus order follows visual order, standard navigation
+  shortcuts work, and status changes are announced. Belief, errors and selection never depend on
+  hue alone. System text scaling, contrast, reduced-motion and right-to-left behavior are honored.
+- The GUI uses the local-owner disclosure policy. It sends nothing over a network, copies nothing to
+  the clipboard automatically and registers no desktop search provider or notification content in
+  the first release.
+- Window geometry may be desktop configuration. Search text, capture drafts, selected entities,
+  names and other knowledge content are never stored in desktop settings.

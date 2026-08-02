@@ -8,6 +8,7 @@ val circeV = "0.14.10"
 val declineV = "2.5.0"
 val munitV = "1.1.1"
 val munitCatsEffectV = "2.1.0"
+val javaGiV = "1.0.0-RC2"
 val scapegoatV = "3.3.6"
 val wartremoverV = "3.6.1"
 
@@ -160,6 +161,14 @@ lazy val vocab = project
   .settings(commonSettings)
   .settings(name := "noesis-vocab")
 
+// Shared owner application services: workspace replay, use cases and presentation-neutral views.
+// CLI and GUI are adapters over this module; neither may acquire a second lifecycle implementation.
+lazy val app = project
+  .in(file("modules/app"))
+  .dependsOn(logic, journal, reasoner, core, lms, vocab)
+  .settings(commonSettings)
+  .settings(name := "noesis-app")
+
 /** Writes an executable launcher, so the CLI can be driven directly instead of through `sbt run`.
   *
   * `sbt run` merges the arguments of several `run` invocations in one session, which makes a
@@ -167,10 +176,11 @@ lazy val vocab = project
   * meant to be used.
   */
 lazy val launcher = taskKey[String]("write an executable launcher script for the CLI, returning its path")
+lazy val guiLauncher = taskKey[String]("write an executable launcher script for the GNOME application")
 
 lazy val cli = project
   .in(file("modules/cli"))
-  .dependsOn(logic, journal, reasoner, core, lms, vocab)
+  .dependsOn(logic, journal, reasoner, core, lms, vocab, app)
   .settings(commonSettings)
   .settings(
     name := "noesis-cli",
@@ -210,6 +220,49 @@ lazy val cli = project
     }
   )
 
+// The local-first GNOME owner surface (SPEC §2.1). Presentation is GTK/libadwaita; all durable
+// behavior enters through `app`, and the pure Model-View-Update reducer remains independently
+// testable without a display server.
+lazy val gui = project
+  .in(file("modules/gui"))
+  .dependsOn(app)
+  .settings(commonSettings)
+  .settings(
+    name := "noesis-gui",
+    libraryDependencies ++= Seq(
+      "org.java-gi" % "gtk" % javaGiV,
+      "org.java-gi" % "adw" % javaGiV
+    ),
+    Compile / run / fork := true,
+    Compile / run / javaOptions ++= Seq(
+      "--enable-native-access=ALL-UNNAMED",
+      "-Djava.awt.headless=true"
+    ),
+    guiLauncher := Def.uncached {
+      val converter = fileConverter.value
+      val classpath = (Runtime / fullClasspath).value
+        .map(entry => converter.toPath(entry.data).toAbsolutePath.toString)
+        .mkString(":")
+      val script = target.value / "noesis-gui"
+      IO.write(
+        script,
+        s"""|#!/usr/bin/env bash
+            |export LC_ALL="$${LC_ALL:-C.UTF-8}"
+            |java="$${JAVA_HOME:+$$JAVA_HOME/bin/}java"
+            |exec "$$java" \\
+            |  --enable-native-access=ALL-UNNAMED \\
+            |  -Djava.awt.headless=true \\
+            |  -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8 \\
+            |  -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 \\
+            |  -cp "$classpath" dev.librecybernetics.noesis.gui.Main "$$@"
+            |""".stripMargin
+      )
+      val _ = script.setExecutable(true)
+      streams.value.log.info(s"GUI launcher written to $script")
+      script.getAbsolutePath
+    }
+  )
+
 /** Conformance to the normative references, as opposed to conformance to our own intentions.
   *
   * A separate module for two reasons, both about the mutation gate. Dropping external corpora into
@@ -242,7 +295,7 @@ lazy val conformance = project
 
 lazy val root = project
   .in(file("."))
-  .aggregate(logic, journal, reasoner, core, lms, vocab, cli, conformance)
+  .aggregate(logic, journal, reasoner, core, lms, vocab, app, cli, gui, conformance)
   .settings(
     name := "noesis",
     publish / skip := true

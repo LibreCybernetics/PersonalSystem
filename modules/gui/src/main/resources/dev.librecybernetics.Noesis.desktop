@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Noesis
+Comment=Personal knowledge and learning workspace
+Exec=noesis-gui
+Icon=dev.librecybernetics.Noesis
+Terminal=false
+Type=Application
+Categories=Office;Education;
+StartupNotify=true

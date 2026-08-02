@@ -371,6 +371,24 @@ merges — making the log smaller, and making a fact never have existed. Steps 4
 commands for that reason alone, and step 6 tells the truth about what step 4 cost rather than
 rendering a past that never held.
 
+### J16 — The daily desktop loop
+
+*Intent:* capture, orient and review without first translating the intention into a shell command.
+*Roles:* Capturer, Learner, Curator. *Outcomes:* 1, 2, 3. *Status:* **implemented** in the GNOME
+client specified in `SPEC.md` §2.1.
+
+| # | Must already know | GUI surface | Result | Friction |
+|---|---|---|---|---|
+| 1 | nothing | `gui:first-run` | the default workspace path and privacy guarantees are shown; Start creates it explicitly | Low |
+| 2 | nothing | `gui:today` | one landing page shows the shared agenda and routes to capture and learning | Low |
+| 3 | the distinction between a fact and a thought | `gui:capture-fact`, `gui:capture-note` | a typed fact is previewed before commit; a thought becomes a note block | Low |
+| 4 | nothing | `gui:search`, `gui:entity` | entities, notes and vocabulary are found without query syntax; facts retain their ids and formal depth | Low |
+| 5 | nothing | `gui:learn` | the queue explains why each item was chosen and asks without revealing the answer | Low |
+
+*Verdict (design):* the GUI removes shell grammar from the highest-frequency loop without replacing
+the CLI or inventing a second application service. Specialist curation, audit, archive and export
+remain CLI journeys in the first release.
+
 ---
 
 ## 5. Story catalogue
@@ -1000,6 +1018,58 @@ When   the same is attempted for the current generation
 Then   it is refused, because that is retraction's job and not this command's
 ```
 
+### US-41 — Start the desktop without a terminal
+
+As the Capturer, when Noesis has no workspace, I want the desktop to explain and initialize it, so
+that the first durable act does not require a command I have not learned.
+
+*Role:* Capturer · *Journey:* J16.1 · *Spec:* §2.1, §10 · *Status:* **implemented**
+
+```
+Given  the default workspace does not exist
+When   the GNOME application opens
+Then   it shows the exact path and the owner-only persistence guarantee
+And    no path exists until the owner activates Start Noesis
+When   Start Noesis is activated
+Then   the workspace and module ontology are installed with the same permissions and journal
+       operations as the CLI
+```
+
+### US-42 — Capture a fact or thought in the desktop
+
+As the Capturer, when something is worth keeping, I want one visible place for facts and thoughts,
+so that not knowing the vocabulary never means losing the thought.
+
+*Role:* Capturer · *Journey:* J16.3 · *Spec:* §2.1, §3.5, §8.5 · *Status:* **implemented**
+
+```
+Given  an initialized workspace
+When   the owner selects a subject, vocabulary term and typed value
+Then   the verbalization, axiom id, Manchester rendering and resolved annotations are previewed
+And    cancelling leaves the journal sequence unchanged
+When   Commit fact is activated once
+Then   exactly one atomic bundle is committed and duplicate activation cannot append another
+When   Save note is activated with a thought
+Then   one stable note block is committed and is immediately searchable
+```
+
+### US-43 — Complete the daily loop in one native window
+
+As the Learner, when I open Noesis for the day, I want agenda, search and review to stay connected,
+so that orientation does not become a tour of command names.
+
+*Role:* Learner, Curator · *Journey:* J16.2, J16.4, J16.5 · *Spec:* §2.1, §4, §5.2 · *Status:* **implemented**
+
+```
+Given  due agenda and learning items plus a named entity
+When   the Today surface opens
+Then   due work is shown and every empty collection states that it is empty
+When   search selects the entity
+Then   its current name, facts, states, belief and actionable identifiers are shown
+When   Learn asks a question
+Then   the answer remains hidden until submission and the durable review result is shown
+```
+
 ---
 
 ## 6. Friction ledger
@@ -1020,7 +1090,7 @@ Every friction identified above, with its root cause and status. **Open** means 
 | **F9** | No machine-readable output | J4, J7 | `Render` targets a terminal exclusively | **Open** — US-20 |
 | **F10** | Two grammars for one relationship (`assert` vs `relationship-add`) | J10.3 | Reified records and direct assertions both model §7.1 relationships; no stated rule for choosing | **Open** — needs a design decision before a story |
 | **F11** | `check` is manual | J1.5, J6.4 | Consistency is enforced at commit; policy and profile findings are only produced on demand | **Accepted** — commit-time consistency already fails closed (`DESIGN.md` invariant 2). Surfacing advisory findings automatically would add output to every command; the Curator asks when curating |
-| **F12** | Capture cannot happen away from the terminal | all | No mobile or web surface (§2) | **Accepted** — local-first, single-device MVP. §10's sync is unbuilt by decision, not oversight |
+| **F12** | The daily loop requires translating intentions into terminal commands | J1–J4, J11, J16 | The CLI was the only implemented owner surface | **Closed** in 0.3 — J16/US-41–US-43 provide the GNOME daily loop. Mobile and web capture remain out of scope |
 | **F13** | No latency evidence for §10's budgets | J2, J3 | Nothing measures capture round-trip or review submit | **Accepted for now** — the budgets bind the LLM-backed capture path that does not exist yet. Revisit when it does |
 | **F14** | Re-extracting from a source means supplying the text again | J14.2 | §8.5.4 keeps no copy of the text | **Accepted** — the direct cost of the retention rule. The alternative is holding the copyrighted text the rule exists to avoid holding, and the digest at least makes "is this the same text?" answerable |
 | **F15** | Comprehension questions cannot go stale | J14.6 | §4.1 detects staleness from source axioms; an open comprehension question has only a reference | **Accepted** — regenerating requires the text, which is not kept. Recorded as a deliberate departure rather than left to be discovered when a question outlives its accuracy |
@@ -1131,3 +1201,9 @@ Dated, numbered, and appended — never rewritten. A decision that reverses an e
   states, while the length of the *current* key is what this decision governs. Rebalancing was
   rejected for a reason pruning does not fix either — it emits a `state.changed` burst for every
   block in the note, which is a false signal to §4.1 whether or not the states are later pruned.
+- **PD-09 (2026-08-01) — Revisit PD-03 for the desktop, not for sync.** F12 was accepted while every
+  non-terminal surface implied a web/mobile client and the synchronization boundary it would need.
+  A local GNOME client changes that premise: it can remove shell grammar from the daily loop while
+  retaining the single-device, local-owner boundary. The first release is therefore GTK 4 and
+  libadwaita, covers only J16, and shares application services with the CLI. Flatpak, web, mobile,
+  background notifications and sync remain outside the decision.
