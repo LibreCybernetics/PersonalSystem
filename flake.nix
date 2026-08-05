@@ -252,15 +252,31 @@
               touch "$out"
             '';
 
+        checks.github-actions =
+          pkgs.runCommand "github-actions"
+            {
+              nativeBuildInputs = [
+                pkgs.actionlint
+                pkgs.shellcheck
+              ];
+            }
+            ''
+              actionlint ${./.github/workflows/ci.yml} ${./.github/workflows/mutation.yml}
+              touch "$out"
+            '';
+
         devShells.default = pkgs.mkShell {
           packages = [
+            pkgs.actionlint
             jdk
             sbt2
             pkgs.coursier
+            pkgs.jq
             pkgs.scala-cli
             pkgs.metals
             pkgs.nixfmt
             pkgs.python3Packages.diff-cover
+            pkgs.shellcheck
             pkgs.gtk4
             pkgs.libadwaita
             pkgs.xvfb-run

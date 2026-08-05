@@ -131,15 +131,16 @@ CI fails below these statement/branch percentages:
 | `gui` | 70 | 60 |
 | aggregate | 85 | 80 |
 
-Pull requests and pushes also run `diff-cover` against the aggregate Cobertura report and require
-100% coverage of changed executable production lines. PRs compare with their base SHA; pushes use
-the previous SHA, falling back to the merge base with `origin/main` for a new or force-pushed branch.
-This line gate does not count tests, documentation or build files. Aggregate and module branch floors
-cover branch regressions because Cobertura cannot express a reliable changed-branch metric. No
-production package or executable adapter body is excluded; bodyless capability declarations are
-marked non-executable so compiler-generated abstract-method positions cannot create false misses. CI
-publishes aggregate/module HTML and XML plus the diff report as the `scoverage` artifact. Mutation
-testing remains the behavioral-adequacy gate for its six pure domain modules.
+Pull requests and pushes to the default branch also run `diff-cover` against the aggregate Cobertura
+report and require 100% coverage of changed executable production lines. PRs compare with their base
+SHA; pushes use the previous SHA, falling back to the merge base with the repository's current
+default branch for a new or force-pushed branch. This line gate does not count tests, documentation
+or build files. Aggregate and module branch floors cover branch regressions because Cobertura cannot
+express a reliable changed-branch metric. No production package or executable adapter body is
+excluded; bodyless capability declarations are marked non-executable so compiler-generated
+abstract-method positions cannot create false misses. CI publishes aggregate/module HTML and XML,
+the diff report, available MUnit XML, and Scapegoat XML as the `scoverage` artifact for 14 days.
+Mutation testing remains the behavioral-adequacy gate for its six pure domain modules.
 
 ### CLI scenarios
 
@@ -265,6 +266,15 @@ nix flake check
 The `agent-sandbox-sources` check runs ShellCheck over both shell scripts, compiles
 `nix/agent-proxy.py` as Python, and executes `nix/agent-proxy-test.py`. Changes to `flake.nix`,
 `nix/agent-session.sh`, `nix/agent-run.sh`, or the agent proxy must also run this check locally.
+The `github-actions` check runs `actionlint` over both workflow definitions with ShellCheck available
+for their embedded scripts. After changing a workflow, run it directly for faster feedback:
+
+```bash
+nix develop --command actionlint .github/workflows/ci.yml .github/workflows/mutation.yml
+```
+
+Workflow actions are pinned to immutable commit SHAs. Dependabot checks those pins weekly; retain the
+human-readable release comment when accepting an update so the reviewed version remains visible.
 
 ## Product traceability
 
@@ -309,7 +319,7 @@ nix develop --command sbt -batch \
 
 The module prefix is `logic`, `journal`, `reasoner`, `core`, `lms`, or `vocab`, according to the
 affected module. Reports are written under `modules/<module>/target/stryker4s-report`. CI runs those
-six modules independently and retains the HTML and JSON reports as artifacts.
+six modules independently and retains the HTML and JSON reports as artifacts for 14 days.
 
 **All six modules score 100%, and a change that drops any of them below that fails CI.** The
 `conformance` module is deliberately not among them — see [Conformance testing](#conformance-testing).
@@ -358,10 +368,11 @@ a wrong value instead of not returning.
 around its call — `prefix + midpoint(rest)` — is not in tail position, and the annotation is a
 compile error rather than a fix. Where an accumulator *can* be threaded through to make it tail
 recursive, the annotation converts the overflow into an infinite loop, which Stryker4s records as
-`Timeout`. That counts as detected and passes the CI gate, which fails only on `Survived` and
-`NoCoverage` (`.github/workflows/mutation.yml`). It is still the worse outcome: the mutant costs a
-full timeout instead of failing in milliseconds, and "the run hung" is weaker evidence than "an
-assertion caught a wrong answer". Reach for it only when a function genuinely must recurse.
+`Timeout`. That counts as detected and passes the mutation-score gate, which fails only on
+`Survived` and `NoCoverage` (`.github/workflows/mutation.yml`). It is still the worse outcome: the
+mutant costs a full timeout instead of failing in milliseconds, and "the run hung" is weaker
+evidence than "an assertion caught a wrong answer". Reach for it only when a function genuinely must
+recurse.
 
 The better fix is to make termination structural, so that no mutation of a guard can affect it:
 
@@ -381,11 +392,17 @@ the mutation score has quietly stopped measuring that function.
 
 ## Continuous integration and reporting
 
-The ordinary `CI` workflow runs the instrumented clean compile under Xvfb, all ten explicit suite
-tasks, module/aggregate coverage floors, 100% changed-line coverage, the packaged desktop smoke, and
-`nix flake check` on every branch push and pull request. It retains the coverage and diff reports as
-an artifact. The `Mutation testing` workflow
-also runs on every branch push and can be started manually; its module matrix does not fail fast.
+On every pull request and push to `main`, the ordinary `CI` workflow runs three independent jobs: the
+instrumented clean compile under Xvfb with all ten explicit suite tasks, module/aggregate coverage
+floors and 100% changed-line coverage; the packaged desktop smoke; and `nix flake check`. The stable
+`CI gate` check fails unless all three pass. Its 14-day artifact retains available test, static
+analysis, coverage and diff reports even when an earlier test step fails.
+
+The `Mutation testing` workflow runs its complete six-module matrix on every pull request and push to
+`main`, and it can be started manually. The matrix does not fail fast, and the stable `Mutation gate`
+check fails unless every module passes. A newer commit for the same pull request or branch cancels
+obsolete automatic work. Configure the protected-branch ruleset to require `CI gate` and `Mutation
+gate`; use these stable summaries rather than individual jobs or matrix entries.
 
 Verification reports contain:
 
