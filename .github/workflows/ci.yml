@@ -39,6 +39,7 @@ jobs:
         run: >-
           nix develop --command sbt -batch
           "clean;
+          coverage;
           compile;
           logic/testOnly dev.librecybernetics.noesis.logic.*;
           journal/testOnly dev.librecybernetics.noesis.journal.*;
@@ -49,7 +50,19 @@ jobs:
           app/testOnly dev.librecybernetics.noesis.app.*;
           cli/testOnly dev.librecybernetics.noesis.cli.*;
           gui/testOnly dev.librecybernetics.noesis.gui.*;
-          conformance/testOnly dev.librecybernetics.noesis.conformance.*"
+          conformance/testOnly dev.librecybernetics.noesis.conformance.*;
+          coverageAggregate;
+          coverageOff"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scoverage
+          path: |
+            target/out/jvm/scala-*/noesis/scoverage-report
+            target/out/jvm/scala-*/noesis/coverage-report
+          if-no-files-found: warn
 
       - name: Smoke test GNOME widget lifecycle
         run: >-

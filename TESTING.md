@@ -8,8 +8,9 @@ testing principles these practices implement.
 ## Toolchain and suite layout
 
 Checks run in the development shell pinned by `flake.nix` (Scala 3.8.4, sbt 2.0.4, and JDK 25).
-The build supplies MUnit and MUnit Cats Effect to every module. Pure suites extend `FunSuite`;
-effectful, concurrent, or filesystem-backed suites extend `CatsEffectSuite`.
+The build supplies MUnit and MUnit Cats Effect to every module, and sbt-scoverage instruments
+production sources when the `coverage` command enables it. Pure suites extend `FunSuite`; effectful,
+concurrent, or filesystem-backed suites extend `CatsEffectSuite`.
 
 Tests live beside their owning module under `modules/<module>/src/test/scala`:
 
@@ -60,6 +61,7 @@ test-bearing module:
 ```bash
 nix develop --command sbt -batch \
   "clean;
+  coverage;
   compile;
   logic/testOnly dev.librecybernetics.noesis.logic.*;
   journal/testOnly dev.librecybernetics.noesis.journal.*;
@@ -70,12 +72,38 @@ nix develop --command sbt -batch \
   app/testOnly dev.librecybernetics.noesis.app.*;
   cli/testOnly dev.librecybernetics.noesis.cli.*;
   gui/testOnly dev.librecybernetics.noesis.gui.*;
-  conformance/testOnly dev.librecybernetics.noesis.conformance.*"
+  conformance/testOnly dev.librecybernetics.noesis.conformance.*;
+  coverageAggregate;
+  coverageOff"
 ```
 
 A plain `sbt test` result is insufficient evidence that every suite ran. sbt 2 executes tests
 incrementally and can report `Total 0` for an unchanged module. The explicit `testOnly` tasks above
 produce visible results from every selected suite.
+
+### Coverage measurement
+
+The full run above measures statement and branch coverage over every module with production sources.
+`conformance` has no production source of its own, but its suites still execute against and contribute
+measurements for the instrumented modules they exercise. The aggregate report is the repository-wide
+measurement; no package or generated owner adapter is excluded.
+
+sbt-scoverage writes the aggregate reports beneath the root project's sbt 2 output directory:
+
+- HTML: `target/out/jvm/scala-3.8.4/noesis/scoverage-report/index.html`
+- Native XML: `target/out/jvm/scala-3.8.4/noesis/scoverage-report/scoverage.xml`
+- Cobertura XML: `target/out/jvm/scala-3.8.4/noesis/coverage-report/cobertura.xml`
+
+`coverageAggregate` reads the subprojects' measurements directly. To inspect one module after the
+full run, execute `<module>/coverageReport`; its reports use the corresponding
+`target/out/jvm/scala-3.8.4/noesis-<module>/` directory. The `coverage` setting is sticky within one
+sbt session, so the canonical command turns it off after generating the report. Start a later
+non-coverage build with `clean` before packaging so instrumented class files cannot become an
+artifact.
+
+CI publishes the aggregate HTML and XML reports as the `scoverage` artifact. Coverage is currently a
+measurement, not a minimum-percentage gate; mutation testing remains the behavioral adequacy gate for
+its six-module matrix.
 
 ### CLI scenarios
 
@@ -317,16 +345,17 @@ the mutation score has quietly stopped measuring that function.
 
 ## Continuous integration and reporting
 
-The ordinary `CI` workflow runs the clean compile, all ten explicit suite tasks, the Xvfb desktop
-smoke, and
-`nix flake check` on every branch push. The `Mutation testing` workflow also runs on every branch
-push and can be started manually; its module matrix does not fail fast.
+The ordinary `CI` workflow runs the instrumented clean compile, all ten explicit suite tasks, the
+aggregate coverage report, the Xvfb desktop smoke, and `nix flake check` on every branch push. It
+retains the aggregate HTML and XML coverage reports as an artifact. The `Mutation testing` workflow
+also runs on every branch push and can be started manually; its module matrix does not fail fast.
 
 Verification reports contain:
 
 - Test counts from the command output of that run rather than documentation or source scanning.
 - The exact module tasks that ran.
 - Every failure and every relevant skipped check, together with its output or reason.
+- For coverage measurement, aggregate statement and branch rates plus the report location.
 - For mutation testing, the affected module's score and report location.
 - Any specification/implementation disagreement as a finding rather than an implicit change to
   intended behavior.

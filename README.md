@@ -173,8 +173,9 @@ records the conventions the owner-facing surface follows.
 ## Development
 
 The development toolchain comes from `flake.nix`; dependencies and compiler configuration live in
-`build.sbt`. See [TESTING.md](TESTING.md) for the test suites, exact full-run command, static-analysis
-and mutation-testing gates, CI behavior, and the evidence required for each kind of change.
+`build.sbt`. See [TESTING.md](TESTING.md) for the test suites, exact full-run command, scoverage
+reports, static-analysis and mutation-testing gates, CI behavior, and the evidence required for each
+kind of change.
 
 ## Isolated coding agents
 

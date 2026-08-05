@@ -17,6 +17,7 @@ Delete the product section only if nothing the owner can see changes. "It is onl
 reading the source. -->
 
 - **Suites run and results:**
+- **Statement / branch coverage and report:**
 - **Mutation score** (affected modules):
 - **Launcher transcript** for the journey step, checked against the story's acceptance criteria:
 
