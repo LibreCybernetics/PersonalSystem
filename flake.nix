@@ -286,10 +286,12 @@
           LD_LIBRARY_PATH = lib.makeLibraryPath gtkLibraries;
 
           shellHook = ''
-            echo "Noesis dev shell — sbt $(sbt --script-version 2>/dev/null || echo 2.0.4), JDK ${jdk.version}"
-            echo "  see TESTING.md    run explicit test suites and verification"
-            echo "  sbt cli/run --help  exercise the CLI"
-            echo "  nix run .#gui       launch the GNOME application"
+            {
+              echo "Noesis dev shell — sbt $(sbt --script-version 2>/dev/null || echo 2.0.4), JDK ${jdk.version}"
+              echo "  see TESTING.md    run explicit test suites and verification"
+              echo "  sbt cli/run --help  exercise the CLI"
+              echo "  nix run .#gui       launch the GNOME application"
+            } >&2
           '';
         };
 

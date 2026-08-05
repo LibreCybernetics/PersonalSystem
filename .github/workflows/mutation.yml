@@ -72,6 +72,10 @@ jobs:
           alive="$(nix develop --command jq -r \
             '[.files[].mutants[] | select(.status == "Survived" or .status == "NoCoverage")] | length' \
             "$report")"
+          if [[ ! "$alive" =~ ^[0-9]+$ ]]; then
+            echo "mutation report produced a non-numeric alive count: $alive" >&2
+            exit 1
+          fi
           if [ "$alive" -eq 0 ]; then
             echo "all mutants killed"
           else
