@@ -19,12 +19,25 @@ import org.gnome.gtk.{Align, Box, Button, CheckButton, Entry, Label, Orientation
 import dev.librecybernetics.noesis.app.{EntityView, SearchHit}
 import dev.librecybernetics.noesis.lms.AnswerSpec
 
+/** Stable, display-independent evidence emitted by the real GTK renderer (TESTING, GUI scenarios). */
+private[gui] final case class DesktopSnapshot(
+    surface: String,
+    agenda: String,
+    preview: String,
+    review: String,
+    search: String,
+    entity: String,
+    feedback: String,
+    commitEnabled: Boolean,
+    answerEnabled: Boolean
+)
+
 /** A thin GTK renderer: widgets emit Events, while all state transitions remain in [[Update]]. */
 final class DesktopView(
     application: org.gnome.adw.Application,
     workspacePath: String,
     dispatch: Event => Unit
-):
+) extends GuiView:
   val window = ApplicationWindow(application)
   window.setTitle("Noesis")
   window.setDefaultSize(960, 680)
@@ -64,6 +77,19 @@ final class DesktopView(
 
   def present(): Unit = window.present()
 
+  private[gui] def snapshot: DesktopSnapshot =
+    DesktopSnapshot(
+      Option(stack.getVisibleChildName).getOrElse(""),
+      agendaLabel.getText,
+      previewLabel.getText,
+      reviewLabel.getText,
+      searchLabel.getText,
+      entityLabel.getText,
+      feedbackLabel.getText,
+      commitButton.getSensitive,
+      answerButton.getSensitive
+    )
+
   def render(model: Model): Unit =
     workInFlight = model.busy
     stack.setVisibleChildName(surfaceName(model.surface))
@@ -96,6 +122,22 @@ final class DesktopView(
       lastFeedback = model.feedback
 
   private def build(): Unit =
+    identify(initializeButton, "gui:first-run:start")
+    identify(noteEntry, "gui:today:note")
+    identify(saveNoteButton, "gui:today:save-note")
+    identify(subjectEntry, "gui:capture-fact:subject")
+    identify(propertyEntry, "gui:capture-fact:property")
+    identify(valueEntry, "gui:capture-fact:value")
+    identify(previewButton, "gui:capture-fact:preview")
+    identify(commitButton, "gui:capture-fact:commit")
+    identify(cancelFactButton, "gui:capture-fact:cancel")
+    identify(answerEntry, "gui:learn:answer")
+    identify(answerButton, "gui:learn:submit")
+    identify(refreshReviewButton, "gui:learn:refresh")
+    identify(searchEntry, "gui:search:query")
+    identify(searchButton, "gui:search:submit")
+    identify(entityEntry, "gui:search:entity")
+    identify(entityButton, "gui:search:open-entity")
     val header = HeaderBar()
     val title = Label("Noesis")
     title.addCssClass("title")
@@ -279,6 +321,9 @@ final class DesktopView(
     label.setYalign(0.0f)
     label.setWrap(true)
     label
+
+  /** GTK widget names are stable automation/accessibility handles, not translated labels. */
+  private def identify(widget: gtk.Widget, id: String): Unit = widget.setName(id)
 
   private def factDraft(): FactDraft =
     FactDraft(subjectEntry.getText, propertyEntry.getText, valueEntry.getText, newSubject.getActive)

@@ -3,14 +3,15 @@ name: Mutation testing
 on:
   push:
     branches:
-      - "**"
+      - main
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: mutation-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -32,20 +33,20 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
 
       - name: Cache sbt dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~/.cache/coursier
             ~/.sbt
-          key: ${{ runner.os }}-sbt-${{ hashFiles('build.sbt', 'project/build.properties', 'project/plugins.sbt') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-sbt-${{ hashFiles('build.sbt', 'project/build.properties', 'project/plugins.sbt', 'flake.nix', 'flake.lock') }}
           restore-keys: |
-            ${{ runner.os }}-sbt-
+            ${{ runner.os }}-${{ runner.arch }}-sbt-
 
       - name: Run mutation tests
         run: >-
@@ -62,26 +63,49 @@ jobs:
       # will accept. Every module is at 100%, so the report itself is the gate: any mutant left
       # alive or uncovered fails the build.
       - name: Require a 100% mutation score
-        run: >-
-          report="$(ls -1dt modules/${{ matrix.module }}/target/stryker4s-report/*/report.json | head -1)";
-          alive="$(nix shell nixpkgs#jq --command jq -r
-          '[.files[].mutants[] | select(.status == "Survived" or .status == "NoCoverage")] | length'
-          "$report")";
+        run: |
+          report="$(find modules/${{ matrix.module }}/target/stryker4s-report \
+            -mindepth 2 -maxdepth 2 -type f -name report.json -printf '%T@ %p\n' \
+            | sort -nr \
+            | sed -n '1s/^[^ ]* //p')"
+          test -n "$report"
+          alive="$(nix develop --command jq -r \
+            '[.files[].mutants[] | select(.status == "Survived" or .status == "NoCoverage")] | length' \
+            "$report")"
+          if [[ ! "$alive" =~ ^[0-9]+$ ]]; then
+            echo "mutation report produced a non-numeric alive count: $alive" >&2
+            exit 1
+          fi
           if [ "$alive" -eq 0 ]; then
-            echo "all mutants killed";
+            echo "all mutants killed"
           else
-            nix shell nixpkgs#jq --command jq -r
-            '.files[].mutants[]
-             | select(.status == "Survived" or .status == "NoCoverage")
-             | "\(.mutatorName) -> \(.replacement)"'
-            "$report";
-            exit 1;
+            nix develop --command jq -r \
+              '.files[].mutants[]
+               | select(.status == "Survived" or .status == "NoCoverage")
+               | "\(.mutatorName) -> \(.replacement)"' \
+              "$report"
+            exit 1
           fi
 
       - name: Upload mutation report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: stryker4s-${{ matrix.module }}
           path: modules/${{ matrix.module }}/target/stryker4s-report
           if-no-files-found: warn
+          retention-days: 14
+
+  gate:
+    name: Mutation gate
+    if: always()
+    needs:
+      - stryker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Require every mutation job to pass
+        env:
+          STRYKER_RESULT: ${{ needs.stryker.result }}
+        run: test "$STRYKER_RESULT" = success

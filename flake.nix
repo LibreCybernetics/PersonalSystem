@@ -252,14 +252,31 @@
               touch "$out"
             '';
 
+        checks.github-actions =
+          pkgs.runCommand "github-actions"
+            {
+              nativeBuildInputs = [
+                pkgs.actionlint
+                pkgs.shellcheck
+              ];
+            }
+            ''
+              actionlint ${./.github/workflows/ci.yml} ${./.github/workflows/mutation.yml}
+              touch "$out"
+            '';
+
         devShells.default = pkgs.mkShell {
           packages = [
+            pkgs.actionlint
             jdk
             sbt2
             pkgs.coursier
+            pkgs.jq
             pkgs.scala-cli
             pkgs.metals
             pkgs.nixfmt
+            pkgs.python3Packages.diff-cover
+            pkgs.shellcheck
             pkgs.gtk4
             pkgs.libadwaita
             pkgs.xvfb-run
@@ -269,10 +286,12 @@
           LD_LIBRARY_PATH = lib.makeLibraryPath gtkLibraries;
 
           shellHook = ''
-            echo "Noesis dev shell — sbt $(sbt --script-version 2>/dev/null || echo 2.0.4), JDK ${jdk.version}"
-            echo "  see TESTING.md    run explicit test suites and verification"
-            echo "  sbt cli/run --help  exercise the CLI"
-            echo "  nix run .#gui       launch the GNOME application"
+            {
+              echo "Noesis dev shell — sbt $(sbt --script-version 2>/dev/null || echo 2.0.4), JDK ${jdk.version}"
+              echo "  see TESTING.md    run explicit test suites and verification"
+              echo "  sbt cli/run --help  exercise the CLI"
+              echo "  nix run .#gui       launch the GNOME application"
+            } >&2
           '';
         };
 

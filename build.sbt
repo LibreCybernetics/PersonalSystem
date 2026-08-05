@@ -11,6 +11,7 @@ val munitCatsEffectV = "2.1.0"
 val javaGiV = "1.0.0-RC2"
 val scapegoatV = "3.3.6"
 val wartremoverV = "3.6.1"
+val coverageCompileNonce = java.util.UUID.randomUUID().toString
 
 // Warts.unsafe includes inference/style checks whose Scala 3 implementations flag opaque-type
 // interpolation and intentional API defaults. Keep the gate on concrete correctness hazards.
@@ -38,6 +39,19 @@ val wartremoverChecks = Seq(
 )
 
 lazy val commonSettings = Seq(
+  // sbt 2 caches tasks by inputs even when their product is a filesystem side effect. Cleaning must
+  // always remove the previous instrumentation and measurement directories, or an instrumented
+  // class can be restored without the directory its scoverage runtime writes into.
+  clean := Def.uncached {
+    IO.delete(target.value)
+  },
+  // scoverage's metadata is not part of sbt 2's cached class product. `reload` gives each canonical
+  // coverage run one stable nonce: instrumentation recompiles once, while ordinary builds cache.
+  Compile / scalacOptions ++= {
+    if (coverageEnabled.value)
+      Seq(s"-Xmacro-settings:noesis-coverage-run=$coverageCompileNonce")
+    else Nil
+  },
   scalacOptions ++= Seq(
     "-deprecation",
     "-feature",
@@ -80,11 +94,23 @@ lazy val commonSettings = Seq(
   ),
 )
 
+/** Coverage floors preserve the already strong domain suites while making adapter debt explicit.
+  *
+  * Changed executable lines are gated separately in CI; these totals keep newly added branches and
+  * denominator growth from hiding behind the diff-only line check (DESIGN, Testing principles).
+  */
+def coverageGate(statements: Double, branches: Double) = Seq(
+  coverageMinimumStmtTotal := statements,
+  coverageMinimumBranchTotal := branches,
+  coverageFailOnMinimum := true
+)
+
 // The formal semantic language (SPEC §3.1): identifiers, literals, OWL-style axioms, annotations,
 // temporal statements, and their stable serialized representation.
 lazy val logic = project
   .in(file("modules/logic"))
   .settings(commonSettings)
+  .settings(coverageGate(96.0, 98.0))
   .settings(
     name := "noesis-logic",
     libraryDependencies ++= Seq(
@@ -101,6 +127,7 @@ lazy val journal = project
   .in(file("modules/journal"))
   .dependsOn(logic)
   .settings(commonSettings)
+  .settings(coverageGate(95.0, 90.0))
   .settings(
     name := "noesis-journal",
     libraryDependencies ++= Seq(
@@ -119,6 +146,7 @@ lazy val reasoner = project
   .in(file("modules/reasoner"))
   .dependsOn(logic)
   .settings(commonSettings)
+  .settings(coverageGate(95.0, 93.0))
   .settings(
     name := "noesis-reasoner",
     libraryDependencies ++= Seq(
@@ -134,6 +162,7 @@ lazy val core = project
   .in(file("modules/core"))
   .dependsOn(logic, journal, reasoner)
   .settings(commonSettings)
+  .settings(coverageGate(93.0, 96.0))
   .settings(
     name := "noesis-core",
     libraryDependencies ++= Seq(
@@ -152,6 +181,7 @@ lazy val lms = project
   .in(file("modules/lms"))
   .dependsOn(logic, reasoner, core % "compile->compile;test->test")
   .settings(commonSettings)
+  .settings(coverageGate(95.0, 92.0))
   .settings(name := "noesis-lms")
 
 // Vocabulary modules (SPEC §5–§8): core upper ontology, crm:, ll:, vf:.
@@ -159,6 +189,7 @@ lazy val vocab = project
   .in(file("modules/vocab"))
   .dependsOn(logic, reasoner, core % "compile->compile;test->test", lms)
   .settings(commonSettings)
+  .settings(coverageGate(98.0, 95.0))
   .settings(name := "noesis-vocab")
 
 // Shared owner application services: workspace replay, use cases and presentation-neutral views.
@@ -167,6 +198,7 @@ lazy val app = project
   .in(file("modules/app"))
   .dependsOn(logic, journal, reasoner, core, lms, vocab)
   .settings(commonSettings)
+  .settings(coverageGate(85.0, 80.0))
   .settings(name := "noesis-app")
 
 /** Writes an executable launcher, so the CLI can be driven directly instead of through `sbt run`.
@@ -182,6 +214,7 @@ lazy val cli = project
   .in(file("modules/cli"))
   .dependsOn(logic, journal, reasoner, core, lms, vocab, app)
   .settings(commonSettings)
+  .settings(coverageGate(70.0, 60.0))
   .settings(
     name := "noesis-cli",
     libraryDependencies ++= Seq(
@@ -227,6 +260,7 @@ lazy val gui = project
   .in(file("modules/gui"))
   .dependsOn(app)
   .settings(commonSettings)
+  .settings(coverageGate(70.0, 60.0))
   .settings(
     name := "noesis-gui",
     libraryDependencies ++= Seq(
@@ -238,6 +272,9 @@ lazy val gui = project
       "--enable-native-access=ALL-UNNAMED",
       "-Djava.awt.headless=true"
     ),
+    // Each suite owns a process-global GLib default application; concurrent suites can redirect
+    // activation and quit callbacks to the wrong window, making a callback assertion vacuous.
+    Test / parallelExecution := false,
     guiLauncher := Def.uncached {
       val converter = fileConverter.value
       val classpath = (Runtime / fullClasspath).value
@@ -298,5 +335,11 @@ lazy val root = project
   .aggregate(logic, journal, reasoner, core, lms, vocab, app, cli, gui, conformance)
   .settings(
     name := "noesis",
-    publish / skip := true
+    publish / skip := true,
+    clean := Def.uncached {
+      IO.delete(target.value)
+    },
+    coverageMinimumStmtTotal := 85.0,
+    coverageMinimumBranchTotal := 80.0,
+    coverageFailOnMinimum := true
   )

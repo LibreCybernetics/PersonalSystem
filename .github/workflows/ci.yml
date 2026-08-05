@@ -3,42 +3,47 @@ name: CI
 on:
   push:
     branches:
-      - "**"
+      - main
+  pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: sbt tests
+  tests-and-coverage:
+    name: Tests and coverage
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
 
       - name: Cache sbt dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~/.cache/coursier
             ~/.sbt
-          key: ${{ runner.os }}-sbt-${{ hashFiles('build.sbt', 'project/build.properties', 'project/plugins.sbt') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-sbt-${{ hashFiles('build.sbt', 'project/build.properties', 'project/plugins.sbt', 'flake.nix', 'flake.lock') }}
           restore-keys: |
-            ${{ runner.os }}-sbt-
+            ${{ runner.os }}-${{ runner.arch }}-sbt-
 
       - name: Run static analysis and all test suites
         run: >-
-          nix develop --command sbt -batch
-          "clean;
+          nix develop --command xvfb-run -a sbt -batch
+          "reload;
+          clean;
+          coverage;
           compile;
           logic/testOnly dev.librecybernetics.noesis.logic.*;
           journal/testOnly dev.librecybernetics.noesis.journal.*;
@@ -49,11 +54,122 @@ jobs:
           app/testOnly dev.librecybernetics.noesis.app.*;
           cli/testOnly dev.librecybernetics.noesis.cli.*;
           gui/testOnly dev.librecybernetics.noesis.gui.*;
-          conformance/testOnly dev.librecybernetics.noesis.conformance.*"
+          conformance/testOnly dev.librecybernetics.noesis.conformance.*;
+          coverageOff"
+
+      # Keep each report in a separate sbt invocation. sbt command sequences continue after a task
+      # error, so a final successful coverageOff could otherwise hide a failed coverage floor.
+      - name: Generate reports and enforce coverage floors
+        run: |
+          nix develop --command sbt -batch coverageAggregate
+          nix develop --command sbt -batch logic/coverageReport
+          nix develop --command sbt -batch journal/coverageReport
+          nix develop --command sbt -batch reasoner/coverageReport
+          nix develop --command sbt -batch core/coverageReport
+          nix develop --command sbt -batch lms/coverageReport
+          nix develop --command sbt -batch vocab/coverageReport
+          nix develop --command sbt -batch app/coverageReport
+          nix develop --command sbt -batch cli/coverageReport
+          nix develop --command sbt -batch gui/coverageReport
+
+      - name: Require coverage for changed production lines
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            coverage_base="$PR_BASE"
+          else
+            coverage_base="$PUSH_BASE"
+          fi
+          if [[ -z "$coverage_base" || "$coverage_base" =~ ^0+$ ]] || \
+             ! git cat-file -e "$coverage_base^{commit}"; then
+            coverage_base="$(git merge-base HEAD "origin/$DEFAULT_BRANCH")"
+          fi
+          git diff --unified=0 "$coverage_base"...HEAD > target/coverage.diff
+          cobertura="$(find target/out -path '*/noesis/coverage-report/cobertura.xml' -print -quit)"
+          test -n "$cobertura"
+          nix develop --command diff-cover "$cobertura" \
+            --diff-file target/coverage.diff \
+            --fail-under 100 \
+            --format html:target/diff-cover.html \
+            --format json:target/diff-cover.json \
+            --show-uncovered
+
+      - name: Upload test, analysis, and coverage reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: scoverage
+          path: |
+            target/out/jvm/scala-*/noesis*/test-reports
+            target/out/jvm/scala-*/noesis*/scapegoat
+            target/out/jvm/scala-*/noesis*/scoverage-report
+            target/out/jvm/scala-*/noesis*/coverage-report
+            target/diff-cover.*
+          if-no-files-found: warn
+          retention-days: 14
+
+  gui-smoke:
+    name: Packaged GUI smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
+
+      - name: Cache sbt dependencies
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt
+          key: ${{ runner.os }}-${{ runner.arch }}-sbt-${{ hashFiles('build.sbt', 'project/build.properties', 'project/plugins.sbt', 'flake.nix', 'flake.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-sbt-
 
       - name: Smoke test GNOME widget lifecycle
         run: >-
           nix develop --command xvfb-run -a nix run .#gui -- --smoke
 
-      - name: Check Nix and isolated-agent sources
+  nix-check:
+    name: Nix and repository checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
+
+      - name: Check Nix, workflows, and isolated-agent sources
         run: nix flake check
+
+  gate:
+    name: CI gate
+    if: always()
+    needs:
+      - tests-and-coverage
+      - gui-smoke
+      - nix-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Require every CI job to pass
+        env:
+          GUI_SMOKE_RESULT: ${{ needs.gui-smoke.result }}
+          NIX_CHECK_RESULT: ${{ needs.nix-check.result }}
+          TESTS_RESULT: ${{ needs.tests-and-coverage.result }}
+        run: |
+          test "$TESTS_RESULT" = success
+          test "$GUI_SMOKE_RESULT" = success
+          test "$NIX_CHECK_RESULT" = success

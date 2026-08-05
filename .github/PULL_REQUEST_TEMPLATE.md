@@ -17,6 +17,8 @@ Delete the product section only if nothing the owner can see changes. "It is onl
 reading the source. -->
 
 - **Suites run and results:**
+- **Statement / branch coverage and report:**
+- **Changed production-line coverage (`diff-cover`, required 100%):**
 - **Mutation score** (affected modules):
 - **Launcher transcript** for the journey step, checked against the story's acceptance criteria:
 
@@ -27,6 +29,7 @@ reading the source. -->
 
 - [ ] `nix flake check` passes
 - [ ] `cli/testOnly dev.librecybernetics.noesis.cli.*` passes, including `ProductTraceSuite`
+- [ ] Module and aggregate coverage floors pass; changed executable production lines are 100% covered
 - [ ] New failure paths follow the error rubric in `UX.md` §4
 - [ ] New commands appear in a `PRODUCT.md` journey and follow the grammar in `UX.md` §2
 - [ ] Documentation and implementation agree in both directions (`AGENTS.md`)
