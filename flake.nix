@@ -260,6 +260,7 @@
             pkgs.scala-cli
             pkgs.metals
             pkgs.nixfmt
+            pkgs.python3Packages.diff-cover
             pkgs.gtk4
             pkgs.libadwaita
             pkgs.xvfb-run

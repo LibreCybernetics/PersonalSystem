@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "**"
+  pull_request:
 
 permissions:
   contents: read
@@ -21,6 +22,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
@@ -37,8 +40,9 @@ jobs:
 
       - name: Run static analysis and all test suites
         run: >-
-          nix develop --command sbt -batch
-          "clean;
+          nix develop --command xvfb-run -a sbt -batch
+          "reload;
+          clean;
           coverage;
           compile;
           logic/testOnly dev.librecybernetics.noesis.logic.*;
@@ -51,8 +55,47 @@ jobs:
           cli/testOnly dev.librecybernetics.noesis.cli.*;
           gui/testOnly dev.librecybernetics.noesis.gui.*;
           conformance/testOnly dev.librecybernetics.noesis.conformance.*;
-          coverageAggregate;
           coverageOff"
+
+      # Keep each report in a separate sbt invocation. sbt command sequences continue after a task
+      # error, so a final successful coverageOff could otherwise hide a failed coverage floor.
+      - name: Generate reports and enforce coverage floors
+        run: |
+          nix develop --command sbt -batch coverageAggregate
+          nix develop --command sbt -batch logic/coverageReport
+          nix develop --command sbt -batch journal/coverageReport
+          nix develop --command sbt -batch reasoner/coverageReport
+          nix develop --command sbt -batch core/coverageReport
+          nix develop --command sbt -batch lms/coverageReport
+          nix develop --command sbt -batch vocab/coverageReport
+          nix develop --command sbt -batch app/coverageReport
+          nix develop --command sbt -batch cli/coverageReport
+          nix develop --command sbt -batch gui/coverageReport
+
+      - name: Require coverage for changed production lines
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            coverage_base="$PR_BASE"
+          else
+            coverage_base="$PUSH_BASE"
+          fi
+          if [[ -z "$coverage_base" || "$coverage_base" =~ ^0+$ ]] || \
+             ! git cat-file -e "$coverage_base^{commit}"; then
+            coverage_base="$(git merge-base HEAD origin/main)"
+          fi
+          git diff --unified=0 "$coverage_base"...HEAD > target/coverage.diff
+          cobertura="$(find target/out -path '*/noesis/coverage-report/cobertura.xml' -print -quit)"
+          test -n "$cobertura"
+          nix develop --command diff-cover "$cobertura" \
+            --diff-file target/coverage.diff \
+            --fail-under 100 \
+            --format html:target/diff-cover.html \
+            --format json:target/diff-cover.json \
+            --show-uncovered
 
       - name: Upload coverage report
         if: always()
@@ -60,8 +103,9 @@ jobs:
         with:
           name: scoverage
           path: |
-            target/out/jvm/scala-*/noesis/scoverage-report
-            target/out/jvm/scala-*/noesis/coverage-report
+            target/out/jvm/scala-*/noesis*/scoverage-report
+            target/out/jvm/scala-*/noesis*/coverage-report
+            target/diff-cover.*
           if-no-files-found: warn
 
       - name: Smoke test GNOME widget lifecycle

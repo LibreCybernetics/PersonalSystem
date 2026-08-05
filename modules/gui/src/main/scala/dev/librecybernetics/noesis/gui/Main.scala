@@ -19,6 +19,7 @@ object Main:
         val (session, closeSession) = OwnerSession.open(root).allocated.unsafeRunSync()
         val application = Application("dev.librecybernetics.Noesis")
         var controller: Option[ReactiveController] = None
+        var closeController: IO[Unit] = IO.unit
         val _ = application.onActivate: () =>
           controller match
             case Some(active) => active.present()
@@ -28,14 +29,16 @@ object Main:
                   session,
                   dispatcher,
                   dispatch => DesktopView(application, root.toString, dispatch)
-                )
+              )
                 .unsafeRunSync()
               controller = Some(active)
-              active.start.unsafeRunSync()
+              val allocated = active.start.allocated.unsafeRunSync()
+              closeController = allocated._2
               active.present()
         try
           val _ = application.run(Array.empty[String])
         finally
+          closeController.unsafeRunSync()
           closeSession.unsafeRunSync()
           closeDispatcher.unsafeRunSync()
 

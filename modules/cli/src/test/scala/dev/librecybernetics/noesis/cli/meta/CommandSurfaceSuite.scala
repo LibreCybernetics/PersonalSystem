@@ -9,7 +9,7 @@ import munit.FunSuite
   */
 class CommandSurfaceSuite extends FunSuite:
 
-  private val surface = CommandSurface.ofModule("dev.librecybernetics.noesis.cli.Main", "main")
+  private val surface = CommandSurface.ofModule("dev.librecybernetics.noesis.cli.Main", "commandInput")
 
   test("the surface is derived, and every declared subcommand is composed into the entry point") {
     assert(surface.commands.nonEmpty, "no commands were derived")

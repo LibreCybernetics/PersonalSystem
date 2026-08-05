@@ -23,18 +23,14 @@ final class Workspace(
     val root: Path,
     val kb: KnowledgeBase[IO],
     val engine: LearningEngine[IO],
-    val reviewLogPath: Path
+    val reviewLogPath: Path,
+    private[app] val uuidGen: UUIDGen[IO]
 ):
   def recordReview(review: Review): IO[Unit] =
     JsonLines.append(reviewLogPath, List(review))
 
 object Workspace:
   val defaultRoot: Path = Path(sys.props.getOrElse("user.home", ".")) / ".noesis"
-
-  given SecureRandom[IO] = SecureRandom.javaSecuritySecureRandom[IO].unsafeRunSync()(using
-    cats.effect.unsafe.implicits.global
-  )
-  given UUIDGen[IO] = UUIDGen.fromSecureRandom[IO]
 
   def journalPath(root: Path): Path = root / "journal.jsonl"
   def reviewsPath(root: Path): Path = root / "reviews.jsonl"
@@ -43,6 +39,14 @@ object Workspace:
   val config: KbConfig = Modules.configure(KbConfig.default, modules)
 
   def open(root: Path): IO[Workspace] =
+    SecureRandom.javaSecuritySecureRandom[IO].flatMap: random =>
+      given SecureRandom[IO] = random
+      open(root, UUIDGen.fromSecureRandom[IO])
+
+  /** Testable assembly seam; UUID generation is an effect owned by the opened session, not global
+    * initialization hidden behind `unsafeRunSync` (DESIGN, Effect boundaries).
+    */
+  private[app] def open(root: Path, uuidGen: UUIDGen[IO]): IO[Workspace] =
     for
       journal <- JsonLinesJournal.open[IO](journalPath(root))
       kb <- KnowledgeBase[IO](journal, config)
@@ -51,7 +55,7 @@ object Workspace:
       _ <- engine.handle(Events.replay(entries))
       reviews <- JsonLines.read[IO, Review](Files[IO], reviewsPath(root))
       _ <- engine.restore(reviews)
-    yield Workspace(root, kb, engine, reviewsPath(root))
+    yield Workspace(root, kb, engine, reviewsPath(root), uuidGen)
 
   /** Installs every module ontology through the ordinary consistency-checked commit path. */
   def install(workspace: Workspace): IO[Either[CommitRejected, List[String]]] =

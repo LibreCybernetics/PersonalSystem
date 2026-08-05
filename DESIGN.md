@@ -77,16 +77,27 @@ Key implementation points:
 
 The desktop is a Model–View–Update adapter, not another service layer. `Model` contains immutable
 presentation data and no GTK object; `Update` is total and pure over `(Model, Event)` and declares
-effects as values. `ReactiveController` consumes one fs2 queue, applies transitions serially and
-interprets those effects through `OwnerSession`. Completed snapshots are scheduled onto GLib's main
-context for rendering. This makes button duplication, stale feedback and cancellation behavior
-properties of the reducer rather than timing assumptions in callbacks.
+effects as values. `Effects` interprets them through the narrow `OwnerActions` and `GuiClock`
+capabilities; the live implementations delegate to `OwnerSession` and Cats Effect time, while tests
+use deterministic interpreters. `ReactiveController` consumes one fs2 queue, applies transitions
+serially and schedules completed snapshots through `UiScheduler`; GTK/GLib are only the live view
+and scheduler interpreters. Its event-loop fiber is a `Resource`, so closing the application cancels
+both callback and external-change streams rather than abandoning a process-owned fiber. This makes
+button duplication, stale feedback, time and cancellation behavior testable properties rather than
+timing assumptions in callbacks.
 
 `OwnerSession` reopens the two logs for each effect. That preserves the CLI's cold-replay semantics
 inside a long-lived window and makes a specialist CLI write visible without shared mutable caches;
 its lightweight position stream refreshes the current Today/Learn projection after an external
 sequence or review-log change. Journal commits and review writes are uncancellable once begun, and
 the window refuses close while an owner action is in flight.
+
+The same rule applies at other adapters without making the whole application polymorphic. CLI
+parsing accepts its default date explicitly and returns the typed command algebra before execution;
+runtime tests cover every derived command leaf. Workspace UUID generation is allocated effectfully
+per owner session and can be supplied at the package boundary in tests. Pure domain modules remain
+free of these adapter capabilities, and filesystem/journal contracts continue to use disposable real
+resources rather than an in-memory imitation of persistence.
 
 ### Architectural ownership rules
 

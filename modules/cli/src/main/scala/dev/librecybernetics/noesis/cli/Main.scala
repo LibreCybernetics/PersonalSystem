@@ -340,11 +340,12 @@ object Main
     * and in the journeys. What changes is that finding the agenda no longer requires knowing which
     * module happens to own the obligation you are looking for.
     */
-  private val agenda = Opts.subcommand("agenda", "show everything due, from every module"):
-    Opts
-      .option[java.time.LocalDate]("on", "agenda date")
-      .withDefault(java.time.LocalDate.now())
-      .map(Command.Agenda.apply)
+  private def agenda(today: java.time.LocalDate) =
+    Opts.subcommand("agenda", "show everything due, from every module"):
+      Opts
+        .option[java.time.LocalDate]("on", "agenda date")
+        .withDefault(today)
+        .map(Command.Agenda.apply)
 
   private val vocabSearch = Opts.subcommand("search", "find a term by name or by how it reads"):
     Opts.argument[String]("query").map(Command.VocabSearch.apply)
@@ -543,11 +544,12 @@ object Main
   private val contactShow = Opts.subcommand("show", "show a structured contact card"):
     Opts.argument[String]("contact").map(ContactCommand.Show.apply)
 
-  private val contactDue = Opts.subcommand("due", "show due follow-ups and reminders"):
-    Opts
-      .option[java.time.LocalDate]("on", "agenda date")
-      .withDefault(java.time.LocalDate.now())
-      .map(ContactCommand.Due.apply)
+  private def contactDue(today: java.time.LocalDate) =
+    Opts.subcommand("due", "show due follow-ups and reminders"):
+      Opts
+        .option[java.time.LocalDate]("on", "agenda date")
+        .withDefault(today)
+        .map(ContactCommand.Due.apply)
 
   private val contactImport = Opts.subcommand("import", "import vCard or FOAF/RDF contacts"):
     (
@@ -564,14 +566,15 @@ object Main
       Opts.flag("include-social", "include the disclosed person-to-person social graph").orFalse
     ).mapN(ContactCommand.Export.apply)
 
-  private val contact = Opts.subcommand("contact", "personal relationship management"):
-    (
-      contactAdd orElse contactMethodAdd orElse contactAddressAdd orElse contactMethodRetire orElse
-        contactEmploymentAdd orElse contactInteractionAdd orElse contactRelationshipAdd orElse
-        contactNoteAdd orElse contactPreferenceAdd orElse contactFollowUp orElse
-        contactReminderAdd orElse contactCompanionAdd orElse contactCircleAdd orElse
-        contactGiftAdd orElse contactShow orElse contactDue orElse contactImport orElse contactExport
-    ).map(Command.Contact.apply)
+  private def contact(today: java.time.LocalDate) =
+    Opts.subcommand("contact", "personal relationship management"):
+      (
+        contactAdd orElse contactMethodAdd orElse contactAddressAdd orElse contactMethodRetire orElse
+          contactEmploymentAdd orElse contactInteractionAdd orElse contactRelationshipAdd orElse
+          contactNoteAdd orElse contactPreferenceAdd orElse contactFollowUp orElse
+          contactReminderAdd orElse contactCompanionAdd orElse contactCircleAdd orElse
+          contactGiftAdd orElse contactShow orElse contactDue(today) orElse contactImport orElse contactExport
+      ).map(Command.Contact.apply)
 
   private val noteToday = Opts.subcommand("today", "open today's page and show it"):
     Opts(NoteCommand.Today)
@@ -622,19 +625,27 @@ object Main
     Opts.argument[String]("term").map(Command.Search.apply)
 
   def main: Opts[IO[ExitCode]] =
+    commandInput(java.time.LocalDate.now()).map: input =>
+      val (root, zone, command) = input
+      run(root, zone, command)
+
+  /** Typed CLI boundary with an injected default date, so parsing can be exercised deterministically. */
+  private[cli] def commandInput(
+      today: java.time.LocalDate
+  ): Opts[(Path, ZoneId, Command)] =
     (
       rootOpt,
       zoneOpt,
       init orElse assertCmd orElse retract orElse closeState orElse supersede orElse
         show orElse query orElse entails orElse explain orElse check orElse journal orElse
-        vocab orElse agenda orElse queue orElse quiz orElse answer orElse items orElse disclose orElse loans orElse
+        vocab orElse agenda(today) orElse queue orElse quiz orElse answer orElse items orElse disclose orElse loans orElse
         exportCmd orElse asOf
-          orElse contact orElse archive orElse note orElse backlinks orElse search
-    ).mapN(run)
+          orElse contact(today) orElse archive orElse note orElse backlinks orElse search
+    ).tupled
 
   // ── Execution ─────────────────────────────────────────────────────────────
 
-  private def run(root: Path, zone: ZoneId, command: Command): IO[ExitCode] =
+  private[cli] def run(root: Path, zone: ZoneId, command: Command): IO[ExitCode] =
     command match
       case Command.Archive(archiveCommand) => runArchive(root, archiveCommand)
       case _ => Workspace.open(root).flatMap(execute(_, zone, command))

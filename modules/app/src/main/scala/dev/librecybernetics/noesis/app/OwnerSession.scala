@@ -6,6 +6,7 @@ import scala.concurrent.duration.*
 import cats.Eq
 import cats.data.NonEmptyList
 import cats.effect.{IO, Resource}
+import cats.effect.std.{SecureRandom, UUIDGen}
 import cats.syntax.all.*
 import fs2.Stream
 import fs2.io.file.Files
@@ -35,7 +36,7 @@ final case class FactInput(
 )
 
 /** The exact formal value the owner reviews; only this module can construct one. */
-final class CommitPreview private[app] (
+final class CommitPreview private[noesis] (
     val axioms: NonEmptyList[Axiom],
     val annotations: AxiomAnnotations,
     val verbalization: String,
@@ -74,11 +75,11 @@ object SessionPosition:
   * semantics in a long-lived desktop process: a specialist CLI command made while the window is
   * open is visible to the next effect without a second cache-invalidation protocol.
   */
-final class OwnerSession private (val root: fs2.io.file.Path):
+final class OwnerSession private (val root: fs2.io.file.Path, uuidGen: UUIDGen[IO]):
   private val modules = Modules.all
   private val vocabulary = Vocabulary.of(modules)
 
-  private def workspace: IO[Workspace] = Workspace.open(root)
+  private def workspace: IO[Workspace] = Workspace.open(root, uuidGen)
 
   def position: IO[SessionPosition] =
     for
@@ -158,7 +159,7 @@ final class OwnerSession private (val root: fs2.io.file.Path):
       workspace.flatMap: opened =>
         for
           state <- opened.kb.state
-          ids <- paragraphs.traverse(_ => Workspace.given_UUIDGen_IO.randomUUID.map(NoteIds.block))
+          ids <- paragraphs.traverse(_ => opened.uuidGen.randomUUID.map(NoteIds.block))
           note = NoteIds.daily(on)
           outline = Outline.of(state, note)
           planned = NotesCapture.appendAll(outline, ids, text)
@@ -301,4 +302,10 @@ final class OwnerSession private (val root: fs2.io.file.Path):
     )
 
 object OwnerSession:
-  def open(root: fs2.io.file.Path): Resource[IO, OwnerSession] = Resource.pure(OwnerSession(root))
+  def open(root: fs2.io.file.Path): Resource[IO, OwnerSession] =
+    Resource.eval(SecureRandom.javaSecuritySecureRandom[IO]).map: random =>
+      given SecureRandom[IO] = random
+      OwnerSession(root, UUIDGen.fromSecureRandom[IO])
+
+  private[app] def open(root: fs2.io.file.Path, uuidGen: UUIDGen[IO]): Resource[IO, OwnerSession] =
+    Resource.pure(OwnerSession(root, uuidGen))

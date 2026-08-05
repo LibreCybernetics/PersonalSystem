@@ -22,9 +22,9 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `core` | `ProjectionSuite`, `KnowledgeBaseSuite`, `DisclosureSuite`, `VerbalizerSuite`: replay and temporal projections, commit validation and atomicity, events, policy and disclosure, and naming/verbalization |
 | `lms` | `BeliefSuite`, `SchedulerSuite`, `ItemSuite`, `QuestionsSuite`, `LearningEngineSuite`: belief updates and decay, derived belief, retention/elucidation scheduling and exploration, item identity and answer grading, template question generation, the engine's reaction to core events plus review-log recovery, and that a question whose source fact changed is regenerated rather than asked |
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts. `FractionalIndexSuite`: sibling order keys, including that appending and prepending stay constant-size. `OutlineSuite`: the note projection, `as-of` over text, arrangement and nesting, and outlines the axiom language cannot rule out. `NotesCaptureSuite`: writing, paragraph chunking, `[[link]]` resolution against current names, and backlinks. `NoteMarkdownSuite`, `NoteEditorSuite`: the mirror, the editable buffer, and which block an edited line is. `NoteRoundTripSuite`: render, edit, plan and commit against a real knowledge base, including that an untouched buffer writes nothing. `VocabularySuite`: the browser's view of the module contract, including terms declared only in a policy or a template, and roles the shipped modules never exercise alone |
-| `app` | `OwnerSessionSuite`: workspace initialization, reviewed fact commit, durable reopen/search/entity projection and failure rendering at the shared CLI/GUI use-case boundary |
-| `cli` | `ArchiveSuite`: coordinated archive creation, checksum/replay/projection verification, restore into a fresh workspace, overwrite refusal, and tamper detection. `CommandSurfaceSuite`: derivation of the command tree from `Main`'s typed AST. `ProductTraceSuite`: traceability between that surface and [PRODUCT.md](PRODUCT.md). `ProductDocumentSuite`: the traceability rules themselves, against fixtures. `ConfirmSuite`: the vocabulary browser's rendering, including that an undeclared range is reported rather than omitted. `QuizSuite`: what the review loop shows, that the answer is withheld until it is answered, and that an ungradeable question declines rather than guessing |
-| `gui` | `UpdateSuite`: display-independent J16 interaction transitions, fail-closed confirmation and duplicate durable-action suppression. `GuiProductTraceSuite`: every finite GUI surface is named by the product journey and no shipped surface remains proposed. `DesktopSmoke`: GTK/libadwaita construction and first render under Xvfb |
+| `app` | `AssertionsSuite`: ontology-driven reference/literal typing at the structured boundary. `OwnerSessionSuite`: initialization, preview/commit rejection, durable reopen, agenda/search/entity projections, notes and links, review recording, polling, and owner failure rendering through real disposable logs |
+| `cli` | `CommandParserSuite`: runtime parsing for every command leaf derived from the typed AST, deterministic defaults, and exact boundary rejection. `CliProgramSuite`: typed command execution across queries, learning, disclosure, notes, contacts, interchange and archives in disposable workspaces. `ArchiveSuite`: checksum/replay/projection verification, restore, overwrite refusal, and tamper detection. `CommandSurfaceSuite` and product suites: derivation and documentation traceability. `ConfirmSuite` and `QuizSuite`: focused terminal rendering and review behavior |
+| `gui` | `UpdateSuite`: exhaustive display-independent MVU transitions and guards. `EffectsSuite`: deterministic owner/time interpretation and failures. `ReactiveControllerSuite`: serialization, rendering, and resource cancellation. `LiveBoundarySuite`: real owner, clock and controller interpreters over a disposable workspace. `DesktopViewSuite`: every surface and load state through the real GTK tree under Xvfb, with a stable interaction snapshot and non-vacuous activation assertion. `MainLifecycleSuite` and `DesktopSmoke`: normal and packaged GTK/libadwaita lifecycle. `GuiProductTraceSuite`: product journey traceability. GUI suites run serially because GLib's default application is process-global |
 | `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
@@ -59,8 +59,9 @@ reproduced by starting clean, compiling all ten modules, and explicitly executin
 test-bearing module:
 
 ```bash
-nix develop --command sbt -batch \
-  "clean;
+nix develop --command xvfb-run -a sbt -batch \
+  "reload;
+  clean;
   coverage;
   compile;
   logic/testOnly dev.librecybernetics.noesis.logic.*;
@@ -73,8 +74,18 @@ nix develop --command sbt -batch \
   cli/testOnly dev.librecybernetics.noesis.cli.*;
   gui/testOnly dev.librecybernetics.noesis.gui.*;
   conformance/testOnly dev.librecybernetics.noesis.conformance.*;
-  coverageAggregate;
   coverageOff"
+
+nix develop --command sbt -batch coverageAggregate
+nix develop --command sbt -batch logic/coverageReport
+nix develop --command sbt -batch journal/coverageReport
+nix develop --command sbt -batch reasoner/coverageReport
+nix develop --command sbt -batch core/coverageReport
+nix develop --command sbt -batch lms/coverageReport
+nix develop --command sbt -batch vocab/coverageReport
+nix develop --command sbt -batch app/coverageReport
+nix develop --command sbt -batch cli/coverageReport
+nix develop --command sbt -batch gui/coverageReport
 ```
 
 A plain `sbt test` result is insufficient evidence that every suite ran. sbt 2 executes tests
@@ -83,7 +94,7 @@ produce visible results from every selected suite.
 
 ### Coverage measurement
 
-The full run above measures statement and branch coverage over every module with production sources.
+The full run above measures and gates statement and branch coverage over every module with production sources.
 `conformance` has no production source of its own, but its suites still execute against and contribute
 measurements for the instrumented modules they exercise. The aggregate report is the repository-wide
 measurement; no package or generated owner adapter is excluded.
@@ -94,16 +105,41 @@ sbt-scoverage writes the aggregate reports beneath the root project's sbt 2 outp
 - Native XML: `target/out/jvm/scala-3.8.4/noesis/scoverage-report/scoverage.xml`
 - Cobertura XML: `target/out/jvm/scala-3.8.4/noesis/coverage-report/cobertura.xml`
 
-`coverageAggregate` reads the subprojects' measurements directly. To inspect one module after the
-full run, execute `<module>/coverageReport`; its reports use the corresponding
+`coverageAggregate` reads the subprojects' measurements directly. Each explicit
+`<module>/coverageReport` also enforces that module's floor; keep these as separate shell commands
+because an sbt command sequence can continue past a failed floor. Reports use the corresponding
 `target/out/jvm/scala-3.8.4/noesis-<module>/` directory. The `coverage` setting is sticky within one
 sbt session, so the canonical command turns it off after generating the report. Start a later
 non-coverage build with `clean` before packaging so instrumented class files cannot become an
-artifact.
+artifact. `clean` is deliberately uncached. The canonical command starts with `reload`, which gives
+that coverage run one stable compiler nonce. This forces one fresh instrumentation pass because sbt
+2's compile cache otherwise restores instrumented classes without scoverage's adjacent runtime
+metadata; ordinary non-coverage compilation remains cacheable.
 
-CI publishes the aggregate HTML and XML reports as the `scoverage` artifact. Coverage is currently a
-measurement, not a minimum-percentage gate; mutation testing remains the behavioral adequacy gate for
-its six-module matrix.
+CI fails below these statement/branch percentages:
+
+| Module | Statements | Branches |
+|---|---:|---:|
+| `logic` | 96 | 98 |
+| `journal` | 95 | 90 |
+| `reasoner` | 95 | 93 |
+| `core` | 93 | 96 |
+| `lms` | 95 | 92 |
+| `vocab` | 98 | 95 |
+| `app` | 85 | 80 |
+| `cli` | 70 | 60 |
+| `gui` | 70 | 60 |
+| aggregate | 85 | 80 |
+
+Pull requests and pushes also run `diff-cover` against the aggregate Cobertura report and require
+100% coverage of changed executable production lines. PRs compare with their base SHA; pushes use
+the previous SHA, falling back to the merge base with `origin/main` for a new or force-pushed branch.
+This line gate does not count tests, documentation or build files. Aggregate and module branch floors
+cover branch regressions because Cobertura cannot express a reliable changed-branch metric. No
+production package or executable adapter body is excluded; bodyless capability declarations are
+marked non-executable so compiler-generated abstract-method positions cannot create false misses. CI
+publishes aggregate/module HTML and XML plus the diff report as the `scoverage` artifact. Mutation
+testing remains the behavioral-adequacy gate for its six pure domain modules.
 
 ### CLI scenarios
 
@@ -345,9 +381,10 @@ the mutation score has quietly stopped measuring that function.
 
 ## Continuous integration and reporting
 
-The ordinary `CI` workflow runs the instrumented clean compile, all ten explicit suite tasks, the
-aggregate coverage report, the Xvfb desktop smoke, and `nix flake check` on every branch push. It
-retains the aggregate HTML and XML coverage reports as an artifact. The `Mutation testing` workflow
+The ordinary `CI` workflow runs the instrumented clean compile under Xvfb, all ten explicit suite
+tasks, module/aggregate coverage floors, 100% changed-line coverage, the packaged desktop smoke, and
+`nix flake check` on every branch push and pull request. It retains the coverage and diff reports as
+an artifact. The `Mutation testing` workflow
 also runs on every branch push and can be started manually; its module matrix does not fail fast.
 
 Verification reports contain:
