@@ -79,6 +79,21 @@ clients remain future surfaces.
 
 ---
 
+### 2.2 ScalaFX desktop client
+
+A second, equally supported Linux/Nix desktop client uses ScalaFX and OpenJFX. It implements the
+same daily owner loop, stable surface and control ids, accessible announcements, close guards and
+durable outcomes as §2.1. GTK/libadwaita remains the default desktop and may provide native adaptive
+styling that ScalaFX does not reproduce.
+
+The clients share the immutable Model–View–Update state, presentation projection, effect
+interpreters, owner session, event serialization, argument boundary and resource lifecycle. The
+ScalaFX module owns only its scene graph, JavaFX application-thread scheduler and `JFXApp3`
+lifecycle; neither toolkit type may enter the shared model or application service. GTK 3, required
+by OpenJFX's Linux Glass backend, and GTK 4 run in separate processes and native-library closures.
+
+---
+
 ## 3. Knowledge Core
 
 ### 3.1 Representation

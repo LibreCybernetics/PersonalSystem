@@ -39,6 +39,24 @@
           pango
         ];
 
+        # OpenJFX 25 uses the GTK 3 Glass backend. Keep this closure out of the Java-GI process:
+        # GTK refuses to initialize GTK 4 after GTK 3 has been loaded in one JVM.
+        javaFxLibraries = with pkgs; [
+          alsa-lib
+          fontconfig
+          freetype
+          glib
+          gtk3
+          libGL
+          libx11
+          libxext
+          libxi
+          libxrandr
+          libxrender
+          libxtst
+          pango
+        ];
+
         # nixpkgs currently ships sbt 1.x. The sbt 2.x distribution has an
         # identical layout, so overriding version + src is enough to keep nix
         # the single source of truth for the toolchain.
@@ -202,6 +220,54 @@
           cp ${./modules/gui/src/main/resources/dev.librecybernetics.Noesis.svg} \
             "$out/share/icons/hicolor/scalable/apps/dev.librecybernetics.Noesis.svg"
         '';
+
+        # The alternative desktop has its own process and desktop identity while sharing the same
+        # application services and toolkit-neutral presentation contract as the GNOME client.
+        guiScalaFxRunner = pkgs.writeShellApplication {
+          name = "noesis-gui-scalafx";
+          runtimeInputs = [
+            jdk
+            sbt2
+            pkgs.coreutils
+            pkgs.findutils
+            pkgs.xvfb-run
+          ]
+          ++ javaFxLibraries;
+          text = ''
+            export NOESIS_JAVAFX_LIBRARY_PATH=${lib.makeLibraryPath javaFxLibraries}
+            export LD_LIBRARY_PATH="$NOESIS_JAVAFX_LIBRARY_PATH"''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+            cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/noesis-gui-scalafx"
+            build_root="$cache_root/${builtins.baseNameOf self.outPath}"
+            if [ ! -f "$build_root/.source-ready" ]; then
+              mkdir -p "$build_root"
+              cp -R ${self.outPath}/. "$build_root/"
+              chmod -R u+w "$build_root"
+              touch "$build_root/.source-ready"
+            fi
+            cd "$build_root"
+            sbt -batch guiScalafx/scalaFxLauncher
+            launcher="$(find target/out -type f -name noesis-gui-scalafx -perm -u+x -print -quit)"
+            if [ -z "$launcher" ]; then
+              echo "Noesis ScalaFX did not start" >&2
+              echo "the ScalaFX GUI launcher was not produced" >&2
+              echo "run nix develop --command sbt -batch guiScalafx/scalaFxLauncher" >&2
+              exit 1
+            fi
+            exec "$launcher" "$@"
+          '';
+        };
+
+        guiScalaFx = pkgs.runCommand "noesis-gui-scalafx" { } ''
+          mkdir -p "$out/bin" "$out/share/applications" "$out/share/metainfo"
+          mkdir -p "$out/share/icons/hicolor/scalable/apps"
+          ln -s ${guiScalaFxRunner}/bin/noesis-gui-scalafx "$out/bin/noesis-gui-scalafx"
+          cp ${./modules/gui-scalafx/src/main/resources/dev.librecybernetics.Noesis.ScalaFX.desktop} \
+            "$out/share/applications/dev.librecybernetics.Noesis.ScalaFX.desktop"
+          cp ${./modules/gui-scalafx/src/main/resources/dev.librecybernetics.Noesis.ScalaFX.metainfo.xml} \
+            "$out/share/metainfo/dev.librecybernetics.Noesis.ScalaFX.metainfo.xml"
+          cp ${./modules/gui/src/main/resources/dev.librecybernetics.Noesis.svg} \
+            "$out/share/icons/hicolor/scalable/apps/dev.librecybernetics.Noesis.ScalaFX.svg"
+        '';
       in
       {
         packages = {
@@ -212,6 +278,7 @@
           claude-agent = claudeAgent;
           agent-shell = agentShell;
           inherit gui;
+          gui-scalafx = guiScalaFx;
         };
 
         apps = {
@@ -234,6 +301,10 @@
           gui = {
             type = "app";
             program = "${gui}/bin/noesis-gui";
+          };
+          gui-scalafx = {
+            type = "app";
+            program = "${guiScalaFx}/bin/noesis-gui-scalafx";
           };
         };
 
@@ -277,6 +348,7 @@
             pkgs.nixfmt
             pkgs.python3Packages.diff-cover
             pkgs.shellcheck
+            pkgs.gtk3
             pkgs.gtk4
             pkgs.libadwaita
             pkgs.xvfb-run
@@ -284,6 +356,8 @@
 
           JAVA_HOME = "${jdk}";
           LD_LIBRARY_PATH = lib.makeLibraryPath gtkLibraries;
+          NOESIS_GTK_LIBRARY_PATH = lib.makeLibraryPath gtkLibraries;
+          NOESIS_JAVAFX_LIBRARY_PATH = lib.makeLibraryPath javaFxLibraries;
 
           shellHook = ''
             {
@@ -291,6 +365,7 @@
               echo "  see TESTING.md    run explicit test suites and verification"
               echo "  sbt cli/run --help  exercise the CLI"
               echo "  nix run .#gui       launch the GNOME application"
+              echo "  nix run .#gui-scalafx  launch the ScalaFX alternative"
             } >&2
           '';
         };

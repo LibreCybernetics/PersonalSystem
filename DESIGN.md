@@ -17,7 +17,8 @@ logic  ← journal
 reasoner
 
 logic + journal + reasoner  ← core  ← lms  ← vocab  ← app  ← cli
-                                                        ↖ gui
+                                                        ← gui-core ← gui
+                                                                   ↖ gui-scalafx
 ```
 
 Dependencies point one way:
@@ -33,8 +34,9 @@ Dependencies point one way:
   lifecycle hooks.
 - `app` assembles workspace replay, learning restoration and presentation-neutral owner use cases.
   It depends on the full domain but on no toolkit or command parser.
-- `cli` and `gui` are sibling adapters. The CLI retains specialist/audit operations; the GUI covers
-  J16's daily loop. Neither invokes the other or owns a second persistence lifecycle.
+- `cli` and `gui-core` are sibling adapters. The CLI retains specialist/audit operations;
+  `gui-core` owns J16's presentation and reactive lifecycle, while `gui` and `gui-scalafx` are thin
+  native renderers. No adapter invokes another or owns a second persistence lifecycle.
 
 Modules extend the system through declarative seams: `Rule` for inference; `PolicyBook` and
 `ItemPolicyBook` for annotation and item defaults; `Templates` and `Naming.Scheme` for
@@ -62,8 +64,9 @@ Key implementation points:
 | Interchange and agenda seams | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/module/Extensions.scala` |
 | Service surface | `modules/core/src/main/scala/dev/librecybernetics/noesis/core/kb/KnowledgeBase.scala` |
 | Shared owner session | `modules/app/src/main/scala/dev/librecybernetics/noesis/app/OwnerSession.scala`, `Workspace.scala` |
-| Desktop reducer and effect loop | `modules/gui/src/main/scala/dev/librecybernetics/noesis/gui/Model.scala`, `ReactiveController.scala` |
+| Desktop reducer, presentation, effect loop and lifecycle | `modules/gui-core/src/main/scala/dev/librecybernetics/noesis/gui/Model.scala`, `Presentation.scala`, `ReactiveController.scala`, `DesktopRuntime.scala` |
 | GTK/libadwaita renderer | `modules/gui/src/main/scala/dev/librecybernetics/noesis/gui/DesktopView.scala` |
+| ScalaFX renderer | `modules/gui-scalafx/src/main/scala/dev/librecybernetics/noesis/gui/scalafx/ScalaFxDesktopView.scala` |
 | Portable archive workflow | `modules/cli/src/main/scala/dev/librecybernetics/noesis/cli/Archive.scala` |
 | Command-surface derivation | `modules/cli/src/main/scala/dev/librecybernetics/noesis/cli/meta/CommandSurface.scala` |
 | Belief, derived belief | `modules/lms/src/main/scala/dev/librecybernetics/noesis/lms/Belief.scala` |
@@ -76,12 +79,14 @@ Key implementation points:
 ### Desktop reactive boundary
 
 The desktop is a Model–View–Update adapter, not another service layer. `Model` contains immutable
-presentation data and no GTK object; `Update` is total and pure over `(Model, Event)` and declares
+presentation data and no toolkit object; `Update` is total and pure over `(Model, Event)` and declares
 effects as values. `Effects` interprets them through the narrow `OwnerActions` and `GuiClock`
 capabilities; the live implementations delegate to `OwnerSession` and Cats Effect time, while tests
 use deterministic interpreters. `ReactiveController` consumes one fs2 queue, applies transitions
-serially and schedules completed snapshots through `UiScheduler`; GTK/GLib are only the live view
-and scheduler interpreters. Its event-loop fiber is a `Resource`, so closing the application cancels
+serially and schedules completed `DesktopPresentation` snapshots through `UiScheduler`. GTK/GLib
+and ScalaFX/JavaFX are only view, scheduler and application-lifecycle interpreters. `DesktopViewHandle`
+constructs each scene on its toolkit thread before binding the controller's event sink. The shared
+event-loop fiber is a `Resource`, so closing either application cancels
 both callback and external-change streams rather than abandoning a process-owned fiber. This makes
 button duplication, stale feedback, time and cancellation behavior testable properties rather than
 timing assumptions in callbacks.

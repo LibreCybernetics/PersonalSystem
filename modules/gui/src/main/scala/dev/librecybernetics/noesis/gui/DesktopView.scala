@@ -16,22 +16,6 @@ import org.gnome.adw.{
 import org.gnome.gtk
 import org.gnome.gtk.{Align, Box, Button, CheckButton, Entry, Label, Orientation, ScrolledWindow, Stack}
 
-import dev.librecybernetics.noesis.app.{EntityView, SearchHit}
-import dev.librecybernetics.noesis.lms.AnswerSpec
-
-/** Stable, display-independent evidence emitted by the real GTK renderer (TESTING, GUI scenarios). */
-private[gui] final case class DesktopSnapshot(
-    surface: String,
-    agenda: String,
-    preview: String,
-    review: String,
-    search: String,
-    entity: String,
-    feedback: String,
-    commitEnabled: Boolean,
-    answerEnabled: Boolean
-)
-
 /** A thin GTK renderer: widgets emit Events, while all state transitions remain in [[Update]]. */
 final class DesktopView(
     application: org.gnome.adw.Application,
@@ -90,18 +74,18 @@ final class DesktopView(
       answerButton.getSensitive
     )
 
-  def render(model: Model): Unit =
+  def render(model: DesktopPresentation): Unit =
     workInFlight = model.busy
     stack.setVisibleChildName(surfaceName(model.surface))
-    agendaLabel.setText(renderAgenda(model.agenda))
-    previewLabel.setText(renderPreview(model))
-    commitButton.setSensitive(model.preview.nonEmpty && !model.busy)
-    cancelFactButton.setSensitive(model.preview.nonEmpty && !model.busy)
-    reviewLabel.setText(renderReview(model))
-    answerButton.setSensitive(hasQuestion(model) && !model.busy)
-    searchLabel.setText(renderSearch(model.searchHits))
-    renderSearchResults(model.searchHits)
-    entityLabel.setText(renderEntity(model.entity))
+    agendaLabel.setText(model.agenda)
+    previewLabel.setText(model.preview)
+    commitButton.setSensitive(model.commitEnabled)
+    cancelFactButton.setSensitive(model.cancelEnabled)
+    reviewLabel.setText(model.review)
+    answerButton.setSensitive(model.answerEnabled)
+    searchLabel.setText(model.search)
+    renderSearchResults(model.searchRows)
+    entityLabel.setText(model.entity)
     feedbackLabel.setText(model.feedback.getOrElse(""))
     feedbackLabel.setVisible(model.feedback.nonEmpty)
     initializeButton.setSensitive(!model.busy)
@@ -111,8 +95,8 @@ final class DesktopView(
     entityButton.setSensitive(!model.busy)
     refreshReviewButton.setSensitive(!model.busy)
 
-    if model.noteDraft.isEmpty && noteEntry.getText.nonEmpty then noteEntry.setText("")
-    if model.factDraft == FactDraft() && subjectEntry.getText.nonEmpty then
+    if model.clearNoteDraft && noteEntry.getText.nonEmpty then noteEntry.setText("")
+    if model.clearFactDraft && subjectEntry.getText.nonEmpty then
       subjectEntry.setText("")
       propertyEntry.setText("")
       valueEntry.setText("")
@@ -122,22 +106,23 @@ final class DesktopView(
       lastFeedback = model.feedback
 
   private def build(): Unit =
-    identify(initializeButton, "gui:first-run:start")
-    identify(noteEntry, "gui:today:note")
-    identify(saveNoteButton, "gui:today:save-note")
-    identify(subjectEntry, "gui:capture-fact:subject")
-    identify(propertyEntry, "gui:capture-fact:property")
-    identify(valueEntry, "gui:capture-fact:value")
-    identify(previewButton, "gui:capture-fact:preview")
-    identify(commitButton, "gui:capture-fact:commit")
-    identify(cancelFactButton, "gui:capture-fact:cancel")
-    identify(answerEntry, "gui:learn:answer")
-    identify(answerButton, "gui:learn:submit")
-    identify(refreshReviewButton, "gui:learn:refresh")
-    identify(searchEntry, "gui:search:query")
-    identify(searchButton, "gui:search:submit")
-    identify(entityEntry, "gui:search:entity")
-    identify(entityButton, "gui:search:open-entity")
+    identify(initializeButton, GuiControl.Initialize.id)
+    identify(noteEntry, GuiControl.Note.id)
+    identify(saveNoteButton, GuiControl.SaveNote.id)
+    identify(subjectEntry, GuiControl.FactSubject.id)
+    identify(propertyEntry, GuiControl.FactProperty.id)
+    identify(valueEntry, GuiControl.FactValue.id)
+    identify(newSubject, GuiControl.FactNewSubject.id)
+    identify(previewButton, GuiControl.FactPreview.id)
+    identify(commitButton, GuiControl.FactCommit.id)
+    identify(cancelFactButton, GuiControl.FactCancel.id)
+    identify(answerEntry, GuiControl.LearnAnswer.id)
+    identify(answerButton, GuiControl.LearnSubmit.id)
+    identify(refreshReviewButton, GuiControl.LearnRefresh.id)
+    identify(searchEntry, GuiControl.SearchQuery.id)
+    identify(searchButton, GuiControl.SearchSubmit.id)
+    identify(entityEntry, GuiControl.SearchEntity.id)
+    identify(entityButton, GuiControl.SearchOpenEntity.id)
     val header = HeaderBar()
     val title = Label("Noesis")
     title.addCssClass("title")
@@ -154,6 +139,7 @@ final class DesktopView(
     navigation.setMarginEnd(12)
     GuiSurface.navigable.foreach: surface =>
       val button = Button.withLabel(surface.title)
+      identify(button, GuiControl.navigate(surface))
       val _ = button.onClicked: () =>
         dispatch(Event.Navigate(surface))
         split.setShowContent(true)
@@ -284,6 +270,7 @@ final class DesktopView(
     entityLabel.setSelectable(true)
     page.append(entityLabel)
     val back = Button.withLabel("Back to search")
+    identify(back, GuiControl.EntityBack.id)
     val _ = back.onClicked(() => dispatch(Event.Navigate(GuiSurface.Search)))
     back.setHalign(Align.START)
     page.append(back)
@@ -334,81 +321,18 @@ final class DesktopView(
 
   private def surfaceName(surface: GuiSurface): String = surface.id.replace(':', '-')
 
-  private def renderAgenda(state: LoadState[List[dev.librecybernetics.noesis.app.AgendaView]]): String =
-    state match
-      case LoadState.Idle | LoadState.Loading => "Loading agenda…"
-      case LoadState.Failed(problem)          => problem.render
-      case LoadState.Ready(Nil)               => "Nothing due."
-      case LoadState.Ready(entries) =>
-        entries.map: entry =>
-          val marker = if entry.overdue then "Overdue" else "Due"
-          s"$marker ${entry.due}: ${entry.summary} — ${entry.subjectLabel} (${entry.subject.value})"
-        .mkString("\n")
-
-  private def renderPreview(model: Model): String =
-    model.preview.fold("Nothing waiting for confirmation."): preview =>
-      val formal = preview.axioms.toList.map(axiom => s"${axiom.id.value}\n${axiom.manchester}")
-      f"${preview.verbalization}\n${formal.mkString("\n")}\nSensitivity: ${preview.sensitivity}%s\nUtility: ${preview.utility}%.2f\nConfidence: ${preview.confidence}%.2f"
-
-  private def renderReview(model: Model): String =
-    model.review match
-      case LoadState.Idle | LoadState.Loading => "Loading the learning queue…"
-      case LoadState.Failed(problem)          => problem.render
-      case LoadState.Ready(None)              => "Nothing due — the queue is empty."
-      case LoadState.Ready(Some(review)) =>
-        review.prompt.question match
-          case None =>
-            s"${review.prompt.entry.item.prompt}\n${review.prompt.entry.reason}\nNo usable question is available."
-          case Some(question) =>
-            val guidance = question.answer match
-              case AnswerSpec.Rubric(criteria) => s"Rubric: $criteria"
-              case _                           => "Type your answer below."
-            s"${question.prompt}\nWhy now: ${review.prompt.entry.reason}\n$guidance"
-
-  private def hasQuestion(model: Model): Boolean =
-    model.review match
-      case LoadState.Ready(Some(review)) => review.prompt.question.nonEmpty
-      case _                             => false
-
-  private def renderSearch(state: LoadState[List[SearchHit]]): String =
-    state match
-      case LoadState.Idle                => "Enter a query."
-      case LoadState.Loading             => "Searching…"
-      case LoadState.Failed(problem)     => problem.render
-      case LoadState.Ready(Nil)          => "No matches."
-      case LoadState.Ready(hits)         => s"${hits.length} match(es)."
-
-  private def renderHit(hit: SearchHit): String =
-    hit match
-      case SearchHit.Entity(iri, label) => s"Entity — $label — ${iri.value}"
-      case SearchHit.NoteBlock(note, title, _, text) => s"Note — $title — ${note.value}\n  $text"
-      case SearchHit.Term(term) =>
-        s"Term — ${term.iri.value} — ${term.template.getOrElse(term.role.toString)}"
-
-  private def renderSearchResults(state: LoadState[List[SearchHit]]): Unit =
+  private def renderSearchResults(rows: List[SearchRow]): Unit =
     searchResultWidgets.foreach(searchResults.remove)
-    searchResultWidgets = state match
-      case LoadState.Ready(hits) =>
-        hits.map:
-          case SearchHit.Entity(iri, label) =>
-            val button = Button.withLabel(s"Open $label — ${iri.value}")
-            val _ = button.onClicked(() => dispatch(Event.EntityRequested(iri)))
-            searchResults.append(button)
-            button
-          case hit =>
-            val label = contentLabel()
-            label.setText(renderHit(hit))
-            searchResults.append(label)
-            label
-      case _ => Nil
-
-  private def renderEntity(state: LoadState[EntityView]): String =
-    state match
-      case LoadState.Idle | LoadState.Loading => "Loading entity…"
-      case LoadState.Failed(problem)          => problem.render
-      case LoadState.Ready(entity) =>
-        val states = entity.states.map(value => s"State — $value")
-        val facts = entity.facts.map: fact =>
-          val belief = fact.belief.fold("")(value => f" — belief $value%.2f")
-          s"${fact.verbalization}$belief\n  ${fact.id.value}\n  ${fact.manchester}"
-        (s"${entity.label}\n${entity.iri.value}" :: states ++ facts).mkString("\n")
+    searchResultWidgets = rows.map:
+      case SearchRow.Entity(index, iri, text) =>
+        val button = Button.withLabel(text)
+        identify(button, GuiControl.searchResult(index))
+        val _ = button.onClicked(() => dispatch(Event.EntityRequested(iri)))
+        searchResults.append(button)
+        button
+      case SearchRow.Text(index, text) =>
+        val label = contentLabel()
+        identify(label, GuiControl.searchResult(index))
+        label.setText(text)
+        searchResults.append(label)
+        label

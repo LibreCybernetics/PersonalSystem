@@ -55,8 +55,9 @@ class DesktopViewSuite extends FunSuite:
           false
         )
         val view = DesktopView(application, "/tmp/noesis-desktop-test", _ => ())
+        def render(model: Model): Unit = view.render(DesktopPresentation.from(model))
 
-        GuiSurface.values.foreach(surface => view.render(Model(surface = surface)))
+        GuiSurface.values.foreach(surface => render(Model(surface = surface)))
         List[LoadState[List[AgendaView]]](
           LoadState.Idle,
           LoadState.Loading,
@@ -65,8 +66,8 @@ class DesktopViewSuite extends FunSuite:
           LoadState.Ready(
             List(AgendaView(java.time.LocalDate.of(2026, 8, 5), "call", iri, "Marco", true))
           )
-        ).foreach(value => view.render(Model(surface = GuiSurface.Today, agenda = value)))
-        view.render(Model(surface = GuiSurface.CaptureFact, preview = Some(preview)))
+        ).foreach(value => render(Model(surface = GuiSurface.Today, agenda = value)))
+        render(Model(surface = GuiSurface.CaptureFact, preview = Some(preview)))
 
         val reviews = List[LoadState[Option[ReviewState]]](
           LoadState.Idle,
@@ -77,7 +78,7 @@ class DesktopViewSuite extends FunSuite:
           LoadState.Ready(Some(ReviewState(ReviewPrompt(entry, Some(exact)), 1.second))),
           LoadState.Ready(Some(ReviewState(ReviewPrompt(entry, Some(rubric)), 1.second)))
         )
-        reviews.foreach(value => view.render(Model(surface = GuiSurface.Learn, review = value)))
+        reviews.foreach(value => render(Model(surface = GuiSurface.Learn, review = value)))
 
         val hits = List[SearchHit](
           SearchHit.Entity(iri, "Marco"),
@@ -90,7 +91,7 @@ class DesktopViewSuite extends FunSuite:
           LoadState.Failed(OwnerProblem("search failed", "journal", "retry")),
           LoadState.Ready(Nil),
           LoadState.Ready(hits)
-        ).foreach(value => view.render(Model(surface = GuiSurface.Search, searchHits = value)))
+        ).foreach(value => render(Model(surface = GuiSurface.Search, searchHits = value)))
 
         val entity = EntityView(
           "Marco",
@@ -103,9 +104,9 @@ class DesktopViewSuite extends FunSuite:
           LoadState.Loading,
           LoadState.Failed(OwnerProblem("entity failed", "journal", "retry")),
           LoadState.Ready(entity)
-        ).foreach(value => view.render(Model(surface = GuiSurface.Entity, entity = value)))
+        ).foreach(value => render(Model(surface = GuiSurface.Entity, entity = value)))
 
-        view.render(
+        render(
           Model(
             surface = GuiSurface.Learn,
             review = LoadState.Ready(Some(ReviewState(ReviewPrompt(entry, Some(exact)), 1.second))),

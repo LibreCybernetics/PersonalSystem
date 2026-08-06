@@ -24,7 +24,9 @@ Tests live beside their owning module under `modules/<module>/src/test/scala`:
 | `vocab` | `ModuleSuite`: the merged modules against the unmodified core, including ontology consistency, inference, policies, templates, capture, learning, and ledger scenarios. `PrmSuite`: structured contact capture, validation, privacy, temporal employment, agenda projections, duplicate candidates, and vCard/FOAF integration. `PrmContractSuite`: field-complete capture and interchange mappings, parser boundaries, record identities, normalization, and projection-helper contracts. `FractionalIndexSuite`: sibling order keys, including that appending and prepending stay constant-size. `OutlineSuite`: the note projection, `as-of` over text, arrangement and nesting, and outlines the axiom language cannot rule out. `NotesCaptureSuite`: writing, paragraph chunking, `[[link]]` resolution against current names, and backlinks. `NoteMarkdownSuite`, `NoteEditorSuite`: the mirror, the editable buffer, and which block an edited line is. `NoteRoundTripSuite`: render, edit, plan and commit against a real knowledge base, including that an untouched buffer writes nothing. `VocabularySuite`: the browser's view of the module contract, including terms declared only in a policy or a template, and roles the shipped modules never exercise alone |
 | `app` | `AssertionsSuite`: ontology-driven reference/literal typing at the structured boundary. `OwnerSessionSuite`: initialization, preview/commit rejection, durable reopen, agenda/search/entity projections, notes and links, review recording, polling, and owner failure rendering through real disposable logs |
 | `cli` | `CommandParserSuite`: runtime parsing for every command leaf derived from the typed AST, deterministic defaults, and exact boundary rejection. `CliProgramSuite`: typed command execution across queries, learning, disclosure, notes, contacts, interchange and archives in disposable workspaces. `ArchiveSuite`: checksum/replay/projection verification, restore, overwrite refusal, and tamper detection. `CommandSurfaceSuite` and product suites: derivation and documentation traceability. `ConfirmSuite` and `QuizSuite`: focused terminal rendering and review behavior |
-| `gui` | `UpdateSuite`: exhaustive display-independent MVU transitions and guards. `EffectsSuite`: deterministic owner/time interpretation and failures. `ReactiveControllerSuite`: serialization, rendering, and resource cancellation. `LiveBoundarySuite`: real owner, clock and controller interpreters over a disposable workspace. `DesktopViewSuite`: every surface and load state through the real GTK tree under Xvfb, with a stable interaction snapshot and non-vacuous activation assertion. `MainLifecycleSuite` and `DesktopSmoke`: normal, repeated-activation, argument-failure and packaged GTK/libadwaita lifecycle. `GuiProductTraceSuite`: product journey traceability. GUI suites run serially because GLib's default application is process-global |
+| `gui-core` | `UpdateSuite`: exhaustive toolkit-independent MVU transitions and guards. `PresentationSuite`: exact immutable rendering, control state, ids and arguments. `EffectsSuite`: deterministic owner/time interpretation and failures. `ReactiveControllerSuite`: serialization, rendering and resource cancellation. `LiveBoundarySuite`: real owner, clock and controller interpreters over a disposable workspace. `GuiProductTraceSuite`: product journey traceability |
+| `gui` | `DesktopViewSuite`: every surface and load state through the real GTK tree under Xvfb, with a stable interaction snapshot and non-vacuous activation assertion. `MainLifecycleSuite` and `DesktopSmoke`: normal, repeated-activation, argument-failure and packaged GTK/libadwaita lifecycle. Each suite runs in a fresh fork because GLib's default application is process-global |
+| `gui-scalafx` | `ScalaFxDesktopViewSuite`: real scene-graph surfaces, stable ids, accessibility, dispatch and close guarding under Xvfb. `ScalaFxRobotSuite`: a TestFX robot initializes a disposable workspace and saves a durable note through the shared controller. Each suite runs in a fresh fork because JavaFX/TestFX platform and focus state are process-global; `Main --smoke` covers the packaged lifecycle |
 | `conformance` | `JcsConformanceSuite`, `JsonSyntaxConformanceSuite`, `IjsonConformanceSuite`, `NamingConformanceSuite`, `XsdConformanceSuite`, `IriConformanceSuite`, `LanguageTagConformanceSuite`, `NTriplesConformanceSuite`, `TurtleConformanceSuite`: corpus-driven conformance to the normative references of SPEC §10.1 |
 | `nix` | `agent-sandbox-sources`: shell analysis, Python syntax checking, and behavioral tests for the isolated-agent HTTPS proxy |
 
@@ -50,12 +52,14 @@ nix develop --command sbt -batch "lms/testOnly dev.librecybernetics.noesis.lms.*
 nix develop --command sbt -batch "vocab/testOnly dev.librecybernetics.noesis.vocab.*"
 nix develop --command sbt -batch "app/testOnly dev.librecybernetics.noesis.app.*"
 nix develop --command sbt -batch "cli/testOnly dev.librecybernetics.noesis.cli.*"
+nix develop --command sbt -batch "guiCore/testOnly dev.librecybernetics.noesis.gui.*"
 nix develop --command sbt -batch "gui/testOnly dev.librecybernetics.noesis.gui.*"
+nix develop --command sbt -batch "guiScalafx/testOnly dev.librecybernetics.noesis.gui.scalafx.*"
 nix develop --command sbt -batch "conformance/testOnly dev.librecybernetics.noesis.conformance.*"
 ```
 
 Inside `nix develop`, the `nix develop --command` prefix is unnecessary. The ordinary CI gate is
-reproduced by starting clean, compiling all ten modules, and explicitly executing every
+reproduced by starting clean, compiling all twelve modules, and explicitly executing every
 test-bearing module:
 
 ```bash
@@ -72,7 +76,9 @@ nix develop --command xvfb-run -a sbt -batch \
   vocab/testOnly dev.librecybernetics.noesis.vocab.*;
   app/testOnly dev.librecybernetics.noesis.app.*;
   cli/testOnly dev.librecybernetics.noesis.cli.*;
+  guiCore/testOnly dev.librecybernetics.noesis.gui.*;
   gui/testOnly dev.librecybernetics.noesis.gui.*;
+  guiScalafx/testOnly dev.librecybernetics.noesis.gui.scalafx.*;
   conformance/testOnly dev.librecybernetics.noesis.conformance.*;
   coverageOff"
 
@@ -85,7 +91,9 @@ nix develop --command sbt -batch lms/coverageReport
 nix develop --command sbt -batch vocab/coverageReport
 nix develop --command sbt -batch app/coverageReport
 nix develop --command sbt -batch cli/coverageReport
+nix develop --command sbt -batch guiCore/coverageReport
 nix develop --command sbt -batch gui/coverageReport
+nix develop --command sbt -batch guiScalafx/coverageReport
 ```
 
 A plain `sbt test` result is insufficient evidence that every suite ran. sbt 2 executes tests
@@ -128,7 +136,9 @@ CI fails below these statement/branch percentages:
 | `vocab` | 98 | 95 |
 | `app` | 85 | 80 |
 | `cli` | 70 | 60 |
+| `gui-core` | 90 | 85 |
 | `gui` | 70 | 60 |
+| `gui-scalafx` | 70 | 60 |
 | aggregate | 85 | 80 |
 
 Pull requests and pushes to the default branch also run `diff-cover` against the aggregate Cobertura
@@ -165,13 +175,15 @@ scenario records stable surface id, owner action, accessible announcement, journ
 review count after each step. The transcript is checked against the J16/US-41–US-43 acceptance
 criteria exactly as a launcher transcript is checked against a CLI story.
 
-Pure Model–View–Update and application-service suites run without a display. GTK lifecycle and
-accessibility smoke cases run under Xvfb from the Nix development shell. Pixel goldens are not an
+Pure Model–View–Update, presentation and application-service suites run without a display. GTK and
+ScalaFX lifecycle, accessibility and robot cases run under Xvfb from the Nix development shell.
+Pixel goldens are not an
 acceptance boundary: fonts, scale and theme are environment inputs, while widget roles, names,
 enabled states, navigation and durable effects are the contract.
 
 ```bash
 nix develop --command xvfb-run -a nix run .#gui -- --smoke
+nix develop --command xvfb-run -a nix run .#gui-scalafx -- --smoke
 ```
 
 ## Test design
@@ -222,8 +234,8 @@ instead of weakening the assertion.
   above. A change that removes friction updates its ledger row; a change that adds friction adds one
   and names the principle that makes the trade acceptable. A new command additionally needs a
   journey step, which `ProductTraceSuite` enforces — see [Product traceability](#product-traceability).
-- **GUI behavior:** Evidence includes reducer transitions for every changed event, a headless GTK
-  smoke case for affected widgets and the interaction/accessibility transcript of the affected J16
+- **GUI behavior:** Evidence includes reducer transitions for every changed event, headless adapter
+  smoke cases for affected widgets and the interaction/accessibility transcript of the affected J16
   step. Cancellation before confirmation leaves both logs unchanged; once a durable action starts,
   the scenario observes its terminal result. A changed stable GUI surface id updates PRODUCT.md and
   `GuiProductTraceSuite` in the same change.
@@ -393,8 +405,8 @@ the mutation score has quietly stopped measuring that function.
 ## Continuous integration and reporting
 
 On every pull request and push to `main`, the ordinary `CI` workflow runs three independent jobs: the
-instrumented clean compile under Xvfb with all ten explicit suite tasks, module/aggregate coverage
-floors and 100% changed-line coverage; the packaged desktop smoke; and `nix flake check`. The stable
+instrumented clean compile under Xvfb with all twelve explicit suite tasks, module/aggregate coverage
+floors and 100% changed-line coverage; both packaged desktop smokes; and `nix flake check`. The stable
 `CI gate` check fails unless all three pass. Its 14-day artifact retains available test, static
 analysis, coverage and diff reports even when an earlier test step fails.
 

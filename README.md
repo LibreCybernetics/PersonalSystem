@@ -11,8 +11,8 @@ you know.
 [SPEC.md](SPEC.md) is the authority on intended design; [DESIGN.md](DESIGN.md) records the principles
 and constraints of the current implementation. This repository is an **MVP** of the spec: the
 Knowledge Core and Learning Engine are complete and well covered by tests, the three domain modules
-work end to end, and both a GNOME daily-loop application and specialist CLI are available. The LLM,
-MCP and HTTP surfaces are not built. See
+work end to end, and GTK/libadwaita and ScalaFX daily-loop applications plus a specialist CLI are
+available. The LLM, MCP and HTTP surfaces are not built. See
 [what is and isn't implemented](#what-is-implemented).
 
 ## Quick start
@@ -21,11 +21,12 @@ MCP and HTTP surfaces are not built. See
 nix develop            # JDK 25, sbt 2.0.4, coursier, scala-cli, metals
 sbt cli/launcher       # writes an executable launcher and prints its path
 nix run .#gui          # builds and opens the GTK 4/libadwaita application
+nix run .#gui-scalafx  # builds and opens the equally supported ScalaFX alternative
 ```
 
 The launcher lands at `target/out/jvm/scala-3.8.4/noesis-cli/noesis`. It defaults to a workspace at
-`~/.noesis`; pass `--root DIR` to use another. The GUI uses the same default; use `nix run .#gui --
---workspace DIR` for a different workspace. The two append-only sources of truth are `journal.jsonl`
+`~/.noesis`; pass `--root DIR` to use another. Both GUIs use the same default; append `-- --workspace
+DIR` to either Nix command for a different workspace. The two append-only sources of truth are `journal.jsonl`
 and `reviews.jsonl`; disposable projections such as the Markdown note mirror may live beside them.
 On POSIX filesystems Noesis creates or tightens the workspace to owner-only permissions (`0700` for
 the directory, `0600` for the files) and rejects symlinked persistence paths.
@@ -90,6 +91,7 @@ overwrite an existing path.
 | Spec area | Status |
 |---|---|
 | §2.1 GNOME desktop | GTK 4/libadwaita daily loop with explicit first-run initialization, Today/agenda and note capture, reviewed structured facts, local search/entity detail, and learning. A Cats Effect/fs2 Model–View–Update loop serializes typed events and durable effects over the shared application services; run it with `nix run .#gui` |
+| §2.2 ScalaFX desktop | Equal Linux/Nix alternative over the same surfaces, stable ids, immutable presentation, effects, and owner lifecycle; only scene graph, JavaFX scheduling, and window lifecycle differ. Run it with `nix run .#gui-scalafx` |
 | §3.2 Journal & projections | Dedicated [`journal`](modules/journal/) module with checksummed, versioned, crash-recoverable commit frames, cross-process locking and fsync; state, current-graph, point-in-time and time-travel projections, all rebuilt from it |
 | §3.1 Representation | Dedicated [`logic`](modules/logic/) module with the RDFS core plus the OWL role constructs the vocabularies need — symmetry, transitivity, inverses, chains, disjointness, irreflexivity; content-derived stable axiom ids; located partial dates, with recurring days kept separate |
 | §3.3 Annotations & cascade | One cascade for sensitivity, utility, confidence and scope: owner override → term policy → module default → behavioral and temporal signals, with decay |
@@ -160,10 +162,12 @@ modules/lms     Learning Engine — items, belief, scheduling, question generati
 modules/vocab   Vocabulary modules — core upper ontology, crm:, ll:, vf:
 modules/app     Shared workspace lifecycle and presentation-neutral owner use cases
 modules/cli     Command-line interface
-modules/gui     GNOME GTK/libadwaita client and pure Model–View–Update loop
+modules/gui-core Toolkit-neutral desktop model, presentation, effects and lifecycle
+modules/gui     GNOME GTK/libadwaita renderer and lifecycle adapter (default)
+modules/gui-scalafx ScalaFX renderer and JavaFX lifecycle adapter
 ```
 
-The runtime uses cats-effect, fs2, circe, decline, and Java-GI. See [DESIGN.md](DESIGN.md) for module
+The runtime uses cats-effect, fs2, circe, decline, Java-GI, and ScalaFX. See [DESIGN.md](DESIGN.md) for module
 boundaries and dependency rules. Each foundational module has its own README and implementation
 specification. [THREAT_MODEL.md](THREAT_MODEL.md) records application assets, trust boundaries,
 controls and residual risks. [PRODUCT.md](PRODUCT.md) records who the system serves, the journeys it

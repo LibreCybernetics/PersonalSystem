@@ -53,7 +53,9 @@ jobs:
           vocab/testOnly dev.librecybernetics.noesis.vocab.*;
           app/testOnly dev.librecybernetics.noesis.app.*;
           cli/testOnly dev.librecybernetics.noesis.cli.*;
+          guiCore/testOnly dev.librecybernetics.noesis.gui.*;
           gui/testOnly dev.librecybernetics.noesis.gui.*;
+          guiScalafx/testOnly dev.librecybernetics.noesis.gui.scalafx.*;
           conformance/testOnly dev.librecybernetics.noesis.conformance.*;
           coverageOff"
 
@@ -70,7 +72,9 @@ jobs:
           nix develop --command sbt -batch vocab/coverageReport
           nix develop --command sbt -batch app/coverageReport
           nix develop --command sbt -batch cli/coverageReport
+          nix develop --command sbt -batch guiCore/coverageReport
           nix develop --command sbt -batch gui/coverageReport
+          nix develop --command sbt -batch guiScalafx/coverageReport
 
       - name: Require coverage for changed production lines
         env:
@@ -113,7 +117,7 @@ jobs:
           retention-days: 14
 
   gui-smoke:
-    name: Packaged GUI smoke
+    name: Packaged GUI smokes
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -137,6 +141,10 @@ jobs:
       - name: Smoke test GNOME widget lifecycle
         run: >-
           nix develop --command xvfb-run -a nix run .#gui -- --smoke
+
+      - name: Smoke test ScalaFX widget lifecycle
+        run: >-
+          nix develop --command xvfb-run -a nix run .#gui-scalafx -- --smoke
 
   nix-check:
     name: Nix and repository checks

@@ -57,9 +57,10 @@ You cannot run usability tests, so use the deterministic substitutes:
 
 ```bash
 nix develop --command sbt -batch <task>     # everything runs inside the flake devshell
-sbt compile                                 # all ten modules, including CLI and GUI
+sbt compile                                 # all twelve modules, including both GUI clients
 sbt cli/launcher                            # writes an executable launcher, prints its path
 sbt gui/guiLauncher                         # writes the GTK/libadwaita launcher, prints its path
+sbt guiScalafx/scalaFxLauncher              # writes the ScalaFX launcher, prints its path
 ```
 
 - Testing commands, suite responsibilities, change-specific evidence, CI gates, and reporting rules

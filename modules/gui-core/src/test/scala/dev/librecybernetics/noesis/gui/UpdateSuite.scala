@@ -11,7 +11,7 @@ import dev.librecybernetics.noesis.journal.Commit
 import dev.librecybernetics.noesis.logic.*
 import dev.librecybernetics.noesis.lms.*
 
-/** Display-independent interaction transcripts for the GNOME Model-View-Update loop. */
+/** Display-independent interaction transcripts for both desktop Model-View-Update adapters. */
 class UpdateSuite extends FunSuite:
   private val problem = OwnerProblem("failed", "because", "retry")
   private val iri = Iri("noesis:e/marco")

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Noesis (ScalaFX)
+Comment=Personal knowledge and learning workspace
+Exec=noesis-gui-scalafx
+Icon=dev.librecybernetics.Noesis.ScalaFX
+Terminal=false
+Type=Application
+Categories=Office;Education;
+StartupNotify=true

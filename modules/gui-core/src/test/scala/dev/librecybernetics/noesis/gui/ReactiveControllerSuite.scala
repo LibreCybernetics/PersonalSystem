@@ -30,9 +30,11 @@ class ReactiveControllerSuite extends CatsEffectSuite:
       IO.raiseError(new AssertionError("unexpected answer"))
     def changes = changeStream
 
-  private final class RecordingView(models: AtomicReference[List[Model]]) extends GuiView:
+  private final class RecordingPresentationView(
+      models: AtomicReference[List[DesktopPresentation]]
+  ) extends GuiView:
     def present(): Unit = ()
-    def render(model: Model): Unit =
+    def render(model: DesktopPresentation): Unit =
       val _ = models.updateAndGet(existing => model :: existing)
 
   private val immediate = new UiScheduler:
@@ -44,14 +46,14 @@ class ReactiveControllerSuite extends CatsEffectSuite:
 
   test("processing is serial and renders the reducer's resulting model"):
     Dispatcher.sequential[IO].use: dispatcher =>
-      val rendered = AtomicReference(List.empty[Model])
+      val rendered = AtomicReference(List.empty[DesktopPresentation])
       val actions = StubActions(Stream.empty)
       for
         controller <- ReactiveController.create(
           actions,
           Effects(actions, fixedClock),
           dispatcher,
-          _ => RecordingView(rendered),
+          DesktopViewHandle(_ => RecordingPresentationView(rendered)),
           immediate
         )
         _ <- controller.process(Event.NoteChanged("first"))
@@ -59,7 +61,7 @@ class ReactiveControllerSuite extends CatsEffectSuite:
         current <- controller.current
       yield
         assertEquals(current.noteDraft, "second")
-        assertEquals(rendered.get().map(_.noteDraft).reverse, List("first", "second"))
+        assertEquals(rendered.get().map(_.clearNoteDraft).reverse, List(false, false))
 
   test("the start resource cancels both event and external-change streams"):
     Dispatcher.sequential[IO].use: dispatcher =>
@@ -71,12 +73,12 @@ class ReactiveControllerSuite extends CatsEffectSuite:
             .bracket(started.complete(()))(_ => finalized.complete(()).map(_ => ()))
             .flatMap(_ => Stream.never[IO])
         actions = StubActions(changes)
-        rendered = AtomicReference(List.empty[Model])
+        rendered = AtomicReference(List.empty[DesktopPresentation])
         controller <- ReactiveController.create(
           actions,
           Effects(actions, fixedClock),
           dispatcher,
-          _ => RecordingView(rendered),
+          DesktopViewHandle(_ => RecordingPresentationView(rendered)),
           immediate
         )
         _ <- controller.start.use: _ =>

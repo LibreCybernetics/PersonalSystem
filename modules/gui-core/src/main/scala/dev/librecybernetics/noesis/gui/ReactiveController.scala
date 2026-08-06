@@ -4,24 +4,17 @@ import cats.effect.{IO, Ref, Resource}
 import cats.effect.std.{Dispatcher, Queue}
 import cats.syntax.all.*
 import fs2.Stream
-import org.gnome.glib.GLib
 
-import dev.librecybernetics.noesis.app.OwnerSession
-
-/** Minimal view contract owned by the controller; GTK remains one live interpreter. */
-private[gui] trait GuiView:
+/** Minimal renderer contract implemented once by each desktop toolkit. */
+trait GuiView:
   def present(): Unit
-  def render(model: Model): Unit
+  def render(model: DesktopPresentation): Unit
 
 /** Schedules view work on its owning UI thread. */
-private[gui] trait UiScheduler:
+trait UiScheduler:
   def apply(action: () => Unit): IO[Unit]
 
-private[gui] object UiScheduler:
-  val glib: UiScheduler = new UiScheduler:
-    def apply(action: () => Unit): IO[Unit] = IO.delay(GLib.idleAddOnce(() => action())).void
-
-/** Serial fs2 event loop joining GTK callbacks to the pure Model-View-Update reducer. */
+/** Serial fs2 event loop joining toolkit callbacks to the pure Model-View-Update reducer. */
 final class ReactiveController private (
     queue: Queue[IO, Event],
     state: Ref[IO, Model],
@@ -56,28 +49,20 @@ final class ReactiveController private (
   private[gui] def current: IO[Model] = state.get
 
   private def render(model: Model): IO[Unit] =
-    scheduler(() => view.render(model))
+    scheduler(() => view.render(DesktopPresentation.from(model)))
 
 object ReactiveController:
-  def create(
-      session: OwnerSession,
-      dispatcher: Dispatcher[IO],
-      viewFactory: (Event => Unit) => GuiView
-  ): IO[ReactiveController] =
-    val actions = OwnerActions.live(session)
-    create(actions, Effects(actions, GuiClock.live), dispatcher, viewFactory, UiScheduler.glib)
-
   private[gui] def create(
       actions: OwnerActions,
       effects: Effects,
       dispatcher: Dispatcher[IO],
-      viewFactory: (Event => Unit) => GuiView,
+      window: DesktopViewHandle,
       scheduler: UiScheduler
   ): IO[ReactiveController] =
     for
       queue <- Queue.unbounded[IO, Event]
       state <- Ref.of[IO, Model](Model())
-      dispatch = (event: Event) => dispatcher.unsafeRunAndForget(queue.offer(event))
-      view = viewFactory(dispatch)
+      view = window.view
       controller = ReactiveController(queue, state, effects, actions.changes, dispatcher, view, scheduler)
+      _ = window.bind(controller.dispatch)
     yield controller

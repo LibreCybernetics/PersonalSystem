@@ -208,17 +208,19 @@ For any change to the owner-facing surface:
 5. Produce the launcher transcript required by [TESTING.md](TESTING.md), and check it against the
    story's acceptance criteria rather than against your intent.
 
-## 10. GNOME desktop surface
+## 10. Desktop surfaces
 
-The desktop client follows every principle above and adds no second vocabulary for the same state.
-Its first release is the J16 daily loop in [PRODUCT.md](PRODUCT.md); CLI-only specialist operations
-remain explicit routes rather than controls that look present but do nothing.
+The GTK/libadwaita and ScalaFX clients follow every principle above and add no second vocabulary for
+the same state. They expose the same J16 daily loop in [PRODUCT.md](PRODUCT.md); CLI-only specialist
+operations remain explicit routes rather than controls that look present but do nothing. GTK is the
+default, while ScalaFX is an equally supported behavioral alternative.
 
 ### 10.1 Window and navigation
 
-- One adaptive libadwaita window contains Today, Capture, Learn and Search. Entity detail is reached
-  from Search and returns through ordinary navigation. The split view collapses into page navigation
-  at narrow widths; it does not open a stack of secondary windows.
+- One window contains Today, Capture, Learn and Search. Entity detail is reached from Search and
+  returns through ordinary navigation; neither toolkit opens a stack of secondary windows. GTK's
+  libadwaita split view may collapse at narrow widths, while ScalaFX keeps a conventional navigation
+  rail. This layout difference does not change the surface sequence or actions.
 - First run is a page, not a background side effect. It states the exact workspace path and privacy
   guarantee; only **Start Noesis** creates anything.
 - Every surface has a stable id (`gui:today`, `gui:capture-fact`, and so on) used by product
@@ -226,7 +228,8 @@ remain explicit routes rather than controls that look present but do nothing.
 
 ### 10.2 Reactive behavior
 
-- GTK signals become typed events. Rendering is a function of one immutable model; widget-local
+- Toolkit signals become typed events. Rendering is a function of one immutable presentation;
+  widget-local
   state is never another authority on whether a commit happened or which search result is current.
 - Work in flight is named and visible. Controls that would start the same durable action are disabled
   until it finishes. Closing after **Commit fact**, **Save note** or **Start Noesis** waits for the

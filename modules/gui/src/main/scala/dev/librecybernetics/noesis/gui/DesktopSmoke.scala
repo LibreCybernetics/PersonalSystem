@@ -8,7 +8,7 @@ object DesktopSmoke:
     val application = Application("dev.librecybernetics.Noesis.Smoke")
     val _ = application.onActivate: () =>
       val view = DesktopView(application, "/tmp/noesis-smoke", _ => ())
-      view.render(Model(surface = GuiSurface.FirstRun))
+      view.render(DesktopPresentation.from(Model(surface = GuiSurface.FirstRun)))
       println(s"gui:first-run window=${view.window.getTitle} surfaces=${GuiSurface.values.length}")
       application.quit()
     val _ = application.run(Array.empty[String])
