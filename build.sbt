@@ -9,6 +9,8 @@ val declineV = "2.5.0"
 val munitV = "1.1.1"
 val munitCatsEffectV = "2.1.0"
 val javaGiV = "1.0.0-RC2"
+val scalaFxV = "25.0.2-R37"
+val testFxV = "4.0.17"
 val scapegoatV = "3.3.6"
 val wartremoverV = "3.6.1"
 val coverageCompileNonce = java.util.UUID.randomUUID().toString
@@ -209,6 +211,7 @@ lazy val app = project
   */
 lazy val launcher = taskKey[String]("write an executable launcher script for the CLI, returning its path")
 lazy val guiLauncher = taskKey[String]("write an executable launcher script for the GNOME application")
+lazy val scalaFxLauncher = taskKey[String]("write an executable launcher script for the ScalaFX application")
 
 lazy val cli = project
   .in(file("modules/cli"))
@@ -253,12 +256,20 @@ lazy val cli = project
     }
   )
 
-// The local-first GNOME owner surface (SPEC §2.1). Presentation is GTK/libadwaita; all durable
-// behavior enters through `app`, and the pure Model-View-Update reducer remains independently
-// testable without a display server.
+// The toolkit-free desktop contract (SPEC §2.1–§2.2): immutable presentation, pure MVU, effects, and the
+// lifecycle shared by the GTK and ScalaFX adapters.
+lazy val guiCore = project
+  .in(file("modules/gui-core"))
+  .dependsOn(app)
+  .settings(commonSettings)
+  .settings(coverageGate(90.0, 85.0))
+  .settings(name := "noesis-gui-core")
+
+// The default local-first GNOME owner surface (SPEC §2.1). GTK/libadwaita owns only rendering,
+// scheduling, and its native application lifecycle.
 lazy val gui = project
   .in(file("modules/gui"))
-  .dependsOn(app)
+  .dependsOn(guiCore % "compile->compile;test->test")
   .settings(commonSettings)
   .settings(coverageGate(70.0, 60.0))
   .settings(
@@ -272,9 +283,19 @@ lazy val gui = project
       "--enable-native-access=ALL-UNNAMED",
       "-Djava.awt.headless=true"
     ),
-    // Each suite owns a process-global GLib default application; concurrent suites can redirect
-    // activation and quit callbacks to the wrong window, making a callback assertion vacuous.
+    Test / javaOptions += "--enable-native-access=ALL-UNNAMED",
+    // A quit GLib application remains process-global. Give each suite a process as well as running
+    // them serially, or a later lifecycle suite can inherit the previous suite's default instance.
     Test / parallelExecution := false,
+    Test / fork := true,
+    Test / testGrouping := Def.uncached {
+      val forkOptions = ForkOptions()
+        .withRunJVMOptions((Test / javaOptions).value.toVector)
+        .withEnvVars((Test / envVars).value)
+      (Test / definedTests).value.map(test =>
+        Tests.Group(test.name, Seq(test), Tests.SubProcess(forkOptions))
+      )
+    },
     guiLauncher := Def.uncached {
       val converter = fileConverter.value
       val classpath = (Runtime / fullClasspath).value
@@ -296,6 +317,74 @@ lazy val gui = project
       )
       val _ = script.setExecutable(true)
       streams.value.log.info(s"GUI launcher written to $script")
+      script.getAbsolutePath
+    }
+  )
+
+// The second local desktop adapter (SPEC §2.2). It consumes the same immutable presentation and
+// runtime as GTK; ScalaFX owns only its scene graph, scheduler, and JavaFX lifecycle.
+lazy val guiScalafx = project
+  .in(file("modules/gui-scalafx"))
+  .dependsOn(guiCore % "compile->compile;test->test")
+  .settings(commonSettings)
+  .settings(coverageGate(70.0, 60.0))
+  .settings(
+    name := "noesis-gui-scalafx",
+    libraryDependencies ++= Seq(
+      "org.scalafx" %% "scalafx" % scalaFxV,
+      "org.testfx" % "testfx-core" % testFxV % Test
+    ),
+    Compile / run / fork := true,
+    Compile / run / javaOptions ++= Seq(
+      "--enable-native-access=ALL-UNNAMED",
+      "-Dprism.order=sw"
+    ),
+    Compile / run / envVars ++= sys.env
+      .get("NOESIS_JAVAFX_LIBRARY_PATH")
+      .map(path => Map("LD_LIBRARY_PATH" -> path))
+      .getOrElse(Map.empty),
+    Test / parallelExecution := false,
+    Test / fork := true,
+    Test / javaOptions ++= Seq(
+      "--enable-native-access=ALL-UNNAMED",
+      "-Dprism.order=sw"
+    ),
+    Test / envVars ++= sys.env
+      .get("NOESIS_JAVAFX_LIBRARY_PATH")
+      .map(path => Map("LD_LIBRARY_PATH" -> path))
+      .getOrElse(Map.empty),
+    // JavaFX and TestFX retain process-global platform/window state after a stage closes. Each
+    // suite gets a fresh process so the robot cannot inherit focus from the scene snapshot suite.
+    Test / testGrouping := Def.uncached {
+      val forkOptions = ForkOptions()
+        .withRunJVMOptions((Test / javaOptions).value.toVector)
+        .withEnvVars((Test / envVars).value)
+      (Test / definedTests).value.map(test =>
+        Tests.Group(test.name, Seq(test), Tests.SubProcess(forkOptions))
+      )
+    },
+    scalaFxLauncher := Def.uncached {
+      val converter = fileConverter.value
+      val classpath = (Runtime / fullClasspath).value
+        .map(entry => converter.toPath(entry.data).toAbsolutePath.toString)
+        .mkString(":")
+      val script = target.value / "noesis-gui-scalafx"
+      IO.write(
+        script,
+        s"""|#!/usr/bin/env bash
+            |export LC_ALL="$${LC_ALL:-C.UTF-8}"
+            |export LD_LIBRARY_PATH="$${NOESIS_JAVAFX_LIBRARY_PATH:-$${LD_LIBRARY_PATH:-}}"
+            |java="$${JAVA_HOME:+$$JAVA_HOME/bin/}java"
+            |exec "$$java" \\
+            |  --enable-native-access=ALL-UNNAMED \\
+            |  -Dprism.order=sw \\
+            |  -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8 \\
+            |  -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 \\
+            |  -cp "$classpath" dev.librecybernetics.noesis.gui.scalafx.Main "$$@"
+            |""".stripMargin
+      )
+      val _ = script.setExecutable(true)
+      streams.value.log.info(s"ScalaFX GUI launcher written to $script")
       script.getAbsolutePath
     }
   )
@@ -332,7 +421,7 @@ lazy val conformance = project
 
 lazy val root = project
   .in(file("."))
-  .aggregate(logic, journal, reasoner, core, lms, vocab, app, cli, gui, conformance)
+  .aggregate(logic, journal, reasoner, core, lms, vocab, app, cli, guiCore, gui, guiScalafx, conformance)
   .settings(
     name := "noesis",
     publish / skip := true,

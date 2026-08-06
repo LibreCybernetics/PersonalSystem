@@ -12,11 +12,11 @@ import dev.librecybernetics.noesis.logic.Iri
 import dev.librecybernetics.noesis.lms.AnswerSpec
 import dev.librecybernetics.noesis.vocab.RelationshipsModule
 
-/** The live GUI interpreters are thin delegations over the real disposable owner boundary. */
+/** The shared live desktop interpreters are thin delegations over the real owner boundary. */
 class LiveBoundarySuite extends CatsEffectSuite:
   private final class RecordingView extends GuiView:
     def present(): Unit = ()
-    def render(model: Model): Unit = ()
+    def render(model: DesktopPresentation): Unit = ()
 
   test("owner, clock, effect, and controller live interpreters preserve the shared boundary"):
     Files[IO].tempDirectory.use: root =>
@@ -50,7 +50,14 @@ class LiveBoundarySuite extends CatsEffectSuite:
             today <- GuiClock.live.today
             monotonic <- GuiClock.live.monotonic
             agendaEvent <- Effects.live(session).run(Effect.LoadAgenda)
-            controller <- ReactiveController.create(session, dispatcher, _ => RecordingView())
+            controller <- ReactiveController.create(
+              actions,
+              Effects(actions, GuiClock.live),
+              dispatcher,
+              DesktopViewHandle(_ => RecordingView()),
+              new UiScheduler:
+                def apply(action: () => Unit) = IO(action())
+            )
             current <- controller.current
           yield
             assertEquals(before, false)

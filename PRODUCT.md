@@ -374,8 +374,8 @@ rendering a past that never held.
 ### J16 — The daily desktop loop
 
 *Intent:* capture, orient and review without first translating the intention into a shell command.
-*Roles:* Capturer, Learner, Curator. *Outcomes:* 1, 2, 3. *Status:* **implemented** in the GNOME
-client specified in `SPEC.md` §2.1.
+*Roles:* Capturer, Learner, Curator. *Outcomes:* 1, 2, 3. *Status:* **implemented** in the default
+GNOME client and equal ScalaFX alternative specified in `SPEC.md` §2.1–§2.2.
 
 | # | Must already know | GUI surface | Result | Friction |
 |---|---|---|---|---|
@@ -1023,11 +1023,11 @@ Then   it is refused, because that is retraction's job and not this command's
 As the Capturer, when Noesis has no workspace, I want the desktop to explain and initialize it, so
 that the first durable act does not require a command I have not learned.
 
-*Role:* Capturer · *Journey:* J16.1 · *Spec:* §2.1, §10 · *Status:* **implemented**
+*Role:* Capturer · *Journey:* J16.1 · *Spec:* §2.1–§2.2, §10 · *Status:* **implemented**
 
 ```
 Given  the default workspace does not exist
-When   the GNOME application opens
+When   either desktop application opens
 Then   it shows the exact path and the owner-only persistence guarantee
 And    no path exists until the owner activates Start Noesis
 When   Start Noesis is activated
@@ -1040,7 +1040,7 @@ Then   the workspace and module ontology are installed with the same permissions
 As the Capturer, when something is worth keeping, I want one visible place for facts and thoughts,
 so that not knowing the vocabulary never means losing the thought.
 
-*Role:* Capturer · *Journey:* J16.3 · *Spec:* §2.1, §3.5, §8.5 · *Status:* **implemented**
+*Role:* Capturer · *Journey:* J16.3 · *Spec:* §2.1–§2.2, §3.5, §8.5 · *Status:* **implemented**
 
 ```
 Given  an initialized workspace
@@ -1058,7 +1058,7 @@ Then   one stable note block is committed and is immediately searchable
 As the Learner, when I open Noesis for the day, I want agenda, search and review to stay connected,
 so that orientation does not become a tour of command names.
 
-*Role:* Learner, Curator · *Journey:* J16.2, J16.4, J16.5 · *Spec:* §2.1, §4, §5.2 · *Status:* **implemented**
+*Role:* Learner, Curator · *Journey:* J16.2, J16.4, J16.5 · *Spec:* §2.1–§2.2, §4, §5.2 · *Status:* **implemented**
 
 ```
 Given  due agenda and learning items plus a named entity
@@ -1090,7 +1090,7 @@ Every friction identified above, with its root cause and status. **Open** means 
 | **F9** | No machine-readable output | J4, J7 | `Render` targets a terminal exclusively | **Open** — US-20 |
 | **F10** | Two grammars for one relationship (`assert` vs `relationship-add`) | J10.3 | Reified records and direct assertions both model §7.1 relationships; no stated rule for choosing | **Open** — needs a design decision before a story |
 | **F11** | `check` is manual | J1.5, J6.4 | Consistency is enforced at commit; policy and profile findings are only produced on demand | **Accepted** — commit-time consistency already fails closed (`DESIGN.md` invariant 2). Surfacing advisory findings automatically would add output to every command; the Curator asks when curating |
-| **F12** | The daily loop requires translating intentions into terminal commands | J1–J4, J11, J16 | The CLI was the only implemented owner surface | **Closed** in 0.3 — J16/US-41–US-43 provide the GNOME daily loop. Mobile and web capture remain out of scope |
+| **F12** | The daily loop requires translating intentions into terminal commands | J1–J4, J11, J16 | The CLI was the only implemented owner surface | **Closed** in 0.3 — J16/US-41–US-43 run in both the default GNOME client and the equal ScalaFX alternative. Mobile and web capture remain out of scope |
 | **F13** | No latency evidence for §10's budgets | J2, J3 | Nothing measures capture round-trip or review submit | **Accepted for now** — the budgets bind the LLM-backed capture path that does not exist yet. Revisit when it does |
 | **F14** | Re-extracting from a source means supplying the text again | J14.2 | §8.5.4 keeps no copy of the text | **Accepted** — the direct cost of the retention rule. The alternative is holding the copyrighted text the rule exists to avoid holding, and the digest at least makes "is this the same text?" answerable |
 | **F15** | Comprehension questions cannot go stale | J14.6 | §4.1 detects staleness from source axioms; an open comprehension question has only a reference | **Accepted** — regenerating requires the text, which is not kept. Recorded as a deliberate departure rather than left to be discovered when a question outlives its accuracy |
@@ -1100,6 +1100,7 @@ Every friction identified above, with its root cause and status. **Open** means 
 | **F19** | After a prune, `as-of` is approximate for the pruned properties | J15.6 | The states that answered the question are the ones removed | **Accepted** — the direct and only cost of pruning, which is why §3.2.1 makes the choice per property and why US-39 requires the output to say so rather than render silently |
 | **F20** | A data property cannot declare its datatype, so the browser cannot show one | J1.3, J2.1 | The axiom language has one `PropertyRange`, and the naming register puts its object in the *class* role. `PropertyRange(crm:birthday, xsd:gMonthDay)` would therefore declare `xsd:gMonthDay` as both a class and a datatype, which ISO/IEC 11179-5 §8.1.2 forbids and `NamingConformanceSuite` enforces | **Open** — needs a `DataPropertyRange` distinct from `PropertyRange`, or a naming register that reads the two positions differently. Until then `noesis vocab show crm:birthday` reports `(none declared)` rather than inventing a datatype, which is the honest answer and still leaves the owner guessing between `05-12` and `--05-12` |
 | **F21** | A local coverage rerun could fail after `clean` with a missing scoverage measurement directory | Change verification | sbt 2 cached filesystem work independently: its compile result included instrumented classes but not scoverage's adjacent runtime metadata | **Closed** in 0.3 — `clean` is uncached and the canonical run reloads one stable coverage-compile nonce before instrumentation; ordinary compilation remains cacheable, and the run also exercises the real GTK suite under Xvfb before reporting |
+| **F22** | Desktop adapter tests could hang or target a stale window when several suites shared one JVM | Change verification | GLib applications and JavaFX/TestFX platform and focus state are process-global; OpenJFX also loads GTK 3 while Java-GI loads GTK 4 | **Closed** in 0.3 — toolkit scene construction is explicit, GTK and ScalaFX use separate native closures and processes, and each native suite gets a fresh fork while the toolkit-free suite remains fast and display-independent |
 
 ---
 
@@ -1208,3 +1209,10 @@ Dated, numbered, and appended — never rewritten. A decision that reverses an e
   retaining the single-device, local-owner boundary. The first release is therefore GTK 4 and
   libadwaita, covers only J16, and shares application services with the CLI. Flatpak, web, mobile,
   background notifications and sync remain outside the decision.
+- **PD-10 (2026-08-05) — Two desktop toolkits, one behavioral product.** ScalaFX is an equally
+  supported Linux/Nix alternative while GTK/libadwaita remains the default. Both implement J16 with
+  the same surface and control ids, accessible announcements, failure text, durable effects and
+  owner-session lifecycle. Styling and GTK's adaptive split behavior may differ. The shared
+  `gui-core` presentation and runtime are the authority; toolkit adapters may render and schedule,
+  but may not duplicate owner behavior or persistence. OpenJFX's GTK 3 backend and Java-GI's GTK 4
+  process remain isolated rather than loading incompatible native stacks together.

@@ -24,4 +24,3 @@ class GuiProductTraceSuite extends FunSuite:
       .takeWhile(path => Option(path).nonEmpty)
       .find(path => Files.isRegularFile(path.resolve("PRODUCT.md")))
       .getOrElse(fail(s"no PRODUCT.md above $from"))
-

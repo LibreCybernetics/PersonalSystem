@@ -17,7 +17,7 @@ class MainLifecycleSuite extends FunSuite:
       IO.blocking:
         val application = Application("dev.librecybernetics.Noesis")
         var idleRan = false
-        UiScheduler.glib(() => idleRan = true).unsafeRunSync()
+        GtkScheduler(() => idleRan = true).unsafeRunSync()
         val _ = GLib.idleAddOnce(() =>
           application.activate()
           application.quit()
